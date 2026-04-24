@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TerraGuard — AI IaC Security Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0c0f;
+  --surface: #0f1215;
+  --surface2: #151a1f;
+  --border: #1e2530;
+  --border2: #2a3340;
+  --text: #c8d4e0;
+  --text-dim: #5a6a7a;
+  --text-bright: #e8f0f8;
+  --accent: #00d4aa;
+  --accent-dim: #00a885;
+  --critical: #ff4757;
+  --high: #ff6b35;
+  --medium: #ffd32a;
+  --low: #2ed573;
+  --info: #5352ed;
+  --scan-line: rgba(0, 212, 170, 0.03);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scan line effect */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    var(--scan-line) 2px,
+    var(--scan-line) 4px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Noise texture */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.4;
+}
+
+.header {
+  padding: 32px 48px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-icon {
+  width: 44px;
+  height: 44px;
+  background: var(--accent);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: pulse-icon 3s ease-in-out infinite;
+}
+
+@keyframes pulse-icon {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(0,212,170,0.4)); }
+  50% { filter: drop-shadow(0 0 20px rgba(0,212,170,0.8)); }
+}
+
+.logo-icon::after {
+  content: '⬡';
+  font-size: 20px;
+  color: var(--bg);
+  position: absolute;
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-name {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--text-bright);
+  letter-spacing: 2px;
+}
+
+.logo-sub {
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: blink 2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: calc(100vh - 89px);
+}
+
+/* LEFT PANEL */
+.left-panel {
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+}
+
+.panel-title {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.panel-title span {
+  color: var(--accent);
+  margin-right: 8px;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  padding: 4px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+.btn-ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.editor-wrapper {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.line-numbers {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 16px 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.line-num {
+  height: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+textarea {
+  position: absolute;
+  top: 0; left: 48px; right: 0; bottom: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 21px;
+  padding: 16px 20px;
+  resize: none;
+  tab-size: 2;
+  caret-color: var(--accent);
+}
+
+textarea::placeholder {
+  color: var(--text-dim);
+  opacity: 0.4;
+}
+
+/* Drop zone overlay */
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,212,170,0.05);
+  border: 2px dashed var(--accent);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 10;
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+
+.drop-overlay.active {
+  display: flex;
+}
+
+.scan-btn-wrapper {
+  padding: 20px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.scan-btn {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  border: none;
+  color: var(--bg);
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+}
+
+.scan-btn::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.4s;
+}
+
+.scan-btn:hover::before { left: 100%; }
+.scan-btn:hover { background: var(--accent-dim); }
+.scan-btn:disabled { background: var(--border2); color: var(--text-dim); cursor: not-allowed; }
+.scan-btn:disabled::before { display: none; }
+
+/* RIGHT PANEL */
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.results-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.summary-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.chip {
+  padding: 3px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border: 1px solid;
+  clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  transition: all 0.2s;
+}
+
+.chip.critical { color: var(--critical); border-color: var(--critical); background: rgba(255,71,87,0.08); }
+.chip.high { color: var(--high); border-color: var(--high); background: rgba(255,107,53,0.08); }
+.chip.medium { color: var(--medium); border-color: var(--medium); background: rgba(255,211,42,0.08); }
+.chip.low { color: var(--low); border-color: var(--low); background: rgba(46,213,115,0.08); }
+.chip.info-chip { color: var(--info); border-color: var(--info); background: rgba(83,82,237,0.08); }
+.chip.active { filter: brightness(1.3); }
+
+.results-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.results-body::-webkit-scrollbar { width: 4px; }
+.results-body::-webkit-scrollbar-track { background: transparent; }
+.results-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* Empty state */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-dim);
+  padding: 40px;
+  text-align: center;
+}
+
+.empty-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  opacity: 0.15;
+  margin-bottom: 8px;
+}
+
+.empty-cell {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: grid-pulse 3s ease-in-out infinite;
+}
+
+.empty-cell:nth-child(odd) { animation-delay: 0.5s; }
+.empty-cell:nth-child(3n) { animation-delay: 1s; }
+
+@keyframes grid-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.empty-state p {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* Loading state */
+.loading-state {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 60px;
+  flex: 1;
+}
+
+.loading-state.visible { display: flex; }
+
+.scan-animation {
+  width: 80px;
+  height: 80px;
+  position: relative;
+}
+
+.scan-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.scan-ring:nth-child(2) {
+  inset: 12px;
+  border-top-color: var(--accent-dim);
+  animation-duration: 0.7s;
+  animation-direction: reverse;
+}
+
+.scan-ring:nth-child(3) {
+  inset: 24px;
+  border-top-color: rgba(0,212,170,0.3);
+  animation-duration: 1.4s;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.loading-log {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  max-width: 280px;
+  line-height: 1.8;
+}
+
+/* Finding card */
+.finding-card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0;
+  transition: all 0.2s;
+  animation: slide-in 0.3s ease-out forwards;
+  opacity: 0;
+  overflow: hidden;
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.finding-card:hover { border-color: var(--border2); }
+
+.finding-card.critical { border-left: 3px solid var(--critical); }
+.finding-card.high { border-left: 3px solid var(--high); }
+.finding-card.medium { border-left: 3px solid var(--medium); }
+.finding-card.low { border-left: 3px solid var(--low); }
+.finding-card.info { border-left: 3px solid var(--info); }
+
+.finding-top {
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.finding-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.finding-id {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
+.finding-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-bright);
+  line-height: 1.4;
+}
+
+.finding-resource {
+  font-size: 10px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finding-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sev-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 2px 8px;
+}
+
+.sev-badge.critical { color: var(--critical); }
+.sev-badge.high { color: var(--high); }
+.sev-badge.medium { color: var(--medium); }
+.sev-badge.low { color: var(--low); }
+.sev-badge.info { color: var(--info); }
+
+.chevron {
+  font-size: 10px;
+  color: var(--text-dim);
+  transition: transform 0.2s;
+}
+
+.finding-card.expanded .chevron { transform: rotate(180deg); }
+
+.finding-detail {
+  padding: 0 14px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.finding-card.expanded .finding-detail { display: flex; }
+
+.detail-label {
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.detail-text {
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.fix-block {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--low);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  font-size: 9px;
+  padding: 2px 7px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+/* Error state */
+.error-banner {
+  margin: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--critical);
+  background: rgba(255,71,87,0.06);
+  font-size: 11px;
+  color: var(--critical);
+  letter-spacing: 1px;
+  display: none;
+}
+
+.error-banner.visible { display: block; }
+
+/* Clean result banner */
+.clean-banner {
+  margin: 16px;
+  padding: 20px;
+  border: 1px solid var(--low);
+  background: rgba(46,213,115,0.05);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.clean-banner.visible { display: flex; }
+.clean-banner .clean-icon { font-size: 28px; }
+.clean-banner .clean-title { font-size: 13px; color: var(--low); letter-spacing: 2px; }
+.clean-banner .clean-sub { font-size: 10px; color: var(--text-dim); }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .main { grid-template-columns: 1fr; grid-template-rows: 50vh 1fr; }
+  .left-panel { border-right: none; border-bottom: 1px solid var(--border); }
+  .header { padding: 16px 20px; }
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon"></div>
+    <div class="logo-text">
+      <span class="logo-name">TERRAGUARD</span>
+      <span class="logo-sub">AI IaC Security Agent</span>
+    </div>
+  </div>
+  <div class="header-meta">
+    <span class="status-dot"><span class="dot"></span> AGENT ONLINE</span>
+    <span>GPT-4o POWERED</span>
+    <span>v1.0.0</span>
+  </div>
+</header>
+
+<main class="main">
+  <!-- LEFT: Editor -->
+  <div class="left-panel">
+    <div class="panel-header">
+      <span class="panel-title"><span>//</span> TERRAFORM INPUT</span>
+      <div class="file-actions">
+        <button class="btn-ghost" onclick="loadSample()">Load Sample</button>
+        <button class="btn-ghost" onclick="clearEditor()">Clear</button>
+        <label class="btn-ghost" style="cursor:pointer">
+          Upload .tf
+          <input type="file" accept=".tf,.tfvars" style="display:none" onchange="handleFileUpload(event)">
+        </label>
+      </div>
+    </div>
+
+    <div class="editor-wrapper" id="editorWrapper">
+      <div class="line-numbers" id="lineNumbers">
+        <div class="line-num">1</div>
+      </div>
+      <textarea id="tfEditor"
+        placeholder="# Paste your Terraform code here...
+# or drag & drop a .tf file
+# or click 'Load Sample' to try an example"
+        spellcheck="false"
+        oninput="updateLineNumbers()"
+        onscroll="syncScroll()"
+      ></textarea>
+      <div class="drop-overlay" id="dropOverlay">
+        <span style="font-size:28px">⬇</span>
+        <span>DROP .tf FILE HERE</span>
+      </div>
+    </div>
+
+    <div class="scan-btn-wrapper">
+      <button class="scan-btn" id="scanBtn" onclick="runScan()">
+        ⬡ &nbsp; SCAN FOR VULNERABILITIES
+      </button>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results -->
+  <div class="right-panel">
+    <div class="results-header">
+      <span class="panel-title"><span>//</span> SECURITY FINDINGS</span>
+      <div class="summary-chips" id="summaryChips">
+        <span class="chip critical" id="chip-critical">C: 0</span>
+        <span class="chip high" id="chip-high">H: 0</span>
+        <span class="chip medium" id="chip-medium">M: 0</span>
+        <span class="chip low" id="chip-low">L: 0</span>
+        <span class="chip info-chip" id="chip-info">I: 0</span>
+      </div>
+    </div>
+
+    <div class="error-banner" id="errorBanner"></div>
+    <div class="clean-banner" id="cleanBanner">
+      <span class="clean-icon">✓</span>
+      <span class="clean-title">NO ISSUES DETECTED</span>
+      <span class="clean-sub">Your Terraform code passed all security checks.</span>
+    </div>
+
+    <div class="loading-state" id="loadingState">
+      <div class="scan-animation">
+        <div class="scan-ring"></div>
+        <div class="scan-ring"></div>
+        <div class="scan-ring"></div>
+      </div>
+      <span class="loading-text">Scanning...</span>
+      <div class="loading-log" id="loadingLog">Parsing HCL resources...</div>
+    </div>
+
+    <div class="results-body" id="resultsBody">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-grid">
+          <div class="empty-cell" style="animation-delay:0s"></div>
+          <div class="empty-cell" style="animation-delay:0.2s"></div>
+          <div class="empty-cell" style="animation-delay:0.4s"></div>
+          <div class="empty-cell" style="animation-delay:0.6s"></div>
+          <div class="empty-cell" style="animation-delay:0.8s"></div>
+          <div class="empty-cell" style="animation-delay:1.0s"></div>
+          <div class="empty-cell" style="animation-delay:1.2s"></div>
+          <div class="empty-cell" style="animation-delay:1.4s"></div>
+        </div>
+        <p>Awaiting scan input</p>
+        <p style="font-size:9px; opacity:0.5; letter-spacing:1px;">Paste Terraform code and press scan</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ---- Line Numbers ----
+function updateLineNumbers() {
+  const ta = document.getElementById('tfEditor');
+  const ln = document.getElementById('lineNumbers');
+  const lines = ta.value.split('\n').length;
+  ln.innerHTML = Array.from({length: lines}, (_, i) =>
+    `<div class="line-num">${i + 1}</div>`
+  ).join('');
+}
+
+function syncScroll() {
+  const ta = document.getElementById('tfEditor');
+  const ln = document.getElementById('lineNumbers');
+  ln.scrollTop = ta.scrollTop;
+}
+
+// ---- File upload ----
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('tfEditor').value = ev.target.result;
+    updateLineNumbers();
+  };
+  reader.readAsText(file);
+}
+
+// ---- Drag & drop ----
+const wrapper = document.getElementById('editorWrapper');
+const dropOverlay = document.getElementById('dropOverlay');
+
+wrapper.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.add('active'); });
+wrapper.addEventListener('dragleave', () => dropOverlay.classList.remove('active'));
+wrapper.addEventListener('drop', e => {
+  e.preventDefault();
+  dropOverlay.classList.remove('active');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('tfEditor').value = ev.target.result;
+      updateLineNumbers();
+    };
+    reader.readAsText(file);
+  }
+});
+
+// ---- Clear ----
+function clearEditor() {
+  document.getElementById('tfEditor').value = '';
+  updateLineNumbers();
+  resetResults();
+}
+
+// ---- Sample Terraform (intentionally vulnerable) ----
+function loadSample() {
+  const sample = `# Sample vulnerable Terraform - DO NOT use in production
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_s3_bucket" "data_bucket" {
+  bucket = "my-company-data-bucket"
+  acl    = "public-read"
+
+  tags = {
+    Name = "DataBucket"
+  }
+}
+
+resource "aws_security_group" "web_sg" {
+  name        = "web-security-group"
+  description = "Allow all inbound traffic"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_db_instance" "main_db" {
+  identifier        = "prod-database"
+  engine            = "mysql"
+  instance_class    = "db.t3.micro"
+  username          = "admin"
+  password          = "SuperSecret123!"
+  publicly_accessible = true
+  storage_encrypted = false
+  skip_final_snapshot = true
+}
+
+resource "aws_iam_role_policy" "lambda_policy" {
+  name = "lambda-policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = "*"
+        Effect   = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_instance" "web_server" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
+
+  root_block_device {
+    encrypted = false
+  }
+}`;
+  document.getElementById('tfEditor').value = sample;
+  updateLineNumbers();
+}
+
+// ---- Reset results ----
+function resetResults() {
+  document.getElementById('errorBanner').classList.remove('visible');
+  document.getElementById('cleanBanner').classList.remove('visible');
+  document.getElementById('loadingState').classList.remove('visible');
+  document.getElementById('emptyState').style.display = 'flex';
+  // Remove all finding cards
+  const cards = document.querySelectorAll('.finding-card');
+  cards.forEach(c => c.remove());
+  // Reset chips
+  ['critical','high','medium','low','info'].forEach(s => {
+    const el = document.getElementById('chip-' + s);
+    el.textContent = s[0].toUpperCase() + ': 0';
+    el.classList.remove('active');
+  });
+}
+
+// ---- Run scan ----
+async function runScan() {
+  const code = document.getElementById('tfEditor').value.trim();
+  if (!code) { alert('Please paste some Terraform code first.'); return; }
+
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.textContent = '⬡  SCANNING...';
+
+  // Reset
+  resetResults();
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('loadingState').classList.add('visible');
+
+  // Animated loading messages
+  const messages = [
+    'Parsing HCL resources...',
+    'Analyzing IAM policies...',
+    'Checking network exposure...',
+    'Scanning encryption settings...',
+    'Reviewing storage configurations...',
+    'Running security heuristics...',
+    'Generating findings report...'
+  ];
+  let msgIdx = 0;
+  const logEl = document.getElementById('loadingLog');
+  const msgInterval = setInterval(() => {
+    logEl.textContent = messages[msgIdx % messages.length];
+    msgIdx++;
+  }, 900);
+
+  try {
+    const res = await fetch('/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+
+    const data = await res.json();
+    clearInterval(msgInterval);
+    document.getElementById('loadingState').classList.remove('visible');
+
+    if (data.error) {
+      document.getElementById('errorBanner').textContent = '⚠ ERROR: ' + data.error;
+      document.getElementById('errorBanner').classList.add('visible');
+      return;
+    }
+
+    // Update chips
+    const smap = { CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'medium', LOW: 'low', INFO: 'info' };
+    Object.entries(data.summary).forEach(([sev, count]) => {
+      const key = smap[sev];
+      const el = document.getElementById('chip-' + key);
+      const label = sev === 'INFO' ? 'I' : sev[0];
+      el.textContent = label + ': ' + count;
+      if (count > 0) el.classList.add('active');
+    });
+
+    if (data.total === 0) {
+      document.getElementById('cleanBanner').classList.add('visible');
+      return;
+    }
+
+    // Render findings sorted by severity
+    const sevOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+    const sorted = [...data.findings].sort((a, b) =>
+      (sevOrder[a.severity] ?? 5) - (sevOrder[b.severity] ?? 5)
+    );
+
+    const body = document.getElementById('resultsBody');
+    sorted.forEach((f, i) => {
+      const card = renderFinding(f, i);
+      body.appendChild(card);
+    });
+
+  } catch (err) {
+    clearInterval(msgInterval);
+    document.getElementById('loadingState').classList.remove('visible');
+    document.getElementById('errorBanner').textContent = '⚠ Network error: ' + err.message;
+    document.getElementById('errorBanner').classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⬡   SCAN FOR VULNERABILITIES';
+  }
+}
+
+// ---- Render a finding card ----
+function renderFinding(f, idx) {
+  const sev = (f.severity || 'INFO').toLowerCase();
+  const card = document.createElement('div');
+  card.className = `finding-card ${sev}`;
+  card.style.animationDelay = (idx * 0.06) + 's';
+
+  card.innerHTML = `
+    <div class="finding-top" onclick="toggleCard(this)">
+      <div class="finding-left">
+        <span class="finding-id">${f.id || ('TG-' + String(idx+1).padStart(3,'0'))}</span>
+        <span class="finding-title">${escHtml(f.title || 'Security Issue')}</span>
+        <span class="finding-resource">${escHtml(f.resource || '')}</span>
+      </div>
+      <div class="finding-right">
+        <span class="sev-badge ${sev}">${f.severity}</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="finding-detail">
+      <div>
+        <div class="detail-label">Description</div>
+        <div class="detail-text">${escHtml(f.description || '')}</div>
+      </div>
+      ${f.line_hint ? `<div><div class="detail-label">Location</div><div class="detail-text">${escHtml(f.line_hint)}</div></div>` : ''}
+      ${f.fix ? `<div><div class="detail-label">Recommended Fix</div><div class="fix-block">${escHtml(f.fix)}</div></div>` : ''}
+      ${f.cwe ? `<div><div class="detail-label">CWE Reference</div><div class="detail-text">${escHtml(f.cwe)}</div></div>` : ''}
+      ${f.tags && f.tags.length ? `<div><div class="detail-label">Tags</div><div class="tags-row">${f.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join('')}</div></div>` : ''}
+    </div>
+  `;
+  return card;
+}
+
+function toggleCard(el) {
+  el.parentElement.classList.toggle('expanded');
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// init
+updateLineNumbers();
+</script>
+</body>
+</html>
