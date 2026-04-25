@@ -1,161 +1,171 @@
 # TerraGuard
 
-An AI-powered security analysis engine for Infrastructure-as-Code.
+AI-powered Infrastructure-as-Code security analysis for Terraform, built for fast developer feedback and clear remediation.
 
-TerraGuard statically analyzes Terraform (and, in future phases, OpenTofu, Pulumi, CloudFormation, and Kubernetes manifests) for security misconfigurations, policy violations, and architectural risk. It combines deterministic rule-based checks with LLM-driven semantic reasoning to surface issues that static linters alone cannot detect — such as implicit trust chains across resources, over-permissive cross-service relationships, and context-dependent risk that only becomes visible when resources are analyzed together.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-0f172a?style=flat&logo=python)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-Backend-111827?style=flat&logo=flask)](https://flask.palletsprojects.com/)
+[![OpenAI](https://img.shields.io/badge/OpenAI-gpt--4o-0b3b2e?style=flat)](https://platform.openai.com/)
+[![License](https://img.shields.io/badge/License-MIT-334155?style=flat)](./LICENSE)
 
-This project is in early development. The current release is a working MVP: a web interface that accepts a Terraform file and returns a severity-ranked findings report with remediation guidance. The architecture described below is the full design target.
+## What TerraGuard Solves
 
----
+IaC security reviews often break down in one of two ways:
+- Static tools are deterministic but miss context-dependent risk.
+- AI-only analysis is flexible but lacks structure for real engineering workflows.
 
-## The problem
+TerraGuard combines structured finding output with LLM reasoning so teams can scan Terraform quickly, triage by severity, and act on concrete fixes.
 
-IaC security tools today fall into two categories. Pure static analyzers (tfsec, Checkov, Terrascan) are fast and deterministic but limited to pattern matching against known rule sets. They miss novel misconfigurations, cannot reason about cross-resource risk, and produce high false-positive rates that teams learn to ignore. LLM-based tools on the other hand lack structured severity scoring, policy enforcement, audit trails, and the integrations that production security workflows require.
+## Current MVP Scope
 
-TerraGuard is an attempt to build something in the middle: deterministic rules for known control failures, AI semantic reasoning for context-dependent risk, and a policy engine that lets teams encode and enforce their own security standards.
+The current implementation is a working MVP, focused on Terraform file analysis:
+- Web UI with paste, drag-drop, and file upload for `.tf`/`.tfvars`
+- Flask API endpoint (`POST /analyze`)
+- GPT-4o powered finding generation
+- Severity-ranked output: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`
+- Rich finding details: title, resource, line hint, description, fix, CWE, tags
 
----
+## High-Level Design (HLD)
 
-## Current state (Phase 1 - MVP)
+Complete architecture document (with symbols, flow legend, and lifecycle):
+- [ARCHITECTURE_HLD.md](docs/ARCHITECTURE_HLD.md)
+- [Architecture Visual (HTML + SVG)](docs/architecture/terraguard-hld.html)
 
-- Web UI: upload or paste a Terraform file, receive a structured findings report
-- AI analysis via GPT-4o with severity classification (CRITICAL / HIGH / MEDIUM / LOW / INFO)
-- Detects: overprivileged IAM, public storage, exposed ports, hardcoded secrets, disabled encryption, missing logging
-- Each finding includes: resource reference, description, remediation guidance, CWE reference, and tags
-- Backend: Python + Flask
-- Frontend: single-file HTML/CSS/JS, no dependencies
+Quick snapshot:
 
----
-
-## Target architecture
-
-The full design is organized into six layers.
-
-**Input sources**
-
-The platform is designed to receive IaC from multiple entry points without requiring changes to existing workflows: GitHub Actions or GitLab CI as a pipeline step, direct Git repository integration, REST API for programmatic use, pre-commit hook for local enforcement, and the web UI for ad-hoc analysis.
-
-**Parser and normalizer**
-
-A unified HCL/YAML parser normalizes inputs across Terraform, OpenTofu, Pulumi, CloudFormation, and Kubernetes manifests into a common internal representation. This decouples the analysis engine from IaC dialect specifics and makes it possible to write rules once that apply across providers.
-
-**Analysis engine**
-
-Three analysis strategies run in parallel against the normalized representation.
-
-The static rules engine applies deterministic checks against a versioned rule registry mapped to CIS Benchmarks, NIST 800-53, SOC2, and provider-specific best practices. These checks are fast, explainable, and produce zero false negatives on known control failures.
-
-The AI semantic analysis engine sends resource context to an LLM and reasons about implicit risk: a Lambda function with an execution role scoped to S3:* that also happens to be triggered by a public API Gateway endpoint is a critical finding that no individual resource-level rule would surface. This layer catches the class of issues that only appear when resources are read together.
-
-The dependency graph engine builds a directed graph of all resource relationships within a configuration and identifies cross-resource risk patterns: privilege escalation paths, data exfiltration paths, and lateral movement vectors.
-
-A finding aggregator merges results from all three engines, deduplicates overlapping findings, and applies CVSS-based severity scoring.
-
-**Policy engine**
-
-Teams can define custom security policies in OPA/Rego that are evaluated against every scan. This allows encoding organization-specific controls (tag requirements, naming conventions, approved AMI lists, required encryption standards) as code, versioned in Git alongside the infrastructure it governs.
-
-**Report generator**
-
-Findings are serialized into multiple output formats depending on the integration context: an HTML dashboard for human review, JSON and SARIF for machine consumption, JUnit XML for CI gate integration, and Markdown for pull request comments.
-
-**Output channels**
-
-Results route to wherever the team works: Slack or PagerDuty for alerting, GitHub or GitLab PR comments for developer feedback, Jira or ServiceNow for ticket creation, and an immutable audit log for compliance evidence.
-
-**Data plane**
-
-Scan history, findings, policies, and rule versions are persisted to allow trend analysis, regression detection, and benchmarking across environments and time.
-
-**Platform integrations**
-
-Planned integrations include live cloud account scanning via AWS, Azure, and GCP APIs (to compare declared vs actual state), OPA Gatekeeper for Kubernetes admission control, SIEM and CSPM connectors (Wiz, Prisma Cloud, Splunk), and enterprise identity via SSO, LDAP, SAML, and OIDC.
-
----
-
-## Why this matters at scale
-
-The gap TerraGuard targets is most visible in organizations running large IaC estates across multiple cloud providers with multiple teams contributing configurations. At that scale, manual review of Terraform PRs is not tractable, rule-based tools produce noise that gets ignored, and the misconfigurations most likely to cause incidents are the ones that look correct in isolation but are dangerous in combination.
-
-The dependency graph and AI semantic layers are designed specifically for that class of risk.
-
----
-
-## Roadmap
-
-Phase 1 (current): MVP — web UI, single-file Terraform analysis, GPT-4o backend, basic rule set
-
-Phase 2: CLI tool, pre-commit hook, GitHub Actions integration, SARIF output, expanded rule set
-
-Phase 3: Multi-file and module-aware analysis, dependency graph engine, policy engine with OPA
-
-Phase 4: API server, multi-tenant support, scan history, trend dashboards
-
-Phase 5: Live cloud account drift detection, SIEM integrations, enterprise auth
-
----
-
-## Local setup
-
-Requires Python 3.10+ and an OpenAI API key.
-
+```mermaid
+flowchart LR
+  CI[/CI\/CD/] --> API([TerraGuard API])
+  REPO[/IaC Repo/] --> API
+  UI[/Web UI/] --> API
+  API --> N{{Parser + Normalizer}}
+  N --> SE[[Static Rules]]
+  N --> AI((AI Semantic Engine))
+  N --> DG{Dependency Graph}
+  SE --> AGG[Finding Aggregator]
+  AI --> AGG
+  DG --> AGG
+  AGG --> REP[[Report Generator]]
+  REP --> OUT[/PR · Slack · Dashboard/]
 ```
-git clone https://github.com/Karthik-099/TERRAGUARD
-cd terraguard
+
+## Detection Coverage (MVP)
+
+| Domain | Example checks |
+| --- | --- |
+| IAM | Wildcard actions/principals, over-permissive policies |
+| Network | Open SG ingress (`0.0.0.0/0`) on sensitive ports |
+| Storage | Public buckets, missing encryption settings |
+| Secrets | Hardcoded credentials in Terraform definitions |
+| Database | Public RDS, insecure instance settings |
+| Logging / Visibility | Missing audit/logging controls when identifiable |
+
+## Local Run
+
+### 1) Install dependencies
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-export OPENAI_API_KEY=your_key_here
+```
+
+### 2) Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```bash
+OPENAI_API_KEY="your_openai_api_key"
+# optional (defaults to gpt-4o)
+OPENAI_MODEL="gpt-4o"
+```
+
+### 3) Start app
+
+```bash
 python app.py
 ```
 
-Open http://localhost:5000 in a browser. Use the "Load Sample" button to analyze a pre-built vulnerable configuration.
+Open `http://localhost:5000`.
 
----
+Health check:
 
-## What it detects (current rule set)
+```bash
+curl http://localhost:5000/health
+```
 
-| Category | Examples |
-|---|---|
-| IAM | Wildcard actions, wildcard principals, overprivileged Lambda roles |
-| Network | SSH, RDP, database ports exposed to 0.0.0.0/0 |
-| Storage | Public S3 buckets, ACL misconfiguration, missing MFA delete |
-| Secrets | Hardcoded passwords, API keys, tokens in .tf files |
-| Encryption | Unencrypted EBS volumes, unencrypted RDS, disabled storage encryption |
-| Logging | CloudTrail disabled, VPC flow logs disabled, S3 access logging disabled |
-| Database | Publicly accessible RDS instances, deletion protection disabled |
+## API Contract
 
----
+### Request
 
-## Tech stack
+`POST /analyze`
 
-Current:
-- Python 3.10+, Flask
-- OpenAI GPT-4o
-- HTML / CSS / JavaScript (zero frontend dependencies)
+```json
+{
+  "code": "resource \"aws_s3_bucket\" \"example\" { ... }"
+}
+```
 
-Planned additions:
-- PostgreSQL (findings persistence)
-- OPA (policy engine)
-- Redis (job queue for async scanning)
-- Prometheus + Grafana (observability)
-- Docker + Kubernetes deployment manifests
+### Response
 
----
+```json
+{
+  "findings": [
+    {
+      "id": "TG-001",
+      "severity": "HIGH",
+      "title": "Publicly accessible S3 bucket",
+      "resource": "aws_s3_bucket.example",
+      "line_hint": "resource aws_s3_bucket.example",
+      "description": "Bucket allows public access.",
+      "fix": "Set block public access and private ACL.",
+      "cwe": "CWE-284",
+      "tags": ["s3", "access-control"]
+    }
+  ],
+  "summary": {
+    "CRITICAL": 0,
+    "HIGH": 1,
+    "MEDIUM": 0,
+    "LOW": 0,
+    "INFO": 0
+  },
+  "total": 1
+}
+```
 
-## Contributing
+## Repository Layout
 
-The project is at an early stage. Contributions to the rule set, parser, or integrations are welcome. Open an issue before submitting large changes.
+```text
+TERRAGUARD/
+├── .env.example                  # Environment template
+├── LICENSE
+├── app.py                        # Flask backend + OpenAI analysis call
+├── static/
+│   ├── index.html                # Frontend editor + findings UI
+│   └── favicon.svg
+├── docs/
+│   ├── ARCHITECTURE_HLD.md       # Detailed HLD and data-flow modeling
+│   └── architecture/
+│       └── terraguard-hld.html   # Shareable architecture visual
+└── requirements.txt
+```
 
----
+## Roadmap
+
+1. CLI and pre-commit support
+2. SARIF/JUnit report output for CI policy gates
+3. Multi-file and module-aware analysis
+4. Policy-as-code layer (OPA/Rego)
+5. Historical findings, trend analytics, and audit export
+
+## LinkedIn Summary (Ready-to-Post)
+
+TerraGuard is an AI-powered IaC security MVP that analyzes Terraform code and produces severity-ranked findings with actionable remediation. The platform is designed as a hybrid architecture: parser/normalizer, multi-engine analysis (static + semantic AI + dependency graph), finding aggregation, policy controls, and multi-channel reporting. Current release includes a working Flask + web UI scanner with GPT-4o-backed risk detection; HLD is defined for CI/CD integration, policy governance, observability, and enterprise deployment growth.
 
 ## License
 
 MIT
-
----
-
-## Author
-
-Karthik
-DevOps and Platform Engineering
-GitHub: github.com/Karthik-099
-Portfolio: karthik-portfolioo.netlify.app

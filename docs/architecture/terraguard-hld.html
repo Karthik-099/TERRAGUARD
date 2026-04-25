@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TerraGuard HLD</title>
+<style>
+  :root {
+    --ink: #0f172a;
+    --muted: #475569;
+    --line: #cbd5e1;
+    --input-bg: #e8f0fb;
+    --input-stroke: #2d6ac7;
+    --engine-bg: #eeedfe;
+    --engine-stroke: #6a5fd3;
+    --service-bg: #e7f8f3;
+    --service-stroke: #1c8d6b;
+    --control-bg: #faece7;
+    --control-stroke: #d35a2d;
+    --data-bg: #faeeda;
+    --data-stroke: #b9781e;
+    --obs-bg: #edf2ff;
+    --obs-stroke: #5a78d1;
+    --sync: #64748b;
+    --async: #1d9e75;
+    --policy: #d85a30;
+    --telemetry: #556ee6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #f8fafc;
+    color: var(--ink);
+    padding: 20px;
+  }
+  .wrap {
+    max-width: 1700px;
+    margin: 0 auto;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+  }
+  .head {
+    background: #0f172a;
+    color: #f8fafc;
+    padding: 16px 24px;
+    border-bottom: 1px solid #1e293b;
+  }
+  .head h1 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .head p {
+    font-size: 12px;
+    color: #cbd5e1;
+    margin-top: 6px;
+  }
+  .foot {
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 12px;
+    padding: 10px 16px;
+    display: flex;
+    justify-content: space-between;
+  }
+  svg text {
+    dominant-baseline: middle;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1>TerraGuard - High-Level Design (HLD)</h1>
+      <p>MVP implemented: Web UI + Flask API + GPT-4o analysis | Planned scale: multi-engine pipeline, governance, data plane, observability.</p>
+    </div>
+
+    <svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1060" viewBox="0 0 1680 1060" role="img" aria-label="TerraGuard high-level architecture">
+      <defs>
+        <marker id="arr-sync" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M1 1 L9 5 L1 9 Z" fill="var(--sync)"/>
+        </marker>
+        <marker id="arr-async" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M1 1 L9 5 L1 9 Z" fill="var(--async)"/>
+        </marker>
+        <marker id="arr-policy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M1 1 L9 5 L1 9 Z" fill="var(--policy)"/>
+        </marker>
+        <marker id="arr-telemetry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M1 1 L9 5 L1 9 Z" fill="var(--telemetry)"/>
+        </marker>
+      </defs>
+
+      <!-- Legend -->
+      <rect x="24" y="24" width="1632" height="70" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+      <text x="42" y="45" font-size="12" font-weight="700" fill="#334155">Legend</text>
+      <text x="42" y="66" font-size="11" fill="#475569">Symbols: parallelogram=input/output | rounded box=service | hexagon=normalizer | circle=AI | diamond=graph | cylinder=data store</text>
+      <line x1="690" y1="50" x2="740" y2="50" stroke="var(--sync)" stroke-width="1.8" marker-end="url(#arr-sync)"/>
+      <text x="752" y="50" font-size="11" fill="#475569">Sync flow</text>
+      <line x1="860" y1="50" x2="910" y2="50" stroke="var(--async)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arr-async)"/>
+      <text x="922" y="50" font-size="11" fill="#475569">Async/Event flow</text>
+      <line x1="1090" y1="50" x2="1140" y2="50" stroke="var(--policy)" stroke-width="3" marker-end="url(#arr-policy)"/>
+      <text x="1152" y="50" font-size="11" fill="#475569">Policy/Governance flow</text>
+      <line x1="1365" y1="50" x2="1415" y2="50" stroke="var(--telemetry)" stroke-width="1.6" stroke-dasharray="2 4" marker-end="url(#arr-telemetry)"/>
+      <text x="1427" y="50" font-size="11" fill="#475569">Telemetry flow</text>
+
+      <!-- Vertical divider -->
+      <line x1="1288" y1="108" x2="1288" y2="990" stroke="#e2e8f0" stroke-width="1"/>
+
+      <!-- Section labels -->
+      <text x="30" y="118" font-size="10" font-weight="700" letter-spacing="1" fill="#64748b">INPUT SOURCES</text>
+      <text x="30" y="288" font-size="10" font-weight="700" letter-spacing="1" fill="#64748b">CORE ANALYSIS PLANE</text>
+      <text x="30" y="620" font-size="10" font-weight="700" letter-spacing="1" fill="#64748b">OUTPUT CHANNELS</text>
+      <text x="30" y="770" font-size="10" font-weight="700" letter-spacing="1" fill="#64748b">PLATFORM INTEGRATIONS</text>
+      <text x="1310" y="118" font-size="10" font-weight="700" letter-spacing="1" fill="#64748b">DATA + OBSERVABILITY</text>
+
+      <!-- Inputs (parallelograms) -->
+      <polygon points="40,138 245,138 230,196 25,196" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="135" y="162" text-anchor="middle" font-size="13" font-weight="700" fill="#0e3a70">CI/CD Pipeline</text>
+      <text x="135" y="181" text-anchor="middle" font-size="10" fill="#2d6ac7">GitHub Actions · GitLab CI</text>
+
+      <polygon points="270,138 475,138 460,196 255,196" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="365" y="162" text-anchor="middle" font-size="13" font-weight="700" fill="#0e3a70">IaC Repository</text>
+      <text x="365" y="181" text-anchor="middle" font-size="10" fill="#2d6ac7">Git · S3 · GCS</text>
+
+      <polygon points="500,138 705,138 690,196 485,196" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="595" y="162" text-anchor="middle" font-size="13" font-weight="700" fill="#0e3a70">Web UI</text>
+      <text x="595" y="181" text-anchor="middle" font-size="10" fill="#2d6ac7">Upload · paste · drag-drop</text>
+
+      <polygon points="730,138 935,138 920,196 715,196" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="825" y="162" text-anchor="middle" font-size="13" font-weight="700" fill="#0e3a70">REST API Clients</text>
+      <text x="825" y="181" text-anchor="middle" font-size="10" fill="#2d6ac7">Programmatic scans</text>
+
+      <polygon points="960,138 1245,138 1230,196 945,196" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="1095" y="162" text-anchor="middle" font-size="13" font-weight="700" fill="#0e3a70">Pre-commit Hook / CLI</text>
+      <text x="1095" y="181" text-anchor="middle" font-size="10" fill="#2d6ac7">Local enforcement</text>
+
+      <!-- API Service -->
+      <rect x="430" y="232" width="420" height="58" rx="28" fill="var(--service-bg)" stroke="var(--service-stroke)" stroke-width="1.8"/>
+      <text x="640" y="256" text-anchor="middle" font-size="14" font-weight="700" fill="#0a4d3b">TerraGuard API Gateway</text>
+      <text x="640" y="274" text-anchor="middle" font-size="10" fill="#1c8d6b">request validation · scan orchestration · session context</text>
+
+      <!-- Normalizer Hexagon -->
+      <polygon points="470,320 812,320 850,356 812,392 470,392 432,356" fill="var(--service-bg)" stroke="var(--service-stroke)" stroke-width="1.8"/>
+      <text x="640" y="350" text-anchor="middle" font-size="14" font-weight="700" fill="#0a4d3b">Parser + Normalizer (Unified IR)</text>
+      <text x="640" y="369" text-anchor="middle" font-size="10" fill="#1c8d6b">Terraform · OpenTofu · Pulumi · CloudFormation · Kubernetes YAML</text>
+
+      <!-- Analysis engines area -->
+      <rect x="40" y="424" width="1220" height="245" rx="10" fill="none" stroke="#6a5fd3" stroke-width="1.5" stroke-dasharray="7 5"/>
+      <text x="56" y="440" font-size="10" font-weight="700" letter-spacing="1" fill="#6a5fd3">ANALYSIS ENGINE</text>
+
+      <!-- Static rules -->
+      <rect x="68" y="454" width="350" height="86" rx="8" fill="var(--engine-bg)" stroke="var(--engine-stroke)" stroke-width="1.4"/>
+      <text x="243" y="482" text-anchor="middle" font-size="13" font-weight="700" fill="#2b2467">Static Rules Engine</text>
+      <text x="243" y="503" text-anchor="middle" font-size="10" fill="#5549bf">CIS · NIST 800-53 · SOC2</text>
+      <text x="243" y="520" text-anchor="middle" font-size="10" fill="#5549bf">Provider baselines and known anti-patterns</text>
+
+      <!-- AI engine circle -->
+      <circle cx="640" cy="497" r="78" fill="var(--engine-bg)" stroke="var(--engine-stroke)" stroke-width="1.5"/>
+      <text x="640" y="484" text-anchor="middle" font-size="13" font-weight="700" fill="#2b2467">AI Semantic</text>
+      <text x="640" y="502" text-anchor="middle" font-size="10" fill="#5549bf">LLM context reasoning</text>
+      <text x="640" y="519" text-anchor="middle" font-size="10" fill="#5549bf">MVP: GPT-4o</text>
+
+      <!-- Dependency graph diamond -->
+      <polygon points="915,417 1070,497 915,577 760,497" fill="var(--engine-bg)" stroke="var(--engine-stroke)" stroke-width="1.5"/>
+      <text x="915" y="485" text-anchor="middle" font-size="13" font-weight="700" fill="#2b2467">Dependency Graph</text>
+      <text x="915" y="505" text-anchor="middle" font-size="10" fill="#5549bf">Cross-resource attack paths</text>
+      <text x="915" y="522" text-anchor="middle" font-size="10" fill="#5549bf">Priv-esc · lateral movement</text>
+
+      <!-- Aggregator trapezoid -->
+      <polygon points="245,590 1065,590 1015,652 295,652" fill="var(--control-bg)" stroke="var(--control-stroke)" stroke-width="1.6"/>
+      <text x="655" y="615" text-anchor="middle" font-size="13" font-weight="700" fill="#542010">Finding Aggregator</text>
+      <text x="655" y="636" text-anchor="middle" font-size="10" fill="#a24522">deduplication · severity scoring · false-positive suppression</text>
+
+      <!-- Policy and reporting -->
+      <rect x="180" y="700" width="380" height="78" rx="9" fill="var(--control-bg)" stroke="var(--control-stroke)" stroke-width="1.8"/>
+      <text x="370" y="729" text-anchor="middle" font-size="13" font-weight="700" fill="#542010">Policy Engine (OPA/Rego)</text>
+      <text x="370" y="748" text-anchor="middle" font-size="10" fill="#a24522">Org controls · RBAC · tag/encryption/naming guardrails</text>
+
+      <path d="M620 702 L900 702 L930 730 L930 778 L620 778 Z" fill="var(--service-bg)" stroke="var(--service-stroke)" stroke-width="1.8"/>
+      <text x="770" y="729" text-anchor="middle" font-size="13" font-weight="700" fill="#0a4d3b">Report Generator</text>
+      <text x="770" y="748" text-anchor="middle" font-size="10" fill="#1c8d6b">JSON · SARIF · JUnit XML · Markdown · HTML/PDF</text>
+
+      <rect x="970" y="700" width="270" height="78" rx="39" fill="var(--control-bg)" stroke="var(--control-stroke)" stroke-width="1.8"/>
+      <text x="1105" y="729" text-anchor="middle" font-size="13" font-weight="700" fill="#542010">Output Router</text>
+      <text x="1105" y="748" text-anchor="middle" font-size="10" fill="#a24522">Route by integration context</text>
+
+      <!-- Output channels -->
+      <polygon points="40,812 275,812 260,870 25,870" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="150" y="836" text-anchor="middle" font-size="12" font-weight="700" fill="#0e3a70">Alerts</text>
+      <text x="150" y="854" text-anchor="middle" font-size="10" fill="#2d6ac7">Slack · PagerDuty · Email</text>
+
+      <polygon points="300,812 535,812 520,870 285,870" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="410" y="836" text-anchor="middle" font-size="12" font-weight="700" fill="#0e3a70">PR Comments</text>
+      <text x="410" y="854" text-anchor="middle" font-size="10" fill="#2d6ac7">GitHub · GitLab inline</text>
+
+      <polygon points="560,812 795,812 780,870 545,870" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="670" y="836" text-anchor="middle" font-size="12" font-weight="700" fill="#0e3a70">Dashboard</text>
+      <text x="670" y="854" text-anchor="middle" font-size="10" fill="#2d6ac7">Trend and drill-down views</text>
+
+      <polygon points="820,812 1055,812 1040,870 805,870" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="930" y="836" text-anchor="middle" font-size="12" font-weight="700" fill="#0e3a70">Ticketing</text>
+      <text x="930" y="854" text-anchor="middle" font-size="10" fill="#2d6ac7">Jira · ServiceNow</text>
+
+      <polygon points="1080,812 1240,812 1225,870 1065,870" fill="var(--input-bg)" stroke="var(--input-stroke)" stroke-width="1.4"/>
+      <text x="1152" y="836" text-anchor="middle" font-size="12" font-weight="700" fill="#0e3a70">Audit Log</text>
+      <text x="1152" y="854" text-anchor="middle" font-size="10" fill="#2d6ac7">Immutable compliance evidence</text>
+
+      <!-- Integrations -->
+      <polygon points="40,900 275,900 260,958 25,958" fill="#e7f8f3" stroke="#1c8d6b" stroke-width="1.3"/>
+      <text x="150" y="925" text-anchor="middle" font-size="12" font-weight="700" fill="#0a4d3b">Cloud Provider APIs</text>
+      <text x="150" y="943" text-anchor="middle" font-size="10" fill="#1c8d6b">AWS · Azure · GCP drift checks</text>
+
+      <polygon points="300,900 535,900 520,958 285,958" fill="#e7f8f3" stroke="#1c8d6b" stroke-width="1.3"/>
+      <text x="410" y="925" text-anchor="middle" font-size="12" font-weight="700" fill="#0a4d3b">Kubernetes</text>
+      <text x="410" y="943" text-anchor="middle" font-size="10" fill="#1c8d6b">OPA Gatekeeper admission controls</text>
+
+      <polygon points="560,900 795,900 780,958 545,958" fill="#e7f8f3" stroke="#1c8d6b" stroke-width="1.3"/>
+      <text x="670" y="925" text-anchor="middle" font-size="12" font-weight="700" fill="#0a4d3b">SIEM / CSPM</text>
+      <text x="670" y="943" text-anchor="middle" font-size="10" fill="#1c8d6b">Wiz · Prisma · Splunk</text>
+
+      <polygon points="820,900 1240,900 1225,958 805,958" fill="#e7f8f3" stroke="#1c8d6b" stroke-width="1.3"/>
+      <text x="1020" y="925" text-anchor="middle" font-size="12" font-weight="700" fill="#0a4d3b">Identity and Access</text>
+      <text x="1020" y="943" text-anchor="middle" font-size="10" fill="#1c8d6b">SSO · LDAP · SAML · OIDC · enterprise RBAC</text>
+
+      <!-- Data plane (cylinders) -->
+      <ellipse cx="1400" cy="173" rx="125" ry="16" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <rect x="1275" y="173" width="250" height="64" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <ellipse cx="1400" cy="237" rx="125" ry="16" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <text x="1400" y="202" text-anchor="middle" font-size="12" font-weight="700" fill="#4a2c05">Findings Database</text>
+      <text x="1400" y="219" text-anchor="middle" font-size="10" fill="#8b5a13">PostgreSQL · scan history · trends</text>
+
+      <ellipse cx="1400" cy="305" rx="125" ry="16" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <rect x="1275" y="305" width="250" height="64" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <ellipse cx="1400" cy="369" rx="125" ry="16" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <text x="1400" y="334" text-anchor="middle" font-size="12" font-weight="700" fill="#4a2c05">Policy Store</text>
+      <text x="1400" y="351" text-anchor="middle" font-size="10" fill="#8b5a13">Git-backed OPA bundles</text>
+
+      <ellipse cx="1400" cy="437" rx="125" ry="16" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <rect x="1275" y="437" width="250" height="64" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <ellipse cx="1400" cy="501" rx="125" ry="16" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.2"/>
+      <text x="1400" y="466" text-anchor="middle" font-size="12" font-weight="700" fill="#4a2c05">Rule Registry</text>
+      <text x="1400" y="483" text-anchor="middle" font-size="10" fill="#8b5a13">Versioned static rule packs</text>
+
+      <rect x="1275" y="548" width="250" height="72" rx="34" fill="var(--data-bg)" stroke="var(--data-stroke)" stroke-width="1.4"/>
+      <text x="1400" y="575" text-anchor="middle" font-size="12" font-weight="700" fill="#4a2c05">Job Queue</text>
+      <text x="1400" y="594" text-anchor="middle" font-size="10" fill="#8b5a13">Redis · worker retries · rate limit</text>
+
+      <!-- Observability -->
+      <rect x="1275" y="660" width="250" height="72" rx="10" fill="var(--obs-bg)" stroke="var(--obs-stroke)" stroke-width="1.2"/>
+      <text x="1400" y="686" text-anchor="middle" font-size="12" font-weight="700" fill="#1f3f8a">Metrics</text>
+      <text x="1400" y="705" text-anchor="middle" font-size="10" fill="#4d67b4">Prometheus · Grafana</text>
+
+      <rect x="1275" y="748" width="250" height="72" rx="10" fill="var(--obs-bg)" stroke="var(--obs-stroke)" stroke-width="1.2"/>
+      <text x="1400" y="774" text-anchor="middle" font-size="12" font-weight="700" fill="#1f3f8a">Tracing</text>
+      <text x="1400" y="793" text-anchor="middle" font-size="10" fill="#4d67b4">OpenTelemetry · Jaeger</text>
+
+      <rect x="1275" y="836" width="250" height="72" rx="10" fill="var(--obs-bg)" stroke="var(--obs-stroke)" stroke-width="1.2"/>
+      <text x="1400" y="862" text-anchor="middle" font-size="12" font-weight="700" fill="#1f3f8a">Structured Logs</text>
+      <text x="1400" y="881" text-anchor="middle" font-size="10" fill="#4d67b4">Loki · CloudWatch · audit events</text>
+
+      <rect x="1275" y="932" width="250" height="50" rx="8" fill="#ffffff" stroke="#1c8d6b" stroke-width="2"/>
+      <text x="1400" y="956" text-anchor="middle" font-size="11" font-weight="700" fill="#0a4d3b">Current Phase: MVP (Web UI + API + GPT-4o)</text>
+
+      <!-- Sync arrows from input to API -->
+      <line x1="135" y1="196" x2="525" y2="232" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+      <line x1="365" y1="196" x2="560" y2="232" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+      <line x1="595" y1="196" x2="615" y2="232" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+      <line x1="825" y1="196" x2="680" y2="232" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+      <line x1="1095" y1="196" x2="760" y2="232" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+
+      <!-- Core sync flows -->
+      <line x1="640" y1="290" x2="640" y2="320" stroke="var(--sync)" stroke-width="1.8" marker-end="url(#arr-sync)"/>
+      <line x1="530" y1="392" x2="250" y2="454" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+      <line x1="640" y1="392" x2="640" y2="419" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+      <line x1="750" y1="392" x2="880" y2="429" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+
+      <line x1="243" y1="540" x2="430" y2="590" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+      <line x1="640" y1="575" x2="655" y2="590" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+      <line x1="915" y1="577" x2="840" y2="590" stroke="var(--sync)" stroke-width="1.6" marker-end="url(#arr-sync)"/>
+
+      <!-- Governance flow -->
+      <line x1="575" y1="652" x2="415" y2="700" stroke="var(--policy)" stroke-width="3" marker-end="url(#arr-policy)"/>
+      <line x1="560" y1="739" x2="620" y2="739" stroke="var(--policy)" stroke-width="3" marker-end="url(#arr-policy)"/>
+      <line x1="930" y1="739" x2="970" y2="739" stroke="var(--policy)" stroke-width="3" marker-end="url(#arr-policy)"/>
+
+      <!-- Output sync flow -->
+      <line x1="1105" y1="778" x2="150" y2="812" stroke="var(--sync)" stroke-width="1.3" marker-end="url(#arr-sync)"/>
+      <line x1="1105" y1="778" x2="410" y2="812" stroke="var(--sync)" stroke-width="1.3" marker-end="url(#arr-sync)"/>
+      <line x1="1105" y1="778" x2="670" y2="812" stroke="var(--sync)" stroke-width="1.3" marker-end="url(#arr-sync)"/>
+      <line x1="1105" y1="778" x2="930" y2="812" stroke="var(--sync)" stroke-width="1.3" marker-end="url(#arr-sync)"/>
+      <line x1="1105" y1="778" x2="1152" y2="812" stroke="var(--sync)" stroke-width="1.3" marker-end="url(#arr-sync)"/>
+
+      <!-- Async integration flows -->
+      <line x1="150" y1="900" x2="560" y2="282" stroke="var(--async)" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arr-async)"/>
+      <line x1="410" y1="900" x2="600" y2="282" stroke="var(--async)" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arr-async)"/>
+      <line x1="670" y1="900" x2="700" y2="282" stroke="var(--async)" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arr-async)"/>
+      <line x1="1020" y1="900" x2="780" y2="282" stroke="var(--async)" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arr-async)"/>
+
+      <!-- Data plane sync -->
+      <line x1="1065" y1="628" x2="1275" y2="205" stroke="var(--sync)" stroke-width="1.2" marker-end="url(#arr-sync)"/>
+      <line x1="370" y1="739" x2="1275" y2="337" stroke="var(--sync)" stroke-width="1.2" marker-end="url(#arr-sync)"/>
+      <line x1="243" y1="497" x2="1275" y2="469" stroke="var(--sync)" stroke-width="1.2" marker-end="url(#arr-sync)"/>
+      <line x1="640" y1="260" x2="1275" y2="584" stroke="var(--async)" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#arr-async)"/>
+
+      <!-- Telemetry -->
+      <line x1="740" y1="261" x2="1275" y2="696" stroke="var(--telemetry)" stroke-width="1.4" stroke-dasharray="2 4" marker-end="url(#arr-telemetry)"/>
+      <line x1="660" y1="616" x2="1275" y2="784" stroke="var(--telemetry)" stroke-width="1.4" stroke-dasharray="2 4" marker-end="url(#arr-telemetry)"/>
+      <line x1="770" y1="739" x2="1275" y2="872" stroke="var(--telemetry)" stroke-width="1.4" stroke-dasharray="2 4" marker-end="url(#arr-telemetry)"/>
+    </svg>
+
+    <div class="foot">
+      <span>TerraGuard architecture v2 (HLD view)</span>
+      <span>github.com/Karthik-099/TERRAGUARD</span>
+    </div>
+  </div>
+</body>
+</html>

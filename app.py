@@ -1,5 +1,11 @@
 from flask import Flask, request, jsonify, send_from_directory
-from openai import OpenAI
+from openai import (
+    OpenAI,
+    APIConnectionError,
+    APIStatusError,
+    AuthenticationError,
+    RateLimitError,
+)
 from dotenv import load_dotenv
 import json
 import os
@@ -7,7 +13,8 @@ import os
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
+client = None
 
 SYSTEM_PROMPT = """You are TerraGuard, an expert AI security agent specializing in Terraform and Infrastructure-as-Code security analysis.
 
@@ -49,9 +56,22 @@ Return ONLY valid JSON array, no markdown, no explanation outside the array. If 
 def index():
     return send_from_directory("static", "index.html")
 
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok", "service": "terraguard", "model": OPENAI_MODEL})
+
+def get_openai_client():
+    global client
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    if client is None:
+        client = OpenAI(api_key=api_key)
+    return client
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     tf_code = data.get("code", "").strip()
 
     if not tf_code:
@@ -60,9 +80,13 @@ def analyze():
     if len(tf_code) > 50000:
         return jsonify({"error": "File too large (max 50KB)"}), 400
 
+    ai_client = get_openai_client()
+    if ai_client is None:
+        return jsonify({"error": "OPENAI_API_KEY is missing. Set it and try again."}), 503
+
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
+        response = ai_client.chat.completions.create(
+            model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Analyze this Terraform code for security issues:\n\n```hcl\n{tf_code}\n```"}
@@ -71,7 +95,9 @@ def analyze():
             max_tokens=4000
         )
 
-        raw = response.choices[0].message.content.strip()
+        raw = (response.choices[0].message.content or "").strip()
+        if not raw:
+            return jsonify({"error": "Empty AI response received."}), 502
 
         # Strip markdown fences if present
         if raw.startswith("```"):
@@ -91,8 +117,16 @@ def analyze():
 
     except json.JSONDecodeError:
         return jsonify({"error": "Failed to parse AI response. Try again."}), 500
+    except AuthenticationError:
+        return jsonify({"error": "Invalid OpenAI API key."}), 401
+    except RateLimitError:
+        return jsonify({"error": "OpenAI rate limit reached. Please retry shortly."}), 429
+    except APIConnectionError:
+        return jsonify({"error": "Unable to reach OpenAI API. Check network connectivity."}), 503
+    except APIStatusError as e:
+        return jsonify({"error": f"OpenAI API error: {e.status_code}"}), 502
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Unexpected server error: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
