@@ -162,9 +162,6 @@ TERRAGUARD/
 4. Policy-as-code layer (OPA/Rego)
 5. Historical findings, trend analytics, and audit export
 
-## LinkedIn Summary (Ready-to-Post)
-
-TerraGuard is an AI-powered IaC security MVP that analyzes Terraform code and produces severity-ranked findings with actionable remediation. The platform is designed as a hybrid architecture: parser/normalizer, multi-engine analysis (static + semantic AI + dependency graph), finding aggregation, policy controls, and multi-channel reporting. Current release includes a working Flask + web UI scanner with GPT-4o-backed risk detection; HLD is defined for CI/CD integration, policy governance, observability, and enterprise deployment growth.
 
 ## License
 
