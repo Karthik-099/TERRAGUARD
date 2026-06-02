@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TerraGuard Multi-File Analyzer</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0c0f;
+  --surface: #0f1215;
+  --border: #1e2530;
+  --text: #c8d4e0;
+  --text-dim: #5a6a7a;
+  --text-bright: #e8f0f8;
+  --accent: #00d4aa;
+  --accent-dim: #00a885;
+  --critical: #ff4757;
+  --high: #ff6b35;
+  --medium: #ffd32a;
+  --low: #2ed573;
+  --info: #5352ed;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 32px;
+  letter-spacing: 1px;
+}
+
+.upload-zone {
+  border: 2px dashed var(--border);
+  background: var(--surface);
+  padding: 60px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 24px;
+}
+
+.upload-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(0, 212, 170, 0.05);
+}
+
+.upload-zone:hover {
+  border-color: var(--accent-dim);
+}
+
+.upload-icon {
+  font-size: 48px;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.upload-text {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.upload-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.file-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 24px;
+  display: none;
+}
+
+.file-list.visible { display: block; }
+
+.file-item {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.file-item:last-child { border-bottom: none; }
+
+.btn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  padding: 14px 32px;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+.btn:hover { background: var(--accent-dim); }
+.btn:disabled { background: var(--border); cursor: not-allowed; }
+
+.results {
+  margin-top: 32px;
+  display: none;
+}
+
+.results.visible { display: block; }
+
+.summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 16px 24px;
+  flex: 1;
+  min-width: 150px;
+}
+
+.summary-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.summary-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.finding {
+  background: var(--surface);
+  border-left: 3px solid var(--border);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.finding.critical { border-left-color: var(--critical); }
+.finding.high { border-left-color: var(--high); }
+.finding.medium { border-left-color: var(--medium); }
+.finding.low { border-left-color: var(--low); }
+.finding.info { border-left-color: var(--info); }
+
+.finding-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.finding-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.severity-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  letter-spacing: 1px;
+}
+
+.severity-badge.critical { color: var(--critical); }
+.severity-badge.high { color: var(--high); }
+.severity-badge.medium { color: var(--medium); }
+.severity-badge.low { color: var(--low); }
+.severity-badge.info { color: var(--info); }
+
+.finding-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.finding-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.graph-viz {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 24px;
+  margin-top: 32px;
+}
+
+.graph-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.graph-canvas {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  width: 100%;
+  height: 400px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>⬡ TerraGuard Multi-File Analyzer</h1>
+  <div class="subtitle">Dependency graph + cross-resource risk detection</div>
+
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-icon">📁</div>
+    <div class="upload-text">Drop multiple .tf files or a .zip archive here</div>
+    <div class="upload-hint">or click to browse</div>
+    <input type="file" id="fileInput" multiple accept=".tf,.tfvars,.zip" style="display:none">
+  </div>
+
+  <div class="file-list" id="fileList"></div>
+
+  <button class="btn" id="analyzeBtn" disabled>Analyze Terraform Project</button>
+
+  <div class="results" id="results">
+    <div class="summary">
+      <div class="summary-card">
+        <div class="summary-label">Total Findings</div>
+        <div class="summary-value" id="totalFindings">0</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Files Analyzed</div>
+        <div class="summary-value" id="filesAnalyzed">0</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Resources Found</div>
+        <div class="summary-value" id="resourceCount">0</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Graph Edges</div>
+        <div class="summary-value" id="edgeCount">0</div>
+      </div>
+    </div>
+
+    <div id="findingsContainer"></div>
+
+    <div class="graph-viz">
+      <div class="graph-title">Resource Dependency Graph</div>
+      <canvas class="graph-canvas" id="graphCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedFiles = [];
+
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const results = document.getElementById('results');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  selectedFiles = Array.from(files);
+  if (selectedFiles.length === 0) {
+    fileList.classList.remove('visible');
+    analyzeBtn.disabled = true;
+    return;
+  }
+
+  fileList.innerHTML = '';
+  selectedFiles.forEach(f => {
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    item.innerHTML = `<span>${f.name}</span><span>${(f.size / 1024).toFixed(1)} KB</span>`;
+    fileList.appendChild(item);
+  });
+
+  fileList.classList.add('visible');
+  analyzeBtn.disabled = false;
+}
+
+analyzeBtn.addEventListener('click', async () => {
+  if (selectedFiles.length === 0) return;
+
+  analyzeBtn.disabled = true;
+  analyzeBtn.textContent = 'Analyzing...';
+  results.classList.remove('visible');
+
+  const formData = new FormData();
+  selectedFiles.forEach(f => formData.append('files', f));
+
+  try {
+    const res = await fetch('/analyze/multi', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (data.error) {
+      alert('Error: ' + data.error);
+      return;
+    }
+
+    // Update summary
+    document.getElementById('totalFindings').textContent = data.total || 0;
+    document.getElementById('filesAnalyzed').textContent = data.files_analyzed?.length || 0;
+    document.getElementById('resourceCount').textContent = data.resource_count || 0;
+    document.getElementById('edgeCount').textContent = data.graph?.edges?.length || 0;
+
+    // Render findings
+    const container = document.getElementById('findingsContainer');
+    container.innerHTML = '';
+    (data.findings || []).forEach(f => {
+      const card = document.createElement('div');
+      card.className = `finding ${(f.severity || 'info').toLowerCase()}`;
+      card.innerHTML = `
+        <div class="finding-header">
+          <div class="finding-title">${escHtml(f.title || 'Issue')}</div>
+          <div class="severity-badge ${(f.severity || 'info').toLowerCase()}">${f.severity || 'INFO'}</div>
+        </div>
+        <div class="finding-desc">${escHtml(f.description || '')}</div>
+        <div class="finding-meta">
+          ${f.resource ? `Resource: ${escHtml(f.resource)}` : ''}
+          ${f.engine ? ` • Engine: ${escHtml(f.engine)}` : ''}
+          ${f.file ? ` • File: ${escHtml(f.file)}` : ''}
+        </div>
+      `;
+      container.appendChild(card);
+    });
+
+    // Simple graph visualization
+    if (data.graph && data.graph.nodes && data.graph.edges) {
+      drawGraph(data.graph);
+    }
+
+    results.classList.add('visible');
+
+  } catch (err) {
+    alert('Network error: ' + err.message);
+  } finally {
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = 'Analyze Terraform Project';
+  }
+});
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function drawGraph(graph) {
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth;
+  canvas.height = 400;
+
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
+  if (nodes.length === 0) {
+    ctx.fillStyle = '#5a6a7a';
+    ctx.font = '12px JetBrains Mono';
+    ctx.fillText('No resources found', 20, 30);
+    return;
+  }
+
+  // Simple force layout approximation
+  const positions = {};
+  const radius = Math.min(canvas.width, canvas.height) * 0.35;
+  nodes.forEach((n, i) => {
+    const angle = (i / nodes.length) * 2 * Math.PI;
+    positions[n.id] = {
+      x: canvas.width / 2 + radius * Math.cos(angle),
+      y: canvas.height / 2 + radius * Math.sin(angle),
+    };
+  });
+
+  // Draw edges
+  ctx.strokeStyle = '#2a3340';
+  ctx.lineWidth = 1;
+  edges.forEach(e => {
+    const src = positions[e.source];
+    const dst = positions[e.target];
+    if (src && dst) {
+      ctx.beginPath();
+      ctx.moveTo(src.x, src.y);
+      ctx.lineTo(dst.x, dst.y);
+      ctx.stroke();
+    }
+  });
+
+  // Draw nodes
+  nodes.forEach(n => {
+    const pos = positions[n.id];
+    if (!pos) return;
+    ctx.fillStyle = '#00d4aa';
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 6, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = '#c8d4e0';
+    ctx.font = '9px JetBrains Mono';
+    ctx.fillText(n.id.split('.')[0], pos.x + 10, pos.y + 3);
+  });
+}
+</script>
+
+</body>
+</html>
