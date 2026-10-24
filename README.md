@@ -1,168 +1,173 @@
-# TerraGuard
+# 🛡️ TerraGuard
 
-AI-powered Infrastructure-as-Code security analysis for Terraform, built for fast developer feedback and clear remediation.
+**Catch Terraform problems before `apply` does, on every cloud.** TerraGuard
+finds security misconfigurations, apply-time failures, attack paths, risky
+plans, cost traps and compliance gaps. It runs in your browser, your terminal,
+your CI, your AI agent or your own server, all from one Go engine. It's open
+source and costs **$0**.
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-0f172a?style=flat&logo=python)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-Backend-111827?style=flat&logo=flask)](https://flask.palletsprojects.com/)
-[![OpenAI](https://img.shields.io/badge/OpenAI-gpt--4o-0b3b2e?style=flat)](https://platform.openai.com/)
-[![License](https://img.shields.io/badge/License-MIT-334155?style=flat)](./LICENSE)
+[![ci](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/ci.yml/badge.svg)](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/ci.yml)
+[![pages](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/pages.yml/badge.svg)](https://karthik-099.github.io/TERRAGUARD/)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-334155)](LICENSE)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-f6821f)](CONTRIBUTING.md)
 
-## What TerraGuard Solves
+### ▶ [Open the web app](https://karthik-099.github.io/TERRAGUARD/): no install, no signup, your code never leaves the browser
 
-IaC security reviews often break down in one of two ways:
-- Static tools are deterministic but miss context-dependent risk.
-- AI-only analysis is flexible but lacks structure for real engineering workflows.
+![TerraGuard web app](docs/screenshot.png)
 
-TerraGuard combines structured finding output with LLM reasoning so teams can scan Terraform quickly, triage by severity, and act on concrete fixes.
+---
 
-## Current MVP Scope
+## Why
 
-The current implementation is a working MVP, focused on Terraform file analysis:
-- Web UI with paste, drag-drop, and file upload for `.tf`/`.tfvars`
-- Flask API endpoint (`POST /analyze`)
-- GPT-4o powered finding generation
-- Severity-ranked output: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`
-- Rich finding details: title, resource, line hint, description, fix, CWE, tags
+- `plan` was green, then `apply` failed on a bucket name with an underscore, or on a deprecated Lambda runtime.
+- A PR quietly replaced the production database because `identifier` changed.
+- Each resource looked fine, but together they made a public Lambda running as admin.
+- SSH was open to `0.0.0.0/0` on a DigitalOcean droplet, a Hetzner server and an OVH instance, because every cloud spells "firewall" differently.
+- The state file was committed to git. The S3 backend had no locking, and two applies corrupted it.
+- A CNAME still pointed at a deleted Heroku app (subdomain takeover).
+- The security exception was approved in Slack 8 months ago, and nobody remembers why.
 
-## High-Level Design (HLD)
+TerraGuard finds these in milliseconds, explains them, and fixes many automatically.
 
-Complete architecture document (with symbols, flow legend, and lifecycle):
-- [ARCHITECTURE_HLD.md](docs/ARCHITECTURE_HLD.md)
-- [Architecture Visual (HTML + SVG)](docs/architecture/terraguard-hld.html)
+## Features
 
-Quick snapshot:
+| | |
+|---|---|
+| **Will it apply?** | Syntax, duplicates, undeclared references, `count`+`for_each`, invalid CIDRs, S3 bucket names, port ranges, deprecated runtimes, missing tfvars. No `terraform init` needed |
+| **88 rules · 14 providers** | AWS · Google Cloud · Azure · Cloudflare · DigitalOcean · Hetzner · Akamai/Linode · OVHcloud/OpenStack · Oracle Cloud · Alibaba · Vultr · Kubernetes · Helm, plus provider-agnostic checks |
+| **Attack paths** | Graph analysis: internet → open SG → public DB; public Lambda → admin role; exposed VM → admin profile |
+| **Plan risk** | `terraform show -json`: destroys/replaces of stateful resources, *with the attribute that forced it* |
+| **State & supply chain** | Unencrypted or unlocked backends, committed `*.tfstate`, unpinned providers, modules and Helm charts, mutable images |
+| **DNS / CDN** | Subdomain-takeover CNAMEs, DNSSEC, CloudFront / Azure CDN / Cloudflare TLS |
+| **Cost** | gp2 → gp3 (auto-fix), previous-gen instances, infinite log retention |
+| **Auto-fix** | One click or `terraguard fix`. Edits the syntax tree, keeps comments, warns on forced replacement |
+| **Policy-as-code** | `.terraguard.yml`: thresholds, overrides, custom rules, **expiring waivers with an approver** |
+| **Compliance** | Indicative mapping to CIS v8, SOC 2, PCI DSS 4.0, ISO 27001:2022, HIPAA |
+| **Docs** | terraform-docs style README (inputs, outputs, providers, resources) |
+| **CI/CD & GitOps** | GitHub Action (SARIF annotations, sticky PR comment, gate) and a pipeline generator (OIDC plan → gate → approved apply) |
+| **MCP server** | `terraguard mcp`: Claude Code / Cursor scan, fix and document Terraform |
+| **Self-hosting** | `terraguard serve` or Docker: one binary, keys stay server-side, optional bundled local LLM |
+| **Live stats** | Public dashboard: Terraform files checked today, resources analyzed, issues, fixes, active users (anonymous counts only) |
+| **AI (optional)** | Explain, remediate, rewrite, generate tests and modules, cost review, plan explanation. Free models with automatic fallback, or fully local |
+
+## Quick start
+
+**Web app:** open **https://karthik-099.github.io/TERRAGUARD/**, paste Terraform or drop a folder.
+
+**CLI**
+
+```bash
+go install github.com/Karthik-099/TERRAGUARD/cmd/terraguard@latest
+terraguard scan .                       # report; exit 1 if the policy fails
+terraguard scan . --plan plan.json      # + plan risk analysis
+terraguard fix .                        # safe auto-fixes
+terraguard docs . > README.md           # module docs
+terraguard ask "what's the riskiest thing here?"   # optional AI
+```
+
+**GitHub Action**
+
+```yaml
+on:
+  pull_request:
+    paths: ["**/*.tf", "**/*.tfvars", ".terraguard.yml"]   # only when Terraform changes
+permissions: { contents: read, pull-requests: write, security-events: write }
+jobs:
+  terraguard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Karthik-099/TERRAGUARD@main
+        with: { path: infra, fail-on: HIGH }
+```
+
+The web app's **CI/CD** tab generates a full pipeline: fmt → validate → OIDC plan → TerraGuard gate → approved apply.
+
+**Self-host (private)**
+
+```bash
+git clone https://github.com/Karthik-099/TERRAGUARD && cd TERRAGUARD
+cp .env.example .env     # free keys, a local model, or nothing
+make serve               # http://127.0.0.1:8080
+# or: docker compose --profile local-llm up -d   (bundled Ollama, nothing leaves your network)
+```
+
+**MCP:** `claude mcp add terraguard -- terraguard mcp`
+
+## Is AI required? No.
+
+Scanning, validation, plan analysis, auto-fix, policy, compliance, docs and the
+CI gate are deterministic, so they're free, offline and reproducible. The AI
+only gives **responses and suggestions** and never decides pass/fail.
+
+When you do use it, TerraGuard routes across **free** models and falls back
+automatically if one is rate-limited or down:
+
+```
+groq: gpt-oss-120b → llama-3.3-70b → gpt-oss-20b
+  → openrouter: nemotron :free → gemma :free → openrouter/free (any live free model)
+  → gemini: 2.5-flash → 2.5-flash-lite
+  → your local Ollama / LM Studio
+```
+
+| Provider | Free key | Cost |
+|---|---|---|
+| Groq | https://console.groq.com/keys | $0 free tier |
+| OpenRouter | https://openrouter.ai/keys | $0 (`:free` models only) |
+| Google Gemini | https://aistudio.google.com/apikey | $0 free tier |
+| Ollama (local) | https://ollama.com/download | $0, runs on your machine |
+
+For **full privacy**, set `TERRAGUARD_AI_LOCAL_ONLY=true` (or tick **Private
+mode** in the web app). Hosted providers are then never called, and your code
+never leaves your machine. See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+
+## Cost: $0
+
+| Piece | Runs on | Cost |
+|---|---|---|
+| Web app | GitHub Pages | $0 |
+| CI gate, SARIF, PR comments | GitHub Actions (public repo) | $0 |
+| AI | Groq / OpenRouter free / Gemini free / local Ollama | $0 |
+| Self-hosted server | Your machine | $0 |
+| Live stats counters (optional) | Cloudflare Workers free plan | $0, and skippable |
+
+## Architecture
 
 ```mermaid
 flowchart LR
-  CI[/CI\/CD/] --> API([TerraGuard API])
-  REPO[/IaC Repo/] --> API
-  UI[/Web UI/] --> API
-  API --> N{{Parser + Normalizer}}
-  N --> SE[[Static Rules]]
-  N --> AI((AI Semantic Engine))
-  N --> DG{Dependency Graph}
-  SE --> AGG[Finding Aggregator]
-  AI --> AGG
-  DG --> AGG
-  AGG --> REP[[Report Generator]]
-  REP --> OUT[/PR · Slack · Dashboard/]
+  E["engine/ (Go)<br/>parser · 88 rules · graph · plan · policy · compliance · docs · autofix"]
+  E -- WASM --> W[Web app<br/>GitHub Pages]
+  E --> C[CLI] --> A[GitHub Action]
+  C --> M[MCP server]
+  C --> S[Self-hosted server]
+  W -. optional .-> L[(free AI models<br/>or local Ollama)]
+  S -. optional .-> L
 ```
 
-## Detection Coverage (MVP)
+The full HLD/LLD, every application and pipeline, the AI routing, the stats
+dashboard, and the security and privacy model are in
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-| Domain | Example checks |
-| --- | --- |
-| IAM | Wildcard actions/principals, over-permissive policies |
-| Network | Open SG ingress (`0.0.0.0/0`) on sensitive ports |
-| Storage | Public buckets, missing encryption settings |
-| Secrets | Hardcoded credentials in Terraform definitions |
-| Database | Public RDS, insecure instance settings |
-| Logging / Visibility | Missing audit/logging controls when identifiable |
-
-## Local Run
-
-### 1) Install dependencies
+## Develop
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+make test        # Go vet + unit tests (engine, AI router, server, stats)
+make evals       # 43 labelled cases: 100% recall/precision gate
+make serve       # full app locally
+make secrets     # fail if any credential is tracked
 ```
 
-### 2) Configure environment
+## Contributing
 
-```bash
-cp .env.example .env
-```
+Rules, false-positive reports, new providers and ideas are all welcome. See
+**[CONTRIBUTING.md](CONTRIBUTING.md)**. A new rule is about 20 lines of Go plus
+two eval cases, and it shows up everywhere automatically.
 
-Edit `.env`:
-
-```bash
-OPENAI_API_KEY="your_openai_api_key"
-# optional (defaults to gpt-4o)
-OPENAI_MODEL="gpt-4o"
-```
-
-### 3) Start app
-
-```bash
-python app.py
-```
-
-Open `http://localhost:5000`.
-
-Health check:
-
-```bash
-curl http://localhost:5000/health
-```
-
-## API Contract
-
-### Request
-
-`POST /analyze`
-
-```json
-{
-  "code": "resource \"aws_s3_bucket\" \"example\" { ... }"
-}
-```
-
-### Response
-
-```json
-{
-  "findings": [
-    {
-      "id": "TG-001",
-      "severity": "HIGH",
-      "title": "Publicly accessible S3 bucket",
-      "resource": "aws_s3_bucket.example",
-      "line_hint": "resource aws_s3_bucket.example",
-      "description": "Bucket allows public access.",
-      "fix": "Set block public access and private ACL.",
-      "cwe": "CWE-284",
-      "tags": ["s3", "access-control"]
-    }
-  ],
-  "summary": {
-    "CRITICAL": 0,
-    "HIGH": 1,
-    "MEDIUM": 0,
-    "LOW": 0,
-    "INFO": 0
-  },
-  "total": 1
-}
-```
-
-## Repository Layout
-
-```text
-TERRAGUARD/
-├── .env.example                  # Environment template
-├── LICENSE
-├── app.py                        # Flask backend + OpenAI analysis call
-├── static/
-│   ├── index.html                # Frontend editor + findings UI
-│   └── favicon.svg
-├── docs/
-│   ├── ARCHITECTURE_HLD.md       # Detailed HLD and data-flow modeling
-│   └── architecture/
-│       └── terraguard-hld.html   # Shareable architecture visual
-└── requirements.txt
-```
-
-## Roadmap
-
-1. CLI and pre-commit support
-2. SARIF/JUnit report output for CI policy gates
-3. Multi-file and module-aware analysis
-4. Policy-as-code layer (OPA/Rego)
-5. Historical findings, trend analytics, and audit export
-
+- 💬 [Discussions](https://github.com/Karthik-099/TERRAGUARD/discussions)
+- 💡 [Suggest a rule](https://github.com/Karthik-099/TERRAGUARD/issues/new?template=rule_request.yml)
+- 🐞 [Report a false positive](https://github.com/Karthik-099/TERRAGUARD/issues/new?template=false_positive.yml)
 
 ## License
 
-MIT
+[MIT](LICENSE) © Karthik

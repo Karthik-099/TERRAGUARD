@@ -1,0 +1,31 @@
+# Engineering standards as code. Commit this next to your Terraform.
+fail_on: HIGH
+
+severity_overrides:
+  TG-AWS-EC2-001: HIGH        # our codex treats IMDSv1 as high
+
+waivers:
+  - rule: TG-AWS-S3-003
+    resource: "aws_s3_bucket.*"
+    reason: "Demo buckets are disposable"
+    expires: "2099-01-01"
+    approved_by: platform-team
+  - rule: TG-TF-010
+    reason: "Migration to aws_s3_bucket_* resources tracked in PLAT-123"
+    expires: "2025-01-31"
+    approved_by: karthik
+
+custom_rules:
+  - id: ORG-TAG-001
+    title: Resources must declare an owner tag
+    severity: LOW
+    resource_types: ["aws_instance", "aws_db_instance", "aws_s3_bucket"]
+    attribute: tags.owner
+    exists: true
+    remediation: Add tags = { owner = "<team>" } so incidents can be routed.
+  - id: ORG-EC2-001
+    title: Only approved instance families
+    severity: MEDIUM
+    resource_types: ["aws_instance"]
+    attribute: instance_type
+    matches: "^(t3|t4g|m7g)\\."

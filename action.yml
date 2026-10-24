@@ -1,0 +1,112 @@
+name: TerraGuard
+description: Terraform security, apply-time validation, attack-path and plan-risk gate with SARIF and PR comments.
+author: Karthik
+branding:
+  icon: shield
+  color: orange
+
+inputs:
+  path:
+    description: Directory (or file) with Terraform to scan.
+    default: "."
+  plan:
+    description: Optional path to `terraform show -json tfplan` output.
+    default: ""
+  config:
+    description: Optional path to .terraguard.yml (auto-detected in `path` otherwise).
+    default: ""
+  fail-on:
+    description: CRITICAL | HIGH | MEDIUM | LOW | NONE. Overrides the policy file.
+    default: ""
+  comment:
+    description: Post/update a single sticky PR comment with the report.
+    default: "true"
+  sarif:
+    description: Upload SARIF to GitHub code scanning (inline annotations, Security tab).
+    default: "true"
+  ai:
+    description: Add an LLM remediation plan to the comment. Needs GROQ_API_KEY, GEMINI_API_KEY or OPENROUTER_API_KEY in env.
+    default: "false"
+
+outputs:
+  passed:
+    description: "true when the policy gate passed."
+    value: ${{ steps.scan.outputs.passed }}
+  score:
+    description: Security score 0-100.
+    value: ${{ steps.scan.outputs.score }}
+  grade:
+    description: A-F grade.
+    value: ${{ steps.scan.outputs.grade }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache-dependency-path: ${{ github.action_path }}/go.sum
+
+    - name: Build TerraGuard
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: go build -o "$RUNNER_TEMP/terraguard" ./cmd/terraguard
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        TG_PATH: ${{ inputs.path }}
+        TG_PLAN: ${{ inputs.plan }}
+        TG_CONFIG: ${{ inputs.config }}
+        TG_FAIL_ON: ${{ inputs.fail-on }}
+        TG_AI: ${{ inputs.ai }}
+      run: |
+        args=(scan "$TG_PATH" --format text --sarif "$RUNNER_TEMP/terraguard.sarif" --markdown "$RUNNER_TEMP/terraguard.md" --json "$RUNNER_TEMP/terraguard.json")
+        [ -n "$TG_PLAN" ] && args+=(--plan "$TG_PLAN")
+        [ -n "$TG_CONFIG" ] && args+=(--config "$TG_CONFIG")
+        [ -n "$TG_FAIL_ON" ] && args+=(--fail-on "$TG_FAIL_ON")
+        [ "$TG_AI" = "true" ] && args+=(--ai)
+        set +e
+        "$RUNNER_TEMP/terraguard" "${args[@]}"
+        code=$?
+        set -e
+        [ $code -ge 2 ] && exit $code
+        echo "passed=$([ $code -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        echo "score=$(jq -r .score "$RUNNER_TEMP/terraguard.json")" >> "$GITHUB_OUTPUT"
+        echo "grade=$(jq -r .grade "$RUNNER_TEMP/terraguard.json")" >> "$GITHUB_OUTPUT"
+        cat "$RUNNER_TEMP/terraguard.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload SARIF
+      if: inputs.sarif == 'true'
+      # Code scanning needs GitHub Advanced Security on private repos; never fail the gate on it.
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ runner.temp }}/terraguard.sarif
+        category: terraguard
+
+    - name: Sticky PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        body="$RUNNER_TEMP/comment.md"
+        { echo "<!-- terraguard -->"; cat "$RUNNER_TEMP/terraguard.md"; } > "$body"
+        id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+          --jq '.[] | select(.body | startswith("<!-- terraguard -->")) | .id' | head -1)
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$body" >/dev/null
+        else
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+        fi
+
+    - name: Policy gate
+      if: steps.scan.outputs.passed != 'true'
+      shell: bash
+      run: |
+        echo "::error title=TerraGuard::Policy failed (grade ${{ steps.scan.outputs.grade }}, score ${{ steps.scan.outputs.score }}). See the job summary."
+        exit 1

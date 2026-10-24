@@ -1,0 +1,39 @@
+# Manual only: benchmark a free LLM against the labelled rule cases.
+# Add GROQ_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY as repository secrets.
+name: llm-evals
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        type: choice
+        options: [groq, gemini, openrouter]
+        default: groq
+      model:
+        description: Model id (blank = provider default)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Evaluate
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          args=(--provider "${{ inputs.provider }}" --summary "$GITHUB_STEP_SUMMARY")
+          [ -n "${{ inputs.model }}" ] && args+=(--model "${{ inputs.model }}")
+          python3 evals/llm_eval.py "${args[@]}"

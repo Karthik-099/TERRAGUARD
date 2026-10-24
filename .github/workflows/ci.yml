@@ -1,0 +1,115 @@
+# Runs only when engine/CLI/evals change. No schedules.
+name: ci
+
+on:
+  pull_request:
+    paths:
+      - "engine/**"
+      - "cmd/**"
+      - "internal/**"
+      - "web/embed.go"
+      - "stats-worker/**"
+      - "scripts/**"
+      - "Dockerfile"
+      - "evals/**"
+      - "examples/**"
+      - "go.mod"
+      - "go.sum"
+      - "action.yml"
+      - "Makefile"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "engine/**"
+      - "cmd/**"
+      - "internal/**"
+      - "web/embed.go"
+      - "stats-worker/**"
+      - "scripts/**"
+      - "Dockerfile"
+      - "evals/**"
+      - "examples/**"
+      - "go.mod"
+      - "go.sum"
+      - "action.yml"
+      - "Makefile"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No credentials in the repository
+        run: scripts/check-secrets.sh --all
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: vet + unit tests
+        run: make test
+      - name: WebAssembly build
+        run: GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/wasm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Rule evals (recall/precision gate)
+        run: make evals
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Stats worker unit tests
+        run: cd stats-worker && npm test
+
+  # Dogfood the composite action exactly as users consume it.
+  action:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hardened example must pass
+        uses: ./
+        with:
+          path: examples/secure
+          comment: "false"
+          sarif: "false"
+      - name: Vulnerable example must fail
+        id: insecure
+        uses: ./
+        continue-on-error: true
+        with:
+          path: examples/insecure
+          plan: examples/plan.json
+          comment: "false"
+          sarif: "false"
+      - run: test "${{ steps.insecure.outputs.passed }}" = "false"
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build self-hosted image
+        run: docker build -t terraguard:ci .
+      - name: Smoke test
+        run: |
+          docker run --rm -v "$PWD/examples:/src" -w /src terraguard:ci scan secure
+          docker run -d --name tg -p 127.0.0.1:8080:8080 terraguard:ci
+          for i in $(seq 1 20); do curl -fsS 127.0.0.1:8080/healthz && break; sleep 1; done
+          curl -fsS 127.0.0.1:8080/api/config
+          curl -fsS -o /dev/null 127.0.0.1:8080/terraguard.wasm

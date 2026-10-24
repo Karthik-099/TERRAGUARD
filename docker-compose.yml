@@ -1,0 +1,30 @@
+# Self-hosted TerraGuard for a team.
+#   docker compose up -d                          # hosted free models (keys from .env)
+#   docker compose --profile local-llm up -d      # + private local LLM, nothing leaves your network
+services:
+  terraguard:
+    build: .
+    image: terraguard:local
+    ports:
+      - "127.0.0.1:8080:8080"   # localhost only; put SSO / a reverse proxy in front to share
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Used only when the local-llm profile is running.
+      TERRAGUARD_OLLAMA_URL: ${TERRAGUARD_OLLAMA_URL:-http://ollama:11434/v1}
+    read_only: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "terraguard", "version"]
+      interval: 30s
+
+  ollama:
+    profiles: ["local-llm"]
+    image: ollama/ollama:0.12.3
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama:

@@ -1,0 +1,27 @@
+name: 💡 Rule request
+description: A misconfiguration or apply failure TerraGuard should catch
+labels: [rule-request]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What goes wrong?
+      description: The security risk, outage, or `terraform apply` failure you hit.
+    validations:
+      required: true
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Minimal Terraform that should be flagged
+      render: hcl
+    validations:
+      required: true
+  - type: textarea
+    id: good
+    attributes:
+      label: The fixed / safe version (must NOT be flagged)
+      render: hcl
+  - type: input
+    id: refs
+    attributes:
+      label: References (provider docs, CVE, incident write-up)

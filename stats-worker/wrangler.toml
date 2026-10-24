@@ -1,0 +1,17 @@
+# Public, anonymous usage counters for the TerraGuard dashboard.
+# Deploy: npx wrangler login && npx wrangler deploy   (free plan is enough)
+name = "terraguard-stats"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Origins allowed to send counts (comma-separated). Add your custom domain if you have one.
+ALLOWED_ORIGINS = "https://karthik-099.github.io,http://localhost:8080,http://127.0.0.1:8080"
+
+[[durable_objects.bindings]]
+name = "STATS"
+class_name = "Stats"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Stats"]

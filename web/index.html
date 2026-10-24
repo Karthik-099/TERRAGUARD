@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TerraGuard</title>
+<meta name="description" content="Terraform security, apply-time validation, attack paths, plan risk, compliance and docs for every cloud. Runs entirely in your browser.">
+<meta property="og:title" content="TerraGuard — catch Terraform problems before apply does">
+<meta property="og:description" content="Open-source Terraform guardrails for AWS, GCP, Azure, Cloudflare, DigitalOcean, OVH, Hetzner, Oracle, Kubernetes and more.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>try { const t = localStorage.getItem("tg.theme"); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="favicon.svg" alt="" width="28" height="28">
+    <div class="brand-text">
+      <span class="name">TerraGuard</span>
+      <span class="tag">Terraform guardrails for every cloud · runs in your browser</span>
+    </div>
+  </div>
+  <nav class="top-actions">
+    <span id="engine-status" class="pill muted" title="The analysis engine runs locally as WebAssembly">loading engine…</span>
+    <span id="privacy-pill" class="pill ok" title="Your Terraform is analyzed on this device and never uploaded">🔒 code stays local</span>
+    <button class="btn ghost icon" id="btn-theme" title="Toggle light/dark theme" aria-label="Toggle theme">◐</button>
+    <button class="btn ghost" data-tab-go="why" title="What TerraGuard solves">Why?</button>
+    <button class="btn ghost" id="btn-share" title="Copy a link that contains your files (nothing is uploaded)">Share</button>
+    <button class="btn ghost" id="btn-settings">AI settings</button>
+    <a class="btn ghost" id="gh-link" href="https://github.com/Karthik-099/TERRAGUARD" target="_blank" rel="noopener">★ GitHub</a>
+  </nav>
+</header>
+
+<main class="layout">
+  <section class="editor-pane" aria-label="Editor">
+    <div class="toolbar">
+      <div class="tabs" id="file-tabs" role="tablist"></div>
+      <div class="toolbar-actions">
+        <button class="btn sm" id="btn-new" title="New file">+ File</button>
+        <label class="btn sm" title="Upload .tf / .tfvars / plan.json / .terraguard.yml">Upload<input type="file" id="upload" multiple hidden accept=".tf,.tfvars,.json,.yml,.yaml"></label>
+        <label class="btn sm" title="Upload a Terraform folder">Folder<input type="file" id="upload-dir" webkitdirectory hidden></label>
+        <select id="example-select" class="btn sm" aria-label="Load example">
+          <option value="">Examples…</option>
+          <option value="insecure">Vulnerable AWS + Cloudflare project</option>
+          <option value="multicloud">Multi-cloud (DO · Hetzner · OVH · OCI · K8s)</option>
+          <option value="secure">Hardened project</option>
+          <option value="plan">Risky terraform plan</option>
+        </select>
+        <button class="btn sm" id="btn-format" title="terraform fmt the current file">Format</button>
+        <button class="btn sm" id="btn-download" title="Download the current file">Download</button>
+      </div>
+    </div>
+    <div id="editor" class="editor"><div class="drop-hint">Paste Terraform, drop files or a folder here, or load an example.</div></div>
+  </section>
+
+  <section class="panel" aria-label="Results">
+    <div class="scorecard" id="scorecard"></div>
+    <nav class="panel-tabs" role="tablist">
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="why">Why TerraGuard</button>
+      <button data-tab="findings">Findings</button>
+      <button data-tab="apply">Will it apply?</button>
+      <button data-tab="plan">Plan</button>
+      <button data-tab="graph">Graph</button>
+      <button data-tab="compliance">Compliance</button>
+      <button data-tab="ai">AI assistant</button>
+      <button data-tab="policy">Policy</button>
+      <button data-tab="docs">Docs</button>
+      <button data-tab="cicd">CI/CD</button>
+      <button data-tab="stats">Live stats</button>
+      <button data-tab="rules">Rules</button>
+      <button data-tab="community">Community</button>
+    </nav>
+
+    <div class="tab-body" id="tab-overview"></div>
+    <div class="tab-body" id="tab-why" hidden></div>
+
+    <div class="tab-body" id="tab-findings" hidden>
+      <div class="filters">
+        <input type="search" id="filter-q" placeholder="Filter by rule, resource, text…">
+        <div class="chips" id="sev-chips"></div>
+      </div>
+      <div class="chips cloud-chips" id="cloud-chips"></div>
+      <div class="bulk">
+        <button class="btn primary sm" id="btn-fixall">Fix all auto-fixable</button>
+        <button class="btn sm" id="btn-ai-review" title="Ask the LLM for issues the rules cannot see">AI deep review</button>
+        <button class="btn sm" id="btn-export">Export ▾</button>
+        <div class="menu" id="export-menu" hidden>
+          <button data-export="markdown">Markdown report</button>
+          <button data-export="json">JSON report</button>
+          <button data-export="sarif">SARIF (GitHub code scanning)</button>
+        </div>
+      </div>
+      <div id="findings-list" class="list"></div>
+    </div>
+
+    <div class="tab-body" id="tab-apply" hidden></div>
+
+    <div class="tab-body" id="tab-plan" hidden>
+      <p class="hint">Paste the output of <code>terraform plan -out tfplan &amp;&amp; terraform show -json tfplan</code>. TerraGuard flags data-loss destroys/replacements and runs every rule against the <em>resolved</em> values.</p>
+      <textarea id="plan-input" class="mono" spellcheck="false" placeholder='{"format_version":"1.2", "resource_changes":[...]}'></textarea>
+      <div class="row"><button class="btn sm" id="btn-plan-clear">Clear plan</button><label class="btn sm">Upload plan.json<input type="file" id="plan-upload" accept=".json" hidden></label><button class="btn sm" data-q="explainplan">Explain plan with AI</button></div>
+      <div id="plan-view"></div>
+    </div>
+
+    <div class="tab-body" id="tab-graph" hidden>
+      <p class="hint">Resource dependency graph. Node colour = worst finding. Attack paths are drawn in red. Click a node to jump to its code.</p>
+      <div id="graph"></div>
+    </div>
+
+    <div class="tab-body" id="tab-compliance" hidden></div>
+
+    <div class="tab-body chat" id="tab-ai" hidden>
+      <div class="ai-head">
+        <div class="row"><span id="ai-provider-label" class="pill"></span><span class="hint" style="margin:0">Advisory only — the engine's findings decide pass/fail.</span></div>
+        <div class="quick">
+          <button class="btn sm" data-q="explain">Explain top risks</button>
+          <button class="btn sm" data-q="plan">Remediation plan</button>
+          <button class="btn sm" data-q="rewrite">Fix this file</button>
+          <button class="btn sm" data-q="test">Write terraform tests</button>
+          <button class="btn sm" data-q="cost">Cost review</button>
+          <button class="btn sm" data-q="generate">Generate secure module…</button>
+          <button class="btn sm" data-q="migrate">Migrate provider version</button>
+          <button class="btn sm ghost" id="btn-chat-clear">Clear chat</button>
+        </div>
+      </div>
+      <div id="chat-log" class="chat-log" aria-live="polite"></div>
+      <form id="chat-form" class="chat-form">
+        <textarea id="chat-input" rows="2" placeholder="Ask about this Terraform, a finding, or ask for a change… (Enter to send, Shift+Enter for newline)"></textarea>
+        <button class="btn primary" type="submit">Send</button>
+      </form>
+    </div>
+
+    <div class="tab-body" id="tab-policy" hidden>
+      <p class="hint">Your engineering standards as code (<code>.terraguard.yml</code>): failure threshold, severity overrides, <strong>expiring, approved waivers</strong>, and custom rules. The same file drives the CLI, GitHub Action, MCP server and self-hosted server.</p>
+      <textarea id="policy-input" class="mono tall" spellcheck="false"></textarea>
+      <div class="row"><button class="btn sm" id="btn-policy-example">Load example policy</button><span id="policy-status" class="hint"></span></div>
+    </div>
+
+    <div class="tab-body" id="tab-docs" hidden>
+      <div class="row"><button class="btn primary sm" id="btn-docs-copy">Copy Markdown</button><button class="btn sm" id="btn-docs-download">Download README.md</button><span class="hint" style="margin:0">terraform-docs style, generated from your code.</span></div>
+      <div id="docs-view" class="md"></div>
+    </div>
+
+    <div class="tab-body" id="tab-cicd" hidden></div>
+    <div class="tab-body" id="tab-stats" hidden></div>
+    <div class="tab-body" id="tab-rules" hidden><div id="rules-list"></div></div>
+    <div class="tab-body" id="tab-community" hidden></div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog" class="settings">
+    <h2>AI settings <span class="pill muted">optional</span></h2>
+    <p class="hint">TerraGuard works fully without AI. If you add a model, it only explains and suggests. Keys stay in this browser's <code>localStorage</code> and go only to the provider you pick.</p>
+    <label class="check"><input type="checkbox" id="ai-private"> <span><b>Private mode</b> — never call hosted AI; use a local model (Ollama/LM Studio) or your self-hosted server only</span></label>
+    <label>Provider
+      <select id="ai-provider">
+        <option value="groq">Groq — GPT-OSS / Llama (fastest, free tier)</option>
+        <option value="openrouter">OpenRouter — many free models</option>
+        <option value="gemini">Google Gemini (free tier)</option>
+        <option value="local">Local model — Ollama, LM Studio, vLLM (data stays on your machine)</option>
+        <option value="server">Self-hosted TerraGuard server (keys in server .env)</option>
+      </select>
+    </label>
+    <label id="row-base">Base URL <input id="ai-base" placeholder="http://localhost:11434/v1"></label>
+    <label id="row-model">Model <input id="ai-model" list="ai-models" autocomplete="off"></label>
+    <datalist id="ai-models"></datalist>
+    <label id="row-key">API key <input id="ai-key" type="password" autocomplete="off" placeholder="paste key"></label>
+    <label id="row-token">Server token <input id="ai-token" type="password" autocomplete="off" placeholder="only if TERRAGUARD_SERVER_TOKEN is set"></label>
+    <p class="hint" id="ai-help"></p>
+    <label class="check"><input type="checkbox" id="ai-fallback" checked> <span>Fallback: if a model is rate-limited or down, try the provider's other models, then my other providers</span></label>
+    <label class="check"><input type="checkbox" id="ai-telemetry" checked> <span>Share anonymous usage counts (number of scans/files/resources — never code) for the public dashboard</span></label>
+    <div class="row end">
+      <button class="btn" value="cancel">Close</button>
+      <button class="btn primary" id="ai-save" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script src="wasm_exec.js"></script>
+<script src="ai.js"></script>
+<script src="cicd.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

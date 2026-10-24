@@ -1,4 +1,27 @@
-venv/
+# local secrets
 .env
+.env.*
+!.env.example
+
+# build output
+bin/
+web/terraguard.wasm
+web/wasm_exec.js
+web/examples/
+
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+
+# python
+venv/
+.venv/
 __pycache__/
 *.pyc
+
+# cloudflare worker
+stats-worker/node_modules/
+stats-worker/.wrangler/
+.dev.vars
