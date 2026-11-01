@@ -538,6 +538,7 @@ waivers:
               <tr><td>Security policy breadth</td><td class="us">271 rules</td><td class="better">1,000+ policies</td><td class="better">Hundreds of checks</td><td>Correctness focus</td><td>None</td></tr>
               <tr><td>Apply-time validation</td><td class="us">Common failures</td><td>No</td><td>No</td><td class="better">Deep, via provider rulesets</td><td>Syntax and references, needs init</td></tr>
               <tr><td>Plan destroy and replace risk</td><td class="us">Yes, with cause</td><td>Security checks only</td><td>Security checks only</td><td>No</td><td>No</td></tr>
+              <tr><td>Quota and global-name preflight</td><td class="us">Opt-in, live, read-only</td><td>No</td><td>No</td><td>No</td><td>No (apply time only)</td></tr>
               <tr><td>Provider argument checks</td><td class="us">Every argument, with --schema</td><td>No</td><td>No</td><td class="better">Yes, via rulesets</td><td>Yes, after init</td></tr>
               <tr><td>Local module input checks</td><td class="us">Unknown and missing inputs, no init</td><td>No</td><td>No</td><td>No</td><td>Yes, after init</td></tr>
               <tr><td>Visual resource graph</td><td class="us">Icons per resource, attack paths</td><td>No</td><td>No</td><td>No</td><td>terraform graph (DOT text)</td></tr>
@@ -773,6 +774,7 @@ curl -s localhost:8080/metrics                           # Prometheus</pre>
           <p class="eyebrow">Documentation</p>
           <a href="#/docs/guide" data-doc="guide">Getting started</a>
           <a href="#/docs/reference" data-doc="reference">Reference: CLI, policy, API, MCP</a>
+          <a href="#/docs/limits" data-doc="limits">Guarantees and limits</a>
           <a href="#/docs/rules" data-doc="rules">Rule catalog</a>
           <a href="#/docs/self-hosting" data-doc="self-hosting">Self-hosting</a>
           <a href="#/docs/security" data-doc="security">Security and threat model</a>

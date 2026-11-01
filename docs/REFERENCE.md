@@ -12,6 +12,7 @@ and configuration. For a walkthrough, start with [Getting started](GUIDE.md).
 | `terraguard fix [paths]` | Apply safe, deterministic fixes in place |
 | `terraguard agent [paths] [--write]` | Deterministic fixes, then AI proposals that the engine verifies |
 | `terraguard pulse [roots]` | Control adoption, waivers and trend across many modules |
+| `terraguard preflight --plan FILE --live` | Check the plan against live cloud quotas and S3 name availability (read-only) |
 | `terraguard policy validate` | Validate `.terraguard.yml`, including `extends` |
 | `terraguard policy test DIR` | Run policy fixtures (`# expect:` and `# forbid:` headers) |
 | `terraguard policy suggest "standard" [paths]` | Draft one custom rule from plain English: AI drafts, the engine validates and dry-runs it |
@@ -208,6 +209,29 @@ All are optional. The CLI and server also read `./.env`.
 | `TERRAGUARD_RUN_TASK_HMAC_KEY` | Enables `/api/run-task`; the HMAC key configured on the run task |
 | `TERRAGUARD_TFC_HOST` | The only host run tasks may call (default `app.terraform.io`) |
 | `TERRAGUARD_RUN_TASK_CONFIG` | Path to a `.terraguard.yml` applied to every run task |
+
+## Quota preflight
+
+```bash
+terraform plan -out tfplan && terraform show -json tfplan > plan.json
+terraguard preflight --plan plan.json --live
+```
+
+| Flag | Meaning |
+|---|---|
+| `--plan FILE` | `terraform show -json` output (required) |
+| `--live` | Read limits and usage with the `aws`, `az` and `gcloud` CLIs; read-only calls only |
+| `--quotas FILE` | JSON of known limits and usage, keyed like the output (`aws/ec2/L-1216C47A@eu-west-1`), instead of `--live` |
+| `--region` | AWS region when the provider's region is not a literal (defaults to `AWS_REGION`) |
+| `--format`, `--markdown`, `--json` | Outputs |
+
+Checked: AWS standard on-demand vCPUs, VPCs, Elastic IPs, internet gateways,
+Application Load Balancers, RDS instances and S3 buckets per account; Azure
+regional vCPUs and public IPs; Google Cloud regional CPUs per machine family,
+static and in-use external addresses; and whether new S3 bucket names are free.
+vCPUs are estimated from instance type names. Exit code 1 means a quota would
+be exceeded or a bucket name is taken. In GitHub Actions use `command:
+preflight` with the `plan` input after configuring cloud credentials.
 
 ## Provider schema checks
 

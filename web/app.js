@@ -163,7 +163,7 @@
 
   // Documentation: the repository's Markdown, rendered in the site
   const DOCS = {
-    guide: "GUIDE.md", reference: "REFERENCE.md", rules: "RULES.md", "self-hosting": "SELF_HOSTING.md",
+    guide: "GUIDE.md", reference: "REFERENCE.md", limits: "LIMITS.md", rules: "RULES.md", "self-hosting": "SELF_HOSTING.md",
     security: "SECURITY.md", academy: "ACADEMY.md", architecture: "ARCHITECTURE.md", contributing: "CONTRIBUTING.md",
   };
   const DOC_SLUG = Object.fromEntries(Object.entries(DOCS).map(([k, v]) => [v, k]));
@@ -428,7 +428,7 @@
         <div class="tile"><h4>Will it apply?</h4><ul class="checks">
           ${VALIDATION.map(([id, label]) => `<li>${mark(!blocking.has(id))}<span>${label}</span></li>`).join("")}
           ${warn.slice(0, 4).map((f) => `<li>${mark(null)}<span>${esc(f.message)}</span></li>`).join("")}</ul>
-          <p class="hint" style="margin:10px 0 0">Quotas, permissions and name availability need a real plan; add one in the Plan tab.</p></div>
+          <p class="hint" style="margin:10px 0 0">Quotas and global names are only enforced by the cloud at apply time: run <code>terraguard preflight --live</code> before apply.</p></div>
         <div class="tile"><h4>Top risks</h4>${active.length ? `<ul class="toplist">${active.slice(0, 8).map((f) => `<li><span class="sev ${f.severity}">${f.severity}</span><span class="grow">${esc(f.title)}</span><button class="loc" data-jump="${esc(f.file)}" data-line="${f.line || 0}">${esc(f.file)}${f.line ? ":" + f.line : ""}</button></li>`).join("")}</ul>` : `<div class="empty-sm">No active findings.</div>`}</div>
         <div class="tile"><h4>Findings by category</h4>${bars(Object.entries(r.by_category || {}).sort((a, b) => b[1] - a[1]), { label: (k) => CATEGORY[k] || k, empty: "No active findings." })}</div>
         <div class="tile"><h4>Resources by provider</h4>${bars(Object.entries(r.providers || {}).sort((a, b) => b[1] - a[1]), { label: (k) => CLOUDS[k] || k, empty: "No resources yet." })}</div>

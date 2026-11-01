@@ -18,6 +18,7 @@ AI is optional: it explains and proposes; the engine decides.
 - **Policy-as-code.** `.terraguard.yml` with `extends`, custom rules (`where`/`assert`), expiring waivers with approver, budgets (`max_findings`), baselines, `policy test`.
 - **Plain-English standards.** `engine.DraftRule` turns a model's draft into one validated custom rule (no waivers, disables or built-in IDs) and dry-runs it; `terraguard policy suggest` and the Policy tab use it.
 - **Remote MCP.** `terraguard serve` exposes the MCP tools at `/mcp` (token-protected, inline files only).
+- **Quota preflight.** `terraguard preflight --live` counts what a plan needs per cloud quota and checks S3 name availability with read-only CLI calls; it is separate from the deterministic gate.
 - **Pulse.** Control adoption, waiver inventory and trend across many modules.
 - **Attack paths.** Cross-resource graph checks (for example a public instance reaching an unencrypted database).
 - **Privacy.** Code never leaves the device in the browser; air-gapped mode makes zero outside requests; paid AI is opt-in only.

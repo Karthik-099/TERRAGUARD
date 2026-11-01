@@ -190,6 +190,18 @@ waivers:
 A complete example lives in [examples/policies](examples/policies).
 
 
+### Quota preflight
+
+```bash
+terraguard preflight --plan plan.json --live   # read-only cloud access
+```
+
+Quotas and global names (like S3 buckets) are only enforced when resources are
+created, so a clean plan can still fail halfway through apply. Preflight counts
+what the plan needs per quota, compares it with live limits and usage, and
+checks that new bucket names are free. It is opt-in and separate from the
+deterministic gate. See [Guarantees and limits](docs/LIMITS.md).
+
 ### Provider schema checks
 
 ```bash
@@ -302,6 +314,7 @@ Also on the website: [karthik-099.github.io/TERRAGUARD/#/docs](https://karthik-0
 - [docs/GUIDE.md](docs/GUIDE.md): getting started, from a first scan to a pull-request gate
 - [docs/REFERENCE.md](docs/REFERENCE.md): CLI, policy file, HTTP API, MCP tools, environment variables
 - [docs/RULES.md](docs/RULES.md): every rule, generated from the engine
+- [docs/LIMITS.md](docs/LIMITS.md): guarantees and limits: drift, quotas, partial applies, permissions, false positives
 - [docs/ACADEMY.md](docs/ACADEMY.md): how Terraform works, where it breaks, and how every TerraGuard feature works
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): HLD, LLD, pipelines and design decisions
 - [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md): Docker, private AI and secrets

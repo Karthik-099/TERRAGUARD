@@ -61,6 +61,12 @@ terraform show -json tfplan > plan.json
 terraguard scan . --plan plan.json
 ```
 
+Right before apply, check what only the cloud knows: quotas and global names.
+
+```bash
+terraguard preflight --plan plan.json --live   # read-only cloud credentials
+```
+
 ## 4. Fix issues
 
 ```bash

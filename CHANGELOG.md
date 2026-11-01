@@ -15,6 +15,8 @@ All notable changes are documented here. The format follows
 - Share links are capped at 5 MB when expanded and their contents are validated before loading.
 
 ### Added
+- `terraguard preflight` (and the Action's `command: preflight`): checks a plan against live cloud quotas (AWS, Azure, Google Cloud) and S3 bucket name availability before apply, with read-only calls. Separate from the deterministic gate.
+- Guarantees and limits page: drift, quotas, partial applies, permissions, unknown values, modules, false positives, AI.
 - Redesigned site and workspace: animated node-network background, 3D hero, cursor light, scroll progress, a teal-to-violet palette in both themes, self-hosted Manrope and Space Grotesk fonts (no Google Fonts request). Workspace tabs show icons and live counts; the status bar shows a severity distribution; the graph draws clearly visible, hover-highlighted connections.
 - Install picker: choosing a platform shows its command; downloads only start from the Download button.
 - Provider schema checks: `scan --schema` (and the Action's `schema` input) checks every argument and block against `terraform providers schema -json`: unknown and read-only arguments with "did you mean" hints, missing required arguments and blocks, block limits, deprecations.

@@ -28,6 +28,8 @@ Usage:
   terraguard agent [paths] [--write]   Fix findings: deterministic fixes, then AI proposals the engine verifies
   terraguard pulse [roots] [--baseline prev.json --json out.json]
                                        Control adoption, waivers and trend across many modules
+  terraguard preflight --plan plan.json --live
+                                       Check the plan against live cloud quotas before apply
   terraguard ai                        Show the AI fallback route built from .env
   terraguard serve [--addr host:port]  Self-host the web app + API (keys stay server-side)
   terraguard policy validate|test      Validate a policy (with extends) or run policy test fixtures
@@ -89,6 +91,8 @@ func main() {
 		err = runAgent(os.Args[2:])
 	case "pulse":
 		code, err = runPulse(os.Args[2:])
+	case "preflight":
+		code, err = runPreflight(os.Args[2:])
 	case "policy":
 		code, err = runPolicy(os.Args[2:])
 	case "review":

@@ -7,7 +7,7 @@ branding:
 
 inputs:
   command:
-    description: "scan (gate on all findings, default), review (gate only on findings a PR introduces; needs actions/checkout with fetch-depth 0) or pulse (control adoption, waivers and trend across many modules)."
+    description: "scan (gate on all findings, default), review (gate only on findings a PR introduces; needs actions/checkout with fetch-depth 0), pulse (control adoption, waivers and trend across many modules) or preflight (check the plan against live cloud quotas and bucket names; needs plan and read-only cloud credentials)."
     default: scan
   base:
     description: "review only: git revision to compare against. Defaults to the pull request's base commit."
@@ -77,9 +77,22 @@ runs:
         cat "$RUNNER_TEMP/pulse.md" >> "$GITHUB_STEP_SUMMARY"
         echo "Pulse JSON: $RUNNER_TEMP/pulse.json (upload it as an artifact and pass it as baseline next run)"
 
+    - name: Preflight
+      if: inputs.command == 'preflight'
+      shell: bash
+      env:
+        TG_PLAN: ${{ inputs.plan }}
+      run: |
+        [ -n "$TG_PLAN" ] || { echo "preflight needs the plan input (terraform show -json output)"; exit 2; }
+        set +e
+        "$RUNNER_TEMP/terraguard" preflight --plan "$TG_PLAN" --live --markdown "$RUNNER_TEMP/preflight.md"
+        code=$?
+        cat "$RUNNER_TEMP/preflight.md" >> "$GITHUB_STEP_SUMMARY"
+        exit $code
+
     - name: Scan
       id: scan
-      if: inputs.command != 'pulse'
+      if: inputs.command != 'pulse' && inputs.command != 'preflight'
       shell: bash
       env:
         TG_PATH: ${{ inputs.path }}
@@ -121,7 +134,7 @@ runs:
         category: terraguard
 
     - name: Sticky PR comment
-      if: inputs.command != 'pulse' && inputs.comment == 'true' && github.event_name == 'pull_request'
+      if: inputs.command != 'pulse' && inputs.command != 'preflight' && inputs.comment == 'true' && github.event_name == 'pull_request'
       continue-on-error: true
       shell: bash
       env:
@@ -139,7 +152,7 @@ runs:
         fi
 
     - name: Policy gate
-      if: inputs.command != 'pulse' && steps.scan.outputs.passed != 'true'
+      if: inputs.command != 'pulse' && inputs.command != 'preflight' && steps.scan.outputs.passed != 'true'
       shell: bash
       run: |
         echo "::error title=TerraGuard::Policy failed (grade ${{ steps.scan.outputs.grade }}, score ${{ steps.scan.outputs.score }}). See the job summary."
