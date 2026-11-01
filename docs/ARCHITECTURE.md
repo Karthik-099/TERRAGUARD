@@ -356,7 +356,7 @@ flowchart LR
 | Google Gemini | https://aistudio.google.com/apikey |
 | Ollama (local) | https://ollama.com/download |
 
-`evals/llm_eval.py` benchmarks any provider against the same labelled cases
+`evals/llmeval` benchmarks any provider against the same labelled cases
 as the engine, which is the evidence for keeping the LLM out of the gate.
 
 ---
@@ -537,7 +537,7 @@ Full self-hosting and privacy guide: [SELF_HOSTING.md](SELF_HOSTING.md).
 | Server tests | `make test` | `/api/config` never exposes keys, stats never contain code, token auth |
 | Rule evals | `make evals` | 45 labelled cases (`# expect:` / `# forbid:`). CI fails on any miss or false positive |
 | Worker tests | `make worker-test` | Clamping, history pruning, never storing code |
-| LLM benchmark | `python3 evals/llm_eval.py --provider groq` | Recall and precision of an LLM-only reviewer on the same cases |
+| LLM benchmark | `go run ./evals/llmeval --provider groq` | Recall and precision of an LLM-only reviewer on the same cases |
 | Dogfood | `ci.yml` | The action passes the secure example, fails the insecure one, and runs pulse; the Docker image scans and serves the app |
 
 ---
@@ -554,7 +554,11 @@ Full self-hosting and privacy guide: [SELF_HOSTING.md](SELF_HOSTING.md).
 | `web/` | Static app (also embedded into the server binary) |
 | `stats-worker/` | Cloudflare Worker + Durable Object for public counters |
 | `action.yml` | Composite GitHub Action |
-| `evals/` | Labelled cases, rule gate, LLM benchmark |
+| `evals/` | Labelled cases (run by `make evals`) and `evals/llmeval`, the Go LLM benchmark |
+| `deploy/` | Private deployments: AWS ECS Fargate, Azure Container Apps, Google Cloud Run (Terraform) and a Helm chart |
+| `templates/` | CI templates: GitLab, Jenkins, AWS CodeBuild, Azure Pipelines, Google Cloud Build |
+| `editors/vscode/` | VS Code extension |
+| `schema/` | JSON Schema for `.terraguard.yml` |
 | `examples/` | Insecure, multi-cloud and secure projects; sample plan |
 | `scripts/` | `check-secrets.sh` |
 | `Dockerfile`, `docker-compose.yml` | Self-hosting (optional bundled Ollama) |
@@ -566,7 +570,7 @@ Full self-hosting and privacy guide: [SELF_HOSTING.md](SELF_HOSTING.md).
 | Decision | Alternatives | Why |
 |---|---|---|
 | Go engine → WASM + CLI + server | Python backend (previous Flask design), JS rewrite | Terraform's own parser, one codebase for five surfaces, no server needed |
-| Deterministic gate, LLM advisory | LLM-only analysis (previous design) | Reproducible, free, offline, measurable; LLM answers vary and can hallucinate (see `llm_eval.py`) |
+| Deterministic gate, LLM advisory | LLM-only analysis (previous design) | Reproducible, free, offline, measurable; LLM answers vary and can hallucinate (see `evals/llmeval`) |
 | Normalized `Resource` model | Separate rules for source and plan | Each rule written once, covering code and resolved plan values |
 | Multi-model, multi-provider fallback | Single provider | Free tiers rate-limit and retire models monthly; the user still gets an answer |
 | BYOK in the browser, `.env` on the server | Shared hosted key | No key to leak or rate-limit, users control spend, private mode is possible |

@@ -25,3 +25,7 @@ __pycache__/
 stats-worker/node_modules/
 stats-worker/.wrangler/
 .dev.vars
+
+# original brand artwork stays local; the site uses derived assets in web/assets
+docs/brand/
+web/vendor/

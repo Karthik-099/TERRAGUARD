@@ -3,7 +3,9 @@
 const AI = (() => {
   const openaiCompat = (urlFn, extraHeaders = () => ({})) => async (key, model, messages, s) => {
     const headers = { "Content-Type": "application/json", ...extraHeaders(s) };
-    if (key) headers.Authorization = `Bearer ${key}`;
+    // Gateways such as Azure OpenAI expect the key in a custom header (e.g. "api-key").
+    if (key && s.authHeader && urlFn === customURL) headers[s.authHeader] = key;
+    else if (key) headers.Authorization = `Bearer ${key}`;
     const res = await fetch(urlFn(s), { method: "POST", headers, body: JSON.stringify({ model, messages, temperature: 0.2 }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw httpError(res.status, data.error?.message || data.error || res.statusText);
@@ -27,6 +29,8 @@ const AI = (() => {
     if (!text) throw httpError(502, data.promptFeedback?.blockReason || "empty response");
     return text;
   };
+
+  function customURL(s) { return `${(s.baseUrl || "http://localhost:11434/v1").replace(/\/$/, "")}/chat/completions`; }
 
   const server = async (_key, _model, messages, s) => {
     const headers = { "Content-Type": "application/json" };
@@ -61,9 +65,9 @@ const AI = (() => {
       call: gemini,
     },
     local: {
-      label: "Local model", hosted: false, keyOptional: true, keyUrl: "https://ollama.com/download",
-      models: ["llama3.2", "qwen2.5-coder", "mistral"],
-      call: openaiCompat((s) => `${(s.baseUrl || "http://localhost:11434/v1").replace(/\/$/, "")}/chat/completions`),
+      label: "Custom endpoint", hosted: false, keyOptional: true, keyUrl: "https://ollama.com/download",
+      models: ["llama3.2", "qwen2.5-coder", "gpt-4.1-mini", "claude-sonnet-4-5"],
+      call: openaiCompat(customURL),
     },
     server: {
       label: "Self-hosted server", hosted: false, keyOptional: true, models: ["(server route)"],
@@ -77,7 +81,7 @@ const AI = (() => {
   function load() {
     let s = {};
     try { s = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
-    return { provider: "", fallback: true, private: false, keys: {}, models: {}, baseUrl: "http://localhost:11434/v1", serverToken: "", ...s };
+    return { provider: "", fallback: true, private: false, keys: {}, models: {}, baseUrl: "http://localhost:11434/v1", authHeader: "", serverToken: "", ...s };
   }
   function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} }
 

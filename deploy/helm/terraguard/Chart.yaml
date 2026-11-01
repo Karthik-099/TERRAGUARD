@@ -1,0 +1,10 @@
+apiVersion: v2
+name: terraguard
+description: Terraform guardrails as a private service (web app, HTTP API, Prometheus metrics).
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
+home: https://github.com/Karthik-099/TERRAGUARD
+sources: [https://github.com/Karthik-099/TERRAGUARD]
+keywords: [terraform, opentofu, security, policy-as-code, devsecops]
+icon: https://raw.githubusercontent.com/Karthik-099/TERRAGUARD/main/web/assets/logo-mark.png

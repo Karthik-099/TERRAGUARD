@@ -13,9 +13,15 @@
   };
   const CATEGORY = { security: "Security", validate: "Validation", reliability: "Reliability", "best-practice": "Best practice", "attack-path": "Attack path", plan: "Plan risk", policy: "Policy", cost: "Cost" };
   const EXAMPLES = { insecure: ["main.tf", "variables.tf", "terraform.tfvars", ".terraguard.yml"], multicloud: ["main.tf"], secure: ["main.tf"] };
+  // assetsBase (set by the Docker image) serves every library from this
+  // origin, so an air-gapped install makes no outside requests.
+  const JSD = "https://cdn.jsdelivr.net/npm";
+  const LOCAL = CFG.assetsBase ? CFG.assetsBase.replace(/\/$/, "") : "";
   const CDN = {
-    monaco: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs",
-    cytoscape: "https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js",
+    monaco: LOCAL ? `${LOCAL}/monaco/min/vs` : `${JSD}/monaco-editor@0.52.2/min/vs`,
+    cytoscape: LOCAL ? `${LOCAL}/cytoscape.min.js` : `${JSD}/cytoscape@3.30.2/dist/cytoscape.min.js`,
+    marked: LOCAL ? `${LOCAL}/marked.min.js` : `${JSD}/marked@12.0.2/marked.min.js`,
+    dompurify: LOCAL ? `${LOCAL}/purify.min.js` : `${JSD}/dompurify@3.1.6/dist/purify.min.js`,
   };
   const POLICY_FILE = ".terraguard.yml";
   const STORE = "tg.state";
@@ -27,17 +33,32 @@
   const fmtN = (n) => new Intl.NumberFormat().format(n || 0);
   const cloudOf = (addr) => (addr || "").replace(/^data\./, "").split("_")[0];
   const icon = (id, cls = "ic") => `<svg class="${cls}"><use href="#i-${id}"/></svg>`;
-  const loadScript = (src) => new Promise((ok, fail) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); });
+  // Pinned CDN files carry Subresource Integrity hashes: a modified file is refused.
+  const SRI = {
+    "https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js": "sha384-IWROdLKRsN1UuJywMlWl7/blXQ8GEooN2n7dzTxfEPd7ybYIKCUJ2Ol/1Gpf3YV4",
+    "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js": "sha384-pHG02SG8pId94Np3AbPmBEJ1yPqaH0IkJGLSNGXYmuGhkazT8Lr/57WYpbkGjJtu",
+    "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js": "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi",
+    "https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js": "sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a",
+  };
+  const loadScript = (src) => new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = src;
+    if (SRI[src]) { s.integrity = SRI[src]; s.crossOrigin = "anonymous"; }
+    s.onload = ok;
+    s.onerror = fail;
+    document.head.appendChild(s);
+  });
 
   const S = {
-    files: {}, active: null, config: "", plan: "", report: null, aiFindings: [], chat: [],
+    files: {}, active: null, config: "", plan: "", report: null, aiFindings: [], chat: [], activity: [],
     filter: { q: "", sev: new Set(), cloud: "" }, tab: "overview",
     session: { scans: 0, files: 0, resources: 0, fixes: 0, ai: 0 },
   };
   let editor, monacoRef, models = {}, graph, appReady;
 
   // ── theme ───────────────────────────────────────────────────────────────
-  const isDark = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+  // Black is the default theme; light is an explicit choice that is remembered.
+  const isDark = () => document.documentElement.dataset.theme !== "light";
   function toggleTheme() {
     const next = isDark() ? "light" : "dark";
     document.documentElement.dataset.theme = next;
@@ -101,19 +122,30 @@
   }
 
   // ── routing: product page <-> workspace ─────────────────────────────────
+  const PAGES = ["home", "product", "ai", "policy", "compare", "integrations", "enterprise", "architecture", "open-source"];
   const inApp = () => location.hash.startsWith("#/app") || location.hash.startsWith("#s=");
   function route() {
     const app = inApp();
     $("#landing").hidden = app;
     $("#app").hidden = !app;
     document.body.classList.toggle("app-open", app);
-    if (app) { appReady ||= enterApp(); return; }
-    const target = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
-    if (target) requestAnimationFrame(() => target.scrollIntoView());
+    if (app) {
+      appReady ||= enterApp();
+      if (location.hash.includes("demo")) appReady.then(() => { fillSettings(); $("#settings").showModal(); });
+      return;
+    }
+    const name = (location.hash.match(/^#\/([\w-]+)/) || [])[1];
+    const page = PAGES.includes(name) ? name : "home";
+    $$("#landing .page").forEach((p) => (p.hidden = p.dataset.page !== page));
+    $$(".nav-links a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#/${page}`));
+    document.title = page === "home" ? "TerraGuard" : `${$(`.nav-links a[href="#/${page}"]`)?.textContent || "TerraGuard"} · TerraGuard`;
+    scrollTo({ top: 0, behavior: "instant" });
   }
 
   // ── engine & editor (loaded only when the workspace opens) ──────────────
-  async function bootEngine() {
+  let enginePromise;
+  const bootEngine = () => (enginePromise ||= loadEngine());
+  async function loadEngine() {
     await loadScript("wasm_exec.js");
     const go = new Go();
     let inst;
@@ -148,8 +180,10 @@
       try { shared = await decodeShare(location.hash.slice(3)); toast("Loaded shared configuration"); } catch { toast("Share link is invalid"); }
       history.replaceState(null, "", "#/app");
     }
-    loadScript(CDN.cytoscape).catch(() => {});
     try {
+      // UMD libraries must load before Monaco's AMD loader installs a global
+      // define(), or they register with it instead of the page.
+      await Promise.all([loadScript(CDN.marked), loadScript(CDN.dompurify), loadScript(CDN.cytoscape)]);
       await Promise.all([bootEngine(), bootEditor()]);
     } catch (e) {
       $("#engine-status").textContent = "Engine failed to load";
@@ -158,7 +192,9 @@
       return;
     }
     updatePrivacyPill();
-    const state = shared || restore();
+    let tried = null;
+    try { tried = JSON.parse(sessionStorage.getItem("tg.try")); sessionStorage.removeItem("tg.try"); } catch {}
+    const state = shared || tried || restore();
     if (state && Object.keys(state.files || {}).length) {
       S.config = state.config || "";
       S.plan = state.plan || "";
@@ -337,6 +373,11 @@
         <div class="tile"><h4>Resources by provider</h4>${bars(Object.entries(r.providers || {}).sort((a, b) => b[1] - a[1]), { label: (k) => CLOUDS[k] || k, empty: "No resources yet." })}</div>
         <div class="tile w12"><h4>Compliance</h4><div class="kpis">${comp.map((c) => `<div><div class="kpi">${c.passing}/${c.total}</div><div class="kpi-label">${esc(c.name)}</div></div>`).join("")}</div>
           <p class="hint" style="margin:10px 0 0">Controls with no failing evidence. <button class="loc" data-tab-go="compliance">View controls</button></p></div>
+        <div class="tile"><h4>How this result was produced</h4>${r.trace ? `<ul class="checks">
+          ${[["Parse", r.trace.parse_ms], ["Resource rules", r.trace.rules_ms], ["Module and graph checks", r.trace.checks_ms], ["Policy", r.trace.policy_ms]].map(([n, ms]) => `<li><span class="status pass">${ms.toFixed(1)} ms</span><span>${n}</span></li>`).join("")}
+          <li><span class="status pass">${fmtN(r.trace.evaluations)}</span><span>rule evaluations on ${r.stats.resources} resources</span></li>
+          <li><span class="status pass">${r.stats.rules}</span><span>rules active, fail_on ${esc(r.fail_on)}${r.trace.custom_rules ? `, ${r.trace.custom_rules} custom` : ""}</span></li></ul>` : `<div class="empty-sm">Trace unavailable.</div>`}</div>
+        <div class="tile"><h4>Activity</h4>${S.activity.length ? `<ul class="checks">${S.activity.slice(0, 8).map((a) => `<li><span class="status ${a.ok ? "pass" : "fail"}">${esc(a.kind)}</span><span>${esc(a.text)} <span class="muted">${a.at.toLocaleTimeString()}</span></span></li>`).join("")}</ul>` : `<div class="empty-sm">Fixes and AI proposals appear here, with the engine's decision.</div>`}</div>
         ${r.plan ? `<div class="tile w12"><h4>Plan</h4><div class="kpis"><div><div class="kpi">${r.plan.create}</div><div class="kpi-label">to add</div></div><div><div class="kpi">${r.plan.update}</div><div class="kpi-label">to change</div></div><div><div class="kpi" style="color:var(--crit)">${r.plan.delete}</div><div class="kpi-label">to destroy</div></div><div><div class="kpi" style="color:var(--high)">${r.plan.replace}</div><div class="kpi-label">to replace</div></div></div></div>` : ""}
       </div>`;
   }
@@ -626,6 +667,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     const existing = Object.fromEntries(Object.entries(changed).filter(([n]) => S.files[n] !== undefined));
     if (Object.keys(existing).length) {
       const v = JSON.parse(terraguard.verifyChange(JSON.stringify({ ...input(), changed: existing })));
+      log("AI proposal", `${Object.keys(existing).join(", ")}: engine ${v.reason}`, v.ok);
       if (!v.ok) { toast(`Engine ${v.reason}. Nothing was changed.`); return false; }
       toast(`Engine ${v.reason}`);
     }
@@ -665,10 +707,18 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
   }
 
   // ── actions ─────────────────────────────────────────────────────────────
+  // log records what changed and why, so users can see how the result evolved.
+  function log(kind, text, ok = true) {
+    S.activity.unshift({ at: new Date(), kind, text, ok });
+    S.activity.length = Math.min(S.activity.length, 30);
+  }
+
   function applyFixes(fixes) {
+    const before = S.report?.score;
     const res = JSON.parse(terraguard.applyFixes(JSON.stringify({ files: S.files, fixes })));
     for (const [n, c] of Object.entries(res.files || {})) setFileContent(n, c);
     count("fixes", fixes.length - (res.errors?.length || 0));
+    log("Fix", `Applied ${fixes.length - (res.errors?.length || 0)} deterministic fix(es)${before !== undefined ? `; score was ${before}` : ""}`);
     toast(res.errors?.length ? res.errors[0] : `Applied ${fixes.length} fix(es)`);
   }
   const fixAll = () => {
@@ -765,6 +815,8 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     $("#ai-fallback").checked = s.fallback;
     $("#ai-telemetry").checked = s.telemetry !== false;
     $("#row-base").hidden = p !== "local";
+    $("#row-header").hidden = p !== "local";
+    $("#ai-header").value = s.authHeader || "";
     $("#row-key").hidden = p === "server";
     $("#row-model").hidden = p === "server";
     $("#row-token").hidden = p !== "server";
@@ -773,7 +825,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       groq: `Free key: <a href="${P.keyUrl}" target="_blank" rel="noopener">${P.keyUrl}</a>`,
       openrouter: `Free key: <a href="${P.keyUrl}" target="_blank" rel="noopener">${P.keyUrl}</a>. Models ending in <code>:free</code> cost nothing.`,
       gemini: `Free key: <a href="${P.keyUrl}" target="_blank" rel="noopener">${P.keyUrl}</a>`,
-      local: `Install <a href="https://ollama.com/download" target="_blank" rel="noopener">Ollama</a>, run <code>ollama pull llama3.2</code>, then start it with <code>OLLAMA_ORIGINS=${esc(location.origin)} ollama serve</code>. Your code never leaves this machine.`,
+      local: `Any OpenAI-compatible endpoint. Local: install <a href="https://ollama.com/download" target="_blank" rel="noopener">Ollama</a>, run <code>ollama pull llama3.2</code> and start it with <code>OLLAMA_ORIGINS=${esc(location.origin)} ollama serve</code>. Enterprise: your gateway URL (LiteLLM, Azure OpenAI <code>https://NAME.openai.azure.com/openai/v1</code>, an internal proxy) with your key.`,
       server: srv ? `Connected. ${esc((srv.ai?.route || []).length)} route step(s)${srv.ai?.local_only ? ", local-only" : ""}.` : `Run <code>terraguard serve</code> and open the app from it. Keys stay in the server's <code>.env</code>.`,
     }[p];
     $$("#ai-provider option").forEach((o) => (o.disabled = s.private && AI.PROVIDERS[o.value].hosted));
@@ -912,7 +964,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     $("#ai-save").onclick = () => {
       const s = AI.load();
       const p = $("#ai-provider").value;
-      Object.assign(s, { provider: p, private: $("#ai-private").checked, baseUrl: $("#ai-base").value.trim() || "http://localhost:11434/v1",
+      Object.assign(s, { provider: p, private: $("#ai-private").checked, baseUrl: $("#ai-base").value.trim() || "http://localhost:11434/v1", authHeader: $("#ai-header").value.trim(),
         serverToken: $("#ai-token").value.trim(), fallback: $("#ai-fallback").checked, telemetry: $("#ai-telemetry").checked });
       if (p !== "server") { s.models[p] = $("#ai-model").value.trim(); s.keys[p] = $("#ai-key").value.trim(); }
       AI.save(s);
@@ -932,10 +984,105 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     addEventListener("pagehide", () => flush(true));
   }
 
+  // ── product page: motion, live try panel, install tabs ──────────────────
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setupMotion() {
+    const targets = $$("#landing .section-head, #landing .card, #landing .stage, #landing .metric, #landing .lane, #landing .diagram, #landing .table-wrap, #landing .policy-code, #landing .cap-list > div, #landing .try-panel, #landing .install, #landing .layer, #landing .flow");
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        e.target.classList.add("in");
+        io.unobserve(e.target);
+        countUp(e.target);
+      }
+    }, { rootMargin: "0px 0px -8% 0px" });
+    for (const el of targets) {
+      const siblings = [...el.parentElement.children].filter((c) => c.matches(el.tagName));
+      el.style.setProperty("--d", `${Math.min(siblings.indexOf(el), 6) * 70}ms`);
+      el.classList.add("reveal");
+      io.observe(el);
+    }
+    countUp($(".facts"));
+  }
+
+  // Animate the leading number in metric labels like "2,400" or "0.25 s".
+  function countUp(root) {
+    if (reduceMotion || !root) return;
+    for (const b of root.querySelectorAll(".metric b, .facts b, .result-steps b")) {
+      const m = b.textContent.match(/^([\d,.]+)(.*)$/);
+      if (!m || b.dataset.counted) continue;
+      b.dataset.counted = "1";
+      const target = parseFloat(m[1].replace(/,/g, "")), decimals = (m[1].split(".")[1] || "").length, rest = m[2];
+      const t0 = performance.now();
+      const tick = (now) => {
+        const k = Math.min((now - t0) / 900, 1), v = target * (1 - Math.pow(1 - k, 3));
+        b.textContent = (decimals ? v.toFixed(decimals) : fmtN(Math.round(v))) + rest;
+        if (k < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+  }
+
+  function setupTry() {
+    const area = $("#try-input");
+    let timer;
+    const run = async () => {
+      $("#try-status").textContent = "Loading engine";
+      try { await bootEngine(); } catch { $("#try-status").textContent = "Engine failed to load"; return; }
+      const t0 = performance.now();
+      const r = JSON.parse(terraguard.scan(JSON.stringify({ files: { "main.tf": area.value } })));
+      const ms = (performance.now() - t0).toFixed(1);
+      $("#try-status").textContent = `Engine v${terraguard.version} · runs locally`;
+      const active = r.findings.filter((f) => !f.waived);
+      $("#try-verdict").innerHTML = `<span class="grade g-${r.grade}" style="width:40px;height:40px;font-size:18px">${r.grade}</span>
+        <span class="verdict ${r.verdict.will_apply ? "ok" : "bad"}" style="margin:0">${r.verdict.will_apply ? "Expected to apply" : "Apply is expected to fail"}</span>
+        <span class="count">${active.length} findings</span><span class="count">${r.fixable} auto-fixable</span>`;
+      $("#try-results").innerHTML = active.length ? active.map((f) => `<div class="try-item"><span class="sev ${f.severity}">${f.severity}</span>
+        <span><span class="t">${esc(f.title)}</span><span class="m">${esc(f.message)}</span></span><span class="ln">line ${f.line || "-"}</span></div>`).join("")
+        : `<div class="empty">No findings. Clean configuration.</div>`;
+      $("#try-meta").textContent = `Scanned in ${ms} ms · ${r.stats.resources} resources · ${r.stats.rules} rules`;
+    };
+    area.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 200); });
+    const io = new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting)) { io.disconnect(); run(); } }, { rootMargin: "200px" });
+    io.observe($("#try"));
+    $("#try-open").addEventListener("click", () => {
+      try { sessionStorage.setItem("tg.try", JSON.stringify({ files: { "main.tf": area.value }, active: "main.tf" })); } catch {}
+    });
+  }
+
+  function setupScrollButtons() {
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-scroll]");
+      if (b) document.getElementById(b.dataset.scroll)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+    });
+  }
+
+  function setupInstall() {
+    $("#install-box .install-tabs").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-install]");
+      if (!b) return;
+      $$("#install-box [data-install]").forEach((x) => x.classList.toggle("on", x === b));
+      $$("#install-box [data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== b.dataset.install));
+    });
+  }
+
   // ── boot ────────────────────────────────────────────────────────────────
+  // Web fonts and GitHub stats are cosmetic: an air-gapped install skips them
+  // so the page makes no outside request at all (system fonts are used).
+  if (!LOCAL) {
+    const font = document.createElement("link");
+    font.rel = "stylesheet";
+    font.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap";
+    document.head.appendChild(font);
+  }
   wire();
+  setupMotion();
+  setupTry();
+  setupInstall();
+  setupScrollButtons();
   route();
   AI.detectServer().then(renderLiveStats);
-  renderGitHub();
+  if (!LOCAL) renderGitHub();
   mountGiscus();
 })();

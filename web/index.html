@@ -7,10 +7,17 @@
 <meta name="description" content="Catch Terraform security risks, apply-time failures and destructive plans before terraform apply. Open source, runs in your browser, CI, editor and AI agents.">
 <meta property="og:title" content="TerraGuard: catch Terraform failures before apply">
 <meta property="og:description" content="Open-source Terraform guardrails: 89 rules across 14 providers, plan risk, attack paths, auto-fix and policy-as-code. Free.">
-<meta name="color-scheme" content="light dark">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://giscus.app 'sha256-zr7+dZuqT+VgxE9ckmQ6xhn/OtqkYeV6SQAom7vG4BY='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; frame-src https://giscus.app; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#06070a">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://karthik-099.github.io/TERRAGUARD/">
+<meta property="og:image" content="https://karthik-099.github.io/TERRAGUARD/assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://karthik-099.github.io/TERRAGUARD/">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/logo-mark.png">
 <link rel="stylesheet" href="style.css">
 <script>try { const t = localStorage.getItem("tg.theme"); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
@@ -42,16 +49,16 @@
 <div id="landing">
   <header class="site-header">
     <div class="container nav">
-      <a class="brand" href="#top" aria-label="TerraGuard home"><img src="favicon.svg" alt="" width="26" height="26"><span>TerraGuard</span></a>
+      <a class="brand" href="#/" aria-label="TerraGuard home"><img class="logo" src="assets/logo.svg" alt="" width="30" height="30"><span>TerraGuard</span></a>
       <nav class="nav-links" aria-label="Sections">
-        <a href="#product">Product</a>
-        <a href="#how">How it works</a>
-        <a href="#ai">AI</a>
-        <a href="#policy">Policy</a>
-        <a href="#evolution">Architecture</a>
-        <a href="#compare">Compare</a>
-        <a href="#integrations">Integrations</a>
-        <a href="#open-source">Open source</a>
+        <a href="#/product">Product</a>
+        <a href="#/ai">AI</a>
+        <a href="#/policy">Policy</a>
+        <a href="#/compare">Compare</a>
+        <a href="#/integrations">Integrations</a>
+        <a href="#/enterprise">Enterprise</a>
+        <a href="#/architecture">Architecture</a>
+        <a href="#/open-source">Open source</a>
       </nav>
       <div class="nav-actions">
         <button class="icon-btn" data-theme-toggle aria-label="Toggle theme"><svg class="ic"><use href="#i-sun"/></svg></button>
@@ -62,15 +69,17 @@
   </header>
 
   <main id="top">
+  <div class="page" data-page="home">
     <section class="hero">
       <div class="container hero-grid">
         <div>
           <p class="eyebrow">Open-source Terraform guardrails</p>
-          <h1>Catch Terraform failures and security risks before <code>apply</code>.</h1>
+          <h1>Catch Terraform failures and security risks <span class="grad-text">before apply</span>.</h1>
           <p class="lead">TerraGuard checks your code and plans for misconfigurations, apply-time errors and destructive changes. It explains every finding and fixes many of them automatically. It runs in your browser, editor, CI and AI agents.</p>
           <div class="cta-row">
             <a class="btn primary lg" href="#/app">Try TerraGuard <svg class="ic"><use href="#i-arrow"/></svg></a>
-            <a class="btn lg" href="https://github.com/Karthik-099/TERRAGUARD" target="_blank" rel="noopener">View source</a>
+            <button class="btn lg" data-scroll="try">Quick scan below</button>
+            <a class="btn ghost lg" href="#/integrations">Install</a>
           </div>
           <ul class="facts">
             <li><b>89</b> rules</li>
@@ -85,6 +94,88 @@
       </div>
     </section>
 
+    <section class="section ways-section">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Get started</p>
+          <h2>Three ways to use TerraGuard</h2>
+        </header>
+        <div class="grid-3 ways">
+          <a class="card link" href="#/app"><span class="way-n">1</span><h3>Try it in the browser</h3><p>Open the workspace, paste or drop your Terraform, and get findings, fixes and a will-it-apply verdict. Nothing to install, nothing uploaded.</p><span class="more">Try TerraGuard <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+          <a class="card link" href="#/integrations"><span class="way-n">2</span><h3>Install where you work</h3><p>CLI binary, VS Code, pre-commit, GitHub Actions, GitLab, Jenkins, Docker, and an MCP server for AI coding agents.</p><span class="more">Install and integrate <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+          <a class="card link" href="#/enterprise"><span class="way-n">3</span><h3>Self-host privately</h3><p>One container inside your network: web app, HTTP API, your own AI models, audit log and metrics. Works fully air-gapped.</p><span class="more">Deploy privately <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+        </div>
+      </div>
+    </section>
+
+    <section id="try" class="section">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Try it here</p>
+          <h2>Paste Terraform. See every issue in milliseconds.</h2>
+          <p class="sub">The real engine runs in this page as WebAssembly. Nothing is uploaded and no account is needed. Edit the example or paste your own.</p>
+        </header>
+        <div class="try-panel">
+          <div class="try-editor">
+            <div class="try-bar"><span>main.tf</span><span id="try-status">Engine loads when you scroll here</span></div>
+            <textarea id="try-input" spellcheck="false" aria-label="Terraform to scan">resource "aws_s3_bucket" "logs" {
+  bucket = "Company_Logs"
+  acl    = "public-read"
+}
+
+resource "aws_security_group" "db" {
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_db_instance" "main" {
+  engine              = "postgres"
+  password            = "SuperSecret123!"
+  publicly_accessible = true
+  storage_encrypted   = false
+}</textarea>
+          </div>
+          <div class="try-out">
+            <div class="try-verdict" id="try-verdict"><span class="muted">Results appear here.</span></div>
+            <div class="try-results" id="try-results"></div>
+            <div class="try-bar"><span id="try-meta"></span><a class="btn primary sm" href="#/app" id="try-open">Open in workspace</a></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Explore</p>
+          <h2>Everything Terraform teams need before apply</h2>
+        </header>
+        <div class="grid-3">
+          <a class="card link" href="#/product"><h3><svg class="ic"><use href="#i-check"/></svg>Product</h3><p>How Terraform works, where each stage breaks, and how TerraGuard catches it earlier.</p><span class="more">Read more <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+          <a class="card link" href="#/ai"><h3><svg class="ic"><use href="#i-spark"/></svg>AI and demo</h3><p>Why AI only proposes and the engine decides. Try it in three steps with a free key.</p><span class="more">See the demo <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+          <a class="card link" href="#/policy"><h3><svg class="ic"><use href="#i-file"/></svg>Policy-as-code</h3><p>Inheritable policy packs, conditional rules, budgets, baselines and expiring waivers.</p><span class="more">Write a policy <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+          <a class="card link" href="#/compare"><h3><svg class="ic"><use href="#i-graph"/></svg>Compare</h3><p>How it relates to Checkov, Trivy, TFLint, OPA and others, including where they are stronger.</p><span class="more">Compare tools <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+          <a class="card link" href="#/integrations"><h3><svg class="ic"><use href="#i-code"/></svg>Integrations</h3><p>VS Code, MCP for AI agents, GitHub, GitLab, Jenkins, pre-commit and Docker.</p><span class="more">Install <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+          <a class="card link" href="#/enterprise"><h3><svg class="ic"><use href="#i-server"/></svg>Enterprise</h3><p>Private networks, air-gapped installs, any AI model, audit logs and metrics.</p><span class="more">Deploy privately <svg class="ic"><use href="#i-arrow"/></svg></span></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section cta-band">
+      <div class="container cta-inner">
+        <div>
+          <h2>Scan your Terraform in seconds</h2>
+          <p class="sub">Paste a file or drop a folder. Nothing is uploaded.</p>
+        </div>
+        <a class="btn primary lg" href="#/app">Try TerraGuard <svg class="ic"><use href="#i-arrow"/></svg></a>
+      </div>
+    </section>
+  </div>
+  <div class="page" data-page="product" hidden>
     <section id="product" class="section">
       <div class="container">
         <header class="section-head">
@@ -190,7 +281,33 @@
       </div>
     </section>
 
-
+    <section id="time" class="section">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Time saved</p>
+          <h2>Feedback moves from apply time to edit time</h2>
+          <p class="sub">The same issues are caught either way. The difference is when, and how many people and pipeline runs it takes.</p>
+        </header>
+        <div class="lanes">
+          <div class="lane">
+            <p class="lane-label">Without TerraGuard</p>
+            <ol class="flow">
+              <li>Write code</li><li>Open PR</li><li>Manual review</li><li>CI plan</li><li class="bad">Apply fails or ships a risk</li><li>Fix and re-review</li><li>Apply again</li><li class="bad">Audit finding later</li>
+            </ol>
+            <p class="lane-note">Feedback arrives after review and apply. Each miss costs another pipeline run and another review.</p>
+          </div>
+          <div class="lane good">
+            <p class="lane-label">With TerraGuard</p>
+            <ol class="flow">
+              <li class="ok">Editor flags issue on save</li><li class="ok">Auto-fix or verified AI fix</li><li class="ok">pre-commit gate</li><li class="ok">PR comment, SARIF, plan risk</li><li>Apply</li>
+            </ol>
+            <p class="lane-note">Feedback arrives in milliseconds, in the editor. Reviewers see only what still needs a human decision.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="page" data-page="ai" hidden>
     <section id="ai" class="section">
       <div class="container">
         <header class="section-head">
@@ -223,10 +340,44 @@
             <text x="620" y="186" class="m">no new medium+ findings,</text>
             <text x="620" y="202" class="m">and risk goes down.</text>
           </svg>
-        </div>
+      
+    <section class="section alt">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Demo in three steps</p>
+          <h2>See an AI fix get verified, with a free key</h2>
+          <p class="sub">The key stays in your browser and is sent only to the provider you pick. No AI at all? Every other feature still works.</p>
+        </header>
+        <ol class="demo-steps">
+          <li class="card">
+            <span class="step-n">1</span>
+            <h3>Get a free API key</h3>
+            <p>Either works. Both have free tiers.</p>
+            <div class="dl-list">
+              <a class="btn sm" href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq API key</a>
+              <a class="btn sm" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio key</a>
+              <a class="btn sm ghost" href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a>
+            </div>
+          </li>
+          <li class="card">
+            <span class="step-n">2</span>
+            <h3>Add it to TerraGuard</h3>
+            <p>Open the workspace, then <b>AI settings</b>. Choose Groq or Gemini, paste the key and save. Prefer privacy? Choose <b>Local model</b> and point it at Ollama.</p>
+            <a class="btn primary sm" href="#/app?demo">Open workspace and AI settings</a>
+          </li>
+          <li class="card">
+            <span class="step-n">3</span>
+            <h3>Run a verified fix</h3>
+            <p>The vulnerable example loads automatically. Click <b>AI fix (verified)</b> on the Overview tab, then read the <b>Activity</b> panel: the engine shows whether it accepted or rejected the change, and how the risk moved.</p>
+          </li>
+        </ol>
+        <p class="footnote">Also try: Explain top risks, Write terraform tests, Explain plan with AI, and AI review for issues rules cannot see. The CLI equivalent is <code>terraguard agent . --write</code> with the key in <code>.env</code>.</p>
+      </div>
+    </section>
+  </div>
         <div class="grid-3">
           <article class="card"><h3>Where AI helps</h3><ul class="plain"><li>Explain a finding and its real-world impact</li><li>Rewrite a file to fix what rules cannot auto-fix</li><li>Generate <code>terraform test</code> files and modules</li><li>Summarize a plan for reviewers</li></ul></article>
-          <article class="card"><h3>Where it is never used</h3><ul class="plain"><li>Deciding pass or fail in CI</li><li>Deciding whether its own fix worked</li><li>Anything without your review</li></ul><p class="muted" style="margin-top:8px">The engine decides. <code>evals/llm_eval.py</code> measures how often models alone miss or invent issues.</p></article>
+          <article class="card"><h3>Where it is never used</h3><ul class="plain"><li>Deciding pass or fail in CI</li><li>Deciding whether its own fix worked</li><li>Anything without your review</li></ul><p class="muted" style="margin-top:8px">The engine decides. <code>evals/llmeval</code> measures how often models alone miss or invent issues.</p></article>
           <article class="card"><h3>Connect any model</h3><ul class="plain"><li>Free keys: Groq, OpenRouter, Gemini</li><li>Local: Ollama, LM Studio, vLLM</li><li>Team: keys on your own server</li><li>Automatic fallback across models</li></ul></article>
         </div>
         <div class="card result">
@@ -243,34 +394,8 @@
         </div>
       </div>
     </section>
-
-    <section id="time" class="section alt">
-      <div class="container">
-        <header class="section-head">
-          <p class="eyebrow">Time saved</p>
-          <h2>Feedback moves from apply time to edit time</h2>
-          <p class="sub">The same issues are caught either way. The difference is when, and how many people and pipeline runs it takes.</p>
-        </header>
-        <div class="lanes">
-          <div class="lane">
-            <p class="lane-label">Without TerraGuard</p>
-            <ol class="flow">
-              <li>Write code</li><li>Open PR</li><li>Manual review</li><li>CI plan</li><li class="bad">Apply fails or ships a risk</li><li>Fix and re-review</li><li>Apply again</li><li class="bad">Audit finding later</li>
-            </ol>
-            <p class="lane-note">Feedback arrives after review and apply. Each miss costs another pipeline run and another review.</p>
-          </div>
-          <div class="lane good">
-            <p class="lane-label">With TerraGuard</p>
-            <ol class="flow">
-              <li class="ok">Editor flags issue on save</li><li class="ok">Auto-fix or verified AI fix</li><li class="ok">pre-commit gate</li><li class="ok">PR comment, SARIF, plan risk</li><li>Apply</li>
-            </ol>
-            <p class="lane-note">Feedback arrives in milliseconds, in the editor. Reviewers see only what still needs a human decision.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-
+  </div>
+  <div class="page" data-page="policy" hidden>
     <section id="policy" class="section">
       <div class="container">
         <header class="section-head">
@@ -312,7 +437,258 @@ waivers:
         </div>
       </div>
     </section>
+  </div>
+  <div class="page" data-page="compare" hidden>
+    <section id="compare" class="section">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Compare</p>
+          <h2>How TerraGuard fits with existing tools</h2>
+          <p class="sub">Mature scanners have broader policy libraries. TerraGuard focuses on developer workflow: validation, plan risk, fixes and zero-install use. Many teams run it alongside them.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="compare">
+            <thead><tr><th></th><th class="us">TerraGuard</th><th>Checkov</th><th>Trivy (tfsec)</th><th>TFLint</th><th>terraform validate</th></tr></thead>
+            <tbody>
+              <tr><td>Runs in the browser, no install</td><td class="us">Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+              <tr><td>Security policy breadth</td><td class="us">89 rules</td><td class="better">1,000+ policies</td><td class="better">Hundreds of checks</td><td>Correctness focus</td><td>None</td></tr>
+              <tr><td>Apply-time validation</td><td class="us">Common failures</td><td>No</td><td>No</td><td class="better">Deep, via provider rulesets</td><td>Syntax and references, needs init</td></tr>
+              <tr><td>Plan destroy and replace risk</td><td class="us">Yes, with cause</td><td>Security checks only</td><td>Security checks only</td><td>No</td><td>No</td></tr>
+              <tr><td>Cross-resource checks</td><td class="us">Attack paths</td><td class="better">Graph checks</td><td>No</td><td>No</td><td>No</td></tr>
+              <tr><td>Auto-fix</td><td class="us">Yes</td><td>Not in open source</td><td>No</td><td>Some rules</td><td>No</td></tr>
+              <tr><td>Waivers with expiry</td><td class="us">Reason, approver, expiry</td><td>Skip comments</td><td>Expiry in ignore comments</td><td>Ignore comments</td><td>No</td></tr>
+              <tr><td>Optional AI, including local models</td><td class="us">Yes</td><td>Paid platform</td><td>No</td><td>No</td><td>No</td></tr>
+              <tr><td>SARIF, JUnit, pre-commit, VS Code</td><td class="us">Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="footnote">Based on public documentation as of November 2026. Ideas adopted from these tools: VS Code diagnostics and pre-commit hooks (Checkov, pre-commit-terraform), JUnit output (Checkov, Trivy), documented-variable checks (TFLint). Provider-schema validation (TFLint) is planned for phase 3. Corrections are welcome as a GitHub issue.</p>
 
+        <h3 class="sub-title">The wider landscape</h3>
+        <div class="table-wrap">
+          <table class="compare">
+            <thead><tr><th>Tool</th><th>What it is best at</th><th>How TerraGuard relates</th></tr></thead>
+            <tbody>
+              <tr><td>Checkov (Prisma Cloud)</td><td>The largest open policy library across many IaC formats</td><td>Use both. TerraGuard adds plan risk, verified fixes, diff-aware review and a zero-install browser experience</td></tr>
+              <tr><td>Trivy, formerly tfsec (Aqua)</td><td>One scanner for containers, dependencies and IaC</td><td>TerraGuard goes deeper on the Terraform workflow: validation, plans, waivers with approvers, adoption reporting</td></tr>
+              <tr><td>TFLint</td><td>Provider-aware correctness, such as invalid instance types</td><td>Complementary. Provider-schema validation is on the TerraGuard roadmap</td></tr>
+              <tr><td>KICS (Checkmarx), Snyk IaC</td><td>Broad IaC scanning inside larger security platforms</td><td>TerraGuard is free, self-hostable and focused on developer feedback before merge</td></tr>
+              <tr><td>OPA and Conftest</td><td>General-purpose policy in Rego, for any JSON</td><td>TerraGuard policies are YAML that teams can read and test without learning Rego. Rego import is planned</td></tr>
+              <tr><td>HashiCorp Sentinel, Spacelift, env0, Scalr</td><td>Policy and orchestration inside managed Terraform platforms</td><td>TerraGuard runs before any platform: in the editor, pre-commit and PR, and works with all of them</td></tr>
+              <tr><td>Infracost</td><td>Cost estimates for Terraform changes</td><td>Complementary. TerraGuard flags cost traps; Infracost prices them</td></tr>
+              <tr><td>terraform validate and plan</td><td>Ground truth from Terraform itself</td><td>TerraGuard gives earlier feedback without init or credentials, then reviews the real plan</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="split" style="margin-top:24px">
+          <article class="card"><h3>Why teams pick TerraGuard</h3><ul class="plain">
+            <li><b>Feedback in milliseconds</b> while typing, in the browser or editor</li>
+            <li><b>The engine decides, AI assists</b>: model-proposed fixes are verified before they are kept</li>
+            <li><b>Adopt without a big bang</b>: baselines, risk budgets and diff-aware review</li>
+            <li><b>Exceptions with accountability</b>: approver, reason and expiry, reported by Pulse</li>
+            <li><b>Runs anywhere for $0</b>: browser, CLI, CI, MCP, air-gapped server</li>
+          </ul></article>
+          <article class="card"><h3>Where others are stronger, and the plan</h3><ul class="plain">
+            <li><b>Policy breadth:</b> Checkov and Trivy have far more checks. Plan: community rule packs and Rego import.</li>
+            <li><b>Provider-level validation:</b> TFLint knows every valid value. Plan: validate against <code>terraform providers schema -json</code>.</li>
+            <li><b>Other IaC formats:</b> others cover CloudFormation and Kubernetes YAML. TerraGuard stays focused on Terraform and OpenTofu.</li>
+            <li><b>Pricing:</b> Infracost estimates real costs. Plan: cost deltas for plan changes.</li>
+          </ul></article>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="page" data-page="integrations" hidden>
+    <section id="install" class="section">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Install and integrate</p>
+          <h2>Use it where the code is written, reviewed and shipped</h2>
+          <p class="sub">Every option below runs the same engine and reads the same <code>.terraguard.yml</code>.</p>
+        </header>
+        <div class="install" id="install-box">
+          <div class="install-tabs" role="tablist">
+            <button class="on" data-install="cli"><svg class="ic"><use href="#i-terminal"/></svg>CLI binary</button>
+            <button data-install="docker"><svg class="ic"><use href="#i-server"/></svg>Docker</button>
+            <button data-install="vscode"><svg class="ic"><use href="#i-code"/></svg>VS Code</button>
+            <button data-install="action"><svg class="ic"><use href="#i-check"/></svg>GitHub Actions</button>
+            <button data-install="gitlab"><svg class="ic"><use href="#i-git"/></svg>GitLab and Jenkins</button>
+            <button data-install="cloudci"><svg class="ic"><use href="#i-cloud"/></svg>AWS, Azure, Google CI</button>
+            <button data-install="precommit"><svg class="ic"><use href="#i-shield"/></svg>pre-commit</button>
+            <button data-install="mcp"><svg class="ic"><use href="#i-spark"/></svg>AI agents (MCP)</button>
+            <button data-install="server"><svg class="ic"><use href="#i-lock"/></svg>Self-hosted</button>
+          </div>
+          <div class="install-panel">
+            <div data-panel="cli">
+              <h3>CLI binary</h3>
+              <p>A single static binary with no dependencies. Download it for your platform, or build it with Go.</p>
+              <div class="dl-list">
+                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_linux_amd64">Linux x64</a>
+                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_linux_arm64">Linux ARM64</a>
+                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_darwin_arm64">macOS Apple silicon</a>
+                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_darwin_amd64">macOS Intel</a>
+                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_windows_amd64.exe">Windows x64</a>
+                <a class="btn sm ghost" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/checksums.txt">Checksums</a>
+              </div>
+<pre>curl -fsSL -o terraguard https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_linux_amd64
+chmod +x terraguard && sudo mv terraguard /usr/local/bin/
+terraguard scan .
+
+# or, with Go installed
+go install github.com/Karthik-099/TERRAGUARD/cmd/terraguard@latest</pre>
+            </div>
+            <div data-panel="docker" hidden>
+              <h3>Docker</h3>
+              <p>Scan any folder without installing anything, or run the full web app and API on your own network.</p>
+<pre>docker run --rm -v "$PWD:/src" -w /src ghcr.io/karthik-099/terraguard scan .
+
+# self-hosted web app and API on http://127.0.0.1:8080
+docker run --rm -p 127.0.0.1:8080:8080 --env-file .env ghcr.io/karthik-099/terraguard</pre>
+            </div>
+            <div data-panel="vscode" hidden>
+              <h3>VS Code extension</h3>
+              <p>Findings as you save, quick fixes and inline ignores. It calls the CLI, so install that first.</p>
+              <div class="dl-list"><a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard-2.0.0.vsix">Download terraguard-2.0.0.vsix</a></div>
+<pre>code --install-extension terraguard-2.0.0.vsix</pre>
+            </div>
+            <div data-panel="action" hidden>
+              <h3>GitHub Actions</h3>
+              <p>SARIF annotations, a sticky PR comment and a policy gate. Use <code>review</code> to gate only on what a PR introduces, or <code>pulse</code> for adoption reports.</p>
+<pre>- uses: actions/checkout@v4
+  with: { fetch-depth: 0 }
+- uses: Karthik-099/TERRAGUARD@v2.0.0
+  with:
+    command: review        # scan | review | pulse
+    path: infra
+    fail-on: HIGH</pre>
+              <p>The workspace's Pipeline tab generates a complete workflow with OIDC, plan analysis and an approval gate.</p>
+            </div>
+            <div data-panel="gitlab" hidden>
+              <h3>GitLab CI and Jenkins</h3>
+              <p>Ready-made templates use the Docker image. GitLab shows findings in the merge request through Code Quality and JUnit reports.</p>
+<pre>include:
+  - remote: https://raw.githubusercontent.com/Karthik-099/TERRAGUARD/v2.0.0/templates/gitlab-ci.yml</pre>
+              <p>Jenkins: copy <code>templates/Jenkinsfile</code>. Any other CI can use the JSON, SARIF or JUnit output and the exit code.</p>
+            </div>
+            <div data-panel="cloudci" hidden>
+              <h3>AWS CodeBuild, Azure Pipelines, Google Cloud Build</h3>
+              <p>Each cloud's native CI runs the TerraGuard image and publishes JUnit results to its test view. Copy the template from <code>templates/</code>.</p>
+<pre># AWS CodeBuild: templates/aws-codebuild-buildspec.yml
+# Azure Pipelines: templates/azure-pipelines.yml
+# Google Cloud Build: templates/cloudbuild.yaml
+terraguard scan . --junit terraguard-junit.xml --markdown terraguard.md</pre>
+              <p>To run TerraGuard itself as a private service in AWS, Azure, Google Cloud or Kubernetes, see the Enterprise page.</p>
+            </div>
+            <div data-panel="precommit" hidden>
+              <h3>pre-commit</h3>
+              <p>Stop risky changes before they leave the laptop.</p>
+<pre>repos:
+  - repo: https://github.com/Karthik-099/TERRAGUARD
+    rev: v2.0.0
+    hooks:
+      - id: terraguard
+      - id: terraguard-fix   # optional</pre>
+            </div>
+            <div data-panel="mcp" hidden>
+              <h3>AI agents (MCP)</h3>
+              <p>Claude Code, Cursor and other MCP clients can scan, fix, document and write AGENTS.md for Terraform before proposing changes.</p>
+<pre>claude mcp add terraguard -- terraguard mcp
+
+# any MCP client (mcp.json)
+{ "mcpServers": { "terraguard": { "command": "terraguard", "args": ["mcp"] } } }</pre>
+              <p>Tools: <code>scan_terraform</code>, <code>fix_terraform</code>, <code>generate_docs</code>, <code>generate_agents_md</code>, <code>list_rules</code>.</p>
+            </div>
+            <div data-panel="server" hidden>
+              <h3>Self-hosted</h3>
+              <p>One URL for a team: the web app, an HTTP API for internal tools, keys kept on the server, an audit log and Prometheus metrics.</p>
+<pre>cp .env.example .env     # any model: free, enterprise, gateway or local
+docker compose up -d     # http://127.0.0.1:8080
+
+curl -s -X POST localhost:8080/api/scan -d @input.json   # {"files": {"main.tf": "..."}}
+curl -s localhost:8080/metrics                           # Prometheus</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Extensions and agents</p>
+          <h2>How the editor extension and MCP server work</h2>
+        </header>
+        <div class="split">
+          <article class="card"><h3><svg class="ic"><use href="#i-code"/></svg>VS Code extension</h3>
+            <ul class="plain">
+              <li><b>What it does:</b> scans the workspace on save and shows findings as diagnostics with the rule ID, the fix and whether apply would fail.</li>
+              <li><b>Quick fixes:</b> apply TerraGuard's auto-fixes to the file, or add a <code>terraguard:ignore</code> comment.</li>
+              <li><b>How:</b> it runs the local CLI, so it works offline and respects your <code>.terraguard.yml</code>.</li>
+              <li><b>Get it:</b> download the <code>.vsix</code> from the latest release. Open VSX and Marketplace listings are planned.</li>
+            </ul>
+          </article>
+          <article class="card"><h3><svg class="ic"><use href="#i-spark"/></svg>MCP server for AI agents</h3>
+            <ul class="plain">
+              <li><b>What MCP is:</b> the Model Context Protocol lets coding agents call tools. <code>terraguard mcp</code> exposes TerraGuard over stdio.</li>
+              <li><b>Tools:</b> <code>scan_terraform</code>, <code>fix_terraform</code>, <code>generate_docs</code>, <code>generate_agents_md</code>, <code>list_rules</code>.</li>
+              <li><b>Typical loop:</b> the agent writes Terraform, scans it, fixes what is reported, scans again, and only then proposes the change.</li>
+              <li><b>Build your own agent:</b> any framework that speaks MCP can use these tools. The same engine also runs behind <code>terraguard serve</code>'s HTTP API.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="diagram" style="margin-top:20px" role="img" aria-label="An AI agent calls TerraGuard MCP tools to scan, fix and rescan Terraform before proposing a change.">
+          <svg viewBox="0 0 1040 150" class="arch">
+            <g class="col"><rect x="10" y="45" width="170" height="56" rx="8"/><text x="26" y="69">Coding agent</text><text x="26" y="89" class="m">Claude Code, Cursor</text></g>
+            <g class="engine"><rect x="230" y="45" width="190" height="56" rx="8"/><text x="246" y="69" class="h">scan_terraform</text><text x="246" y="89" class="m">findings, exact lines</text></g>
+            <g class="engine"><rect x="470" y="45" width="190" height="56" rx="8"/><text x="486" y="69" class="h">fix_terraform</text><text x="486" y="89" class="m">deterministic fixes</text></g>
+            <g class="engine"><rect x="710" y="45" width="140" height="56" rx="8"/><text x="726" y="69" class="h">scan again</text><text x="726" y="89" class="m">verify</text></g>
+            <g class="col"><rect x="900" y="45" width="130" height="56" rx="8"/><text x="916" y="69">Propose</text><text x="916" y="89" class="m">clean change</text></g>
+            <g class="wires"><path d="M180 73 H230 M420 73 H470 M660 73 H710 M850 73 H900"/></g>
+          </svg>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="page" data-page="enterprise" hidden>
+    <section id="enterprise" class="section">
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">Enterprise</p>
+          <h2>Runs where your code is allowed to go</h2>
+          <p class="sub">From a browser tab to an air-gapped network. The engine never needs the internet, and AI is optional, pluggable and governed by you.</p>
+        </header>
+        <div class="deploy-grid">
+          <article class="card deploy"><span class="where">Browser</span><h3>No install</h3><p>WebAssembly in the page. Code stays on the device.</p><ul><li>Evaluation and demos</li><li>Share findings as a link</li></ul></article>
+          <article class="card deploy"><span class="where">Developer and CI</span><h3>CLI, editor, pipeline</h3><p>One binary or the Docker image on your own runners.</p><ul><li>VS Code, pre-commit</li><li>GitHub, GitLab, Jenkins</li><li>SARIF, JUnit, Code Quality</li></ul></article>
+          <article class="card deploy"><span class="where">Private network</span><h3>Self-hosted server</h3><p><code>terraguard serve</code> inside your VPC behind SSO.</p><ul><li>HTTP API for internal tools</li><li>Keys only on the server</li><li>Audit log and Prometheus metrics</li></ul></article>
+          <article class="card deploy"><span class="where">Air-gapped</span><h3>No internet at all</h3><p>The image bundles the editor and assets; pair it with a local model.</p><ul><li>No CDN, no telemetry</li><li>Ollama, vLLM or internal gateways</li><li>Policy packs from internal URLs</li></ul></article>
+        </div>
+        <h3 class="sub-title">Deploy in your cloud, privately</h3>
+        <div class="deploy-grid">
+          <article class="card deploy"><span class="where">AWS</span><h3>ECS Fargate</h3><p>Private subnets behind an internal HTTPS load balancer; secrets from SSM.</p><pre class="mini">deploy/aws</pre></article>
+          <article class="card deploy"><span class="where">Azure</span><h3>Container Apps</h3><p>Internal environment inside your VNet; no external ingress.</p><pre class="mini">deploy/azure</pre></article>
+          <article class="card deploy"><span class="where">Google Cloud</span><h3>Cloud Run</h3><p>Internal-only ingress; invoker limited to your group.</p><pre class="mini">deploy/gcp</pre></article>
+          <article class="card deploy"><span class="where">Kubernetes</span><h3>Helm chart</h3><p>EKS, AKS, GKE or on-premises: non-root, read-only, NetworkPolicy.</p><pre class="mini">deploy/helm/terraguard</pre></article>
+        </div>
+        <p class="footnote">Each template is Terraform validated against the real provider and scanned by TerraGuard in CI. CI templates for AWS CodeBuild, Azure Pipelines and Google Cloud Build are in <code>templates/</code>.</p>
+        <h3 class="sub-title">Bring any AI model</h3>
+        <div class="table-wrap">
+          <table class="ai-matrix">
+            <thead><tr><th>Option</th><th>Examples</th><th>Cost</th><th>Where code goes</th></tr></thead>
+            <tbody>
+              <tr><td>No AI</td><td>Every scan, fix, policy and gate works without a model</td><td>$0</td><td>Nowhere</td></tr>
+              <tr><td>Free hosted</td><td>Groq, OpenRouter free models, Gemini free tier</td><td>$0</td><td>The provider you choose</td></tr>
+              <tr><td>Enterprise hosted</td><td>OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Google Vertex AI</td><td>Your contract</td><td>Your tenant, under your data agreements</td></tr>
+              <tr><td>AI gateway</td><td>LiteLLM, Cloudflare AI Gateway, Kong, any internal OpenAI-compatible proxy</td><td>Your choice</td><td>Your gateway, with your logging and routing</td></tr>
+              <tr><td>Local or on-premises</td><td>Ollama, LM Studio, vLLM on your GPUs</td><td>$0</td><td>Never leaves your network</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="footnote">Paid providers are used only when you configure them. Any OpenAI-compatible endpoint works, with custom auth headers for gateways such as Azure OpenAI. Whatever the model, the engine verifies every AI-proposed change before it is kept.</p>
+      </div>
+    </section>
+  </div>
+  <div class="page" data-page="architecture" hidden>
     <section id="evolution" class="section">
       <div class="container">
         <header class="section-head">
@@ -385,7 +761,7 @@ waivers:
             <h3><svg class="ic"><use href="#i-spark"/></svg>Why AI, and where it is not used</h3>
             <ul class="plain">
               <li><b>Used for</b> what rules cannot do: explaining risk in context, rewriting a file, generating <code>terraform test</code> files, reviewing a plan in plain language.</li>
-              <li><b>Not used for</b> pass or fail. LLM output varies between runs, so gating stays deterministic. <code>evals/llm_eval.py</code> measures the gap.</li>
+              <li><b>Not used for</b> pass or fail. LLM output varies between runs, so gating stays deterministic. <code>evals/llmeval</code> measures the gap.</li>
               <li><b>Connect any model.</b> Free Groq, OpenRouter or Gemini keys in your browser, a local Ollama model, or keys on your own server, with automatic fallback.</li>
             </ul>
           </article>
@@ -411,79 +787,14 @@ waivers:
         <div id="live-stats" hidden></div>
       </div>
     </section>
-
-    <section id="compare" class="section">
-      <div class="container">
-        <header class="section-head">
-          <p class="eyebrow">Compare</p>
-          <h2>How TerraGuard fits with existing tools</h2>
-          <p class="sub">Mature scanners have broader policy libraries. TerraGuard focuses on developer workflow: validation, plan risk, fixes and zero-install use. Many teams run it alongside them.</p>
-        </header>
-        <div class="table-wrap">
-          <table class="compare">
-            <thead><tr><th></th><th class="us">TerraGuard</th><th>Checkov</th><th>Trivy (tfsec)</th><th>TFLint</th><th>terraform validate</th></tr></thead>
-            <tbody>
-              <tr><td>Runs in the browser, no install</td><td class="us">Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-              <tr><td>Security policy breadth</td><td class="us">89 rules</td><td class="better">1,000+ policies</td><td class="better">Hundreds of checks</td><td>Correctness focus</td><td>None</td></tr>
-              <tr><td>Apply-time validation</td><td class="us">Common failures</td><td>No</td><td>No</td><td class="better">Deep, via provider rulesets</td><td>Syntax and references, needs init</td></tr>
-              <tr><td>Plan destroy and replace risk</td><td class="us">Yes, with cause</td><td>Security checks only</td><td>Security checks only</td><td>No</td><td>No</td></tr>
-              <tr><td>Cross-resource checks</td><td class="us">Attack paths</td><td class="better">Graph checks</td><td>No</td><td>No</td><td>No</td></tr>
-              <tr><td>Auto-fix</td><td class="us">Yes</td><td>Not in open source</td><td>No</td><td>Some rules</td><td>No</td></tr>
-              <tr><td>Waivers with expiry</td><td class="us">Reason, approver, expiry</td><td>Skip comments</td><td>Expiry in ignore comments</td><td>Ignore comments</td><td>No</td></tr>
-              <tr><td>Optional AI, including local models</td><td class="us">Yes</td><td>Paid platform</td><td>No</td><td>No</td><td>No</td></tr>
-              <tr><td>SARIF, JUnit, pre-commit, VS Code</td><td class="us">Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="footnote">Based on public documentation as of November 2026. Ideas adopted from these tools: VS Code diagnostics and pre-commit hooks (Checkov, pre-commit-terraform), JUnit output (Checkov, Trivy), documented-variable checks (TFLint). Provider-schema validation (TFLint) is planned for phase 3. Corrections are welcome as a GitHub issue.</p>
-      </div>
-    </section>
-
-    <section id="integrations" class="section alt">
-      <div class="container">
-        <header class="section-head">
-          <p class="eyebrow">Integrations</p>
-          <h2>Use it where the code is written and reviewed</h2>
-        </header>
-        <div class="grid-3">
-          <article class="card integ"><h3><svg class="ic"><use href="#i-code"/></svg>VS Code</h3><p>Diagnostics on save, quick fixes and inline ignores.</p><pre>code --install-extension terraguard.vsix</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-terminal"/></svg>CLI</h3><p>Text, JSON, SARIF, JUnit and Markdown output.</p><pre>go install github.com/Karthik-099/TERRAGUARD/cmd/terraguard@latest</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-git"/></svg>pre-commit</h3><p>Block risky commits before they reach a PR.</p><pre>- repo: https://github.com/Karthik-099/TERRAGUARD
-  hooks: [{ id: terraguard }]</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-check"/></svg>GitHub Action</h3><p>Code scanning annotations, a sticky PR comment and a policy gate.</p><pre>- uses: Karthik-099/TERRAGUARD@main
-  with: { path: infra, fail-on: HIGH }</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-spark"/></svg>MCP server</h3><p>Claude Code, Cursor and other agents check their own Terraform.</p><pre>claude mcp add terraguard -- terraguard mcp</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-server"/></svg>Docker</h3><p>Scan any folder without installing Go, or self-host the web app and API.</p><pre>docker run --rm -v "$PWD:/src" -w /src \
-  ghcr.io/karthik-099/terraguard scan .</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-wrench"/></svg>Fix agent</h3><p>Deterministic fixes, then AI proposals the engine verifies. Dry run by default.</p><pre>terraguard agent infra --write</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-git"/></svg>Diff-aware review</h3><p>Reports only what a pull request introduces or resolves, with a risk tier. Legacy debt never blocks a merge.</p><pre>terraguard review --base origin/main .</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-gauge"/></svg>Pulse for platform teams</h3><p>Control adoption, expiring waivers and trend across every module in an organization.</p><pre>terraguard pulse ./infra --baseline last.json</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-file"/></svg>AGENTS.md</h3><p>Tells AI coding agents the repo's providers, commands, guardrails and what not to touch.</p><pre>terraguard agents-md . > AGENTS.md</pre></article>
-          <article class="card integ"><h3><svg class="ic"><use href="#i-users"/></svg>Build your own agent</h3><p>Point any MCP client or agent framework at the tools <code>scan_terraform</code>, <code>fix_terraform</code>, <code>generate_docs</code>, <code>generate_agents_md</code> and <code>list_rules</code>.</p><pre>terraguard mcp   # stdio JSON-RPC</pre></article>
-        </div>
-        <div class="card dist">
-          <h3>Distribution</h3>
-          <table>
-            <thead><tr><th>Artifact</th><th>Where it is published</th><th>How users get it</th></tr></thead>
-            <tbody>
-              <tr><td>Web app</td><td>GitHub Pages</td><td>Open the site. Nothing to install.</td></tr>
-              <tr><td>CLI binaries</td><td>GitHub Releases (Linux, macOS, Windows)</td><td>Download, or <code>go install</code></td></tr>
-              <tr><td>Docker image</td><td>GitHub Container Registry</td><td><code>docker pull ghcr.io/karthik-099/terraguard</code></td></tr>
-              <tr><td>VS Code extension</td><td>GitHub Releases (<code>.vsix</code>); Open VSX and Marketplace optional</td><td><code>code --install-extension terraguard.vsix</code></td></tr>
-              <tr><td>pre-commit hook and Action</td><td>This repository</td><td>Reference it by tag</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="footnote">Ready-made templates for GitLab CI (Code Quality and JUnit in the merge request) and Jenkins live in <code>templates/</code>. Any other CI can consume the JSON, SARIF or JUnit output, or call the HTTP API of <code>terraguard serve</code>. The workspace's Pipeline tab generates a complete GitHub Actions workflow with OIDC, plan analysis and an approval gate.</p>
-      </div>
-    </section>
-
+  </div>
+  <div class="page" data-page="open-source" hidden>
     <section id="open-source" class="section">
       <div class="container">
         <header class="section-head">
           <p class="eyebrow">Open source</p>
-          <h2>Built in the open. Contributions welcome.</h2>
-          <p class="sub">Every rule is a small Go function with two test cases. If a Terraform failure cost you time, it probably belongs here.</p>
+          <h2>Built in the open, and still learning</h2>
+          <p class="sub">I started TerraGuard to learn how good infrastructure tooling is built, and I am still learning every day. It is MIT licensed and free for any use. If you find it useful, a star, an issue, a review of the architecture or a new rule would mean a lot. There is no obligation; feedback from people more experienced than me is just as welcome as code.</p>
         </header>
         <div class="metrics small" id="gh-stats"></div>
         <ol class="flow contrib">
@@ -497,23 +808,15 @@ waivers:
         <div id="giscus-box"></div>
       </div>
     </section>
-
-    <section class="section cta-band">
-      <div class="container cta-inner">
-        <div>
-          <h2>Scan your Terraform in seconds</h2>
-          <p class="sub">Paste a file or drop a folder. Nothing is uploaded.</p>
-        </div>
-        <a class="btn primary lg" href="#/app">Try TerraGuard <svg class="ic"><use href="#i-arrow"/></svg></a>
-      </div>
-    </section>
+  </div>
   </main>
 
   <footer class="site-footer">
     <div class="container foot">
-      <span>TerraGuard · MIT License · Built by Karthik</span>
+      <span class="foot-brand"><img class="logo" src="assets/logo.svg" alt="" width="22" height="22">TerraGuard · MIT License · Built by Karthik</span>
       <nav>
-        <a href="https://github.com/Karthik-099/TERRAGUARD/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener">Architecture</a>
+        <a href="#/architecture">Architecture</a>
+        <a href="https://github.com/Karthik-099/TERRAGUARD/blob/main/docs/ACADEMY.md" target="_blank" rel="noopener">Academy</a>
         <a href="https://github.com/Karthik-099/TERRAGUARD/blob/main/docs/SELF_HOSTING.md" target="_blank" rel="noopener">Self-hosting</a>
         <a href="https://github.com/Karthik-099/TERRAGUARD/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
         <a href="https://github.com/Karthik-099/TERRAGUARD" target="_blank" rel="noopener">GitHub</a>
@@ -525,7 +828,7 @@ waivers:
 <!-- ═════════════════════════════ WORKSPACE ═════════════════════════════ -->
 <div id="app" hidden>
   <header class="app-header">
-    <a class="brand" href="#top" title="Back to product page"><img src="favicon.svg" alt="" width="22" height="22"><span>TerraGuard</span><span class="crumb">Workspace</span></a>
+    <a class="brand" href="#/" title="Back to the product site"><img class="logo" src="assets/logo.svg" alt="" width="26" height="26"><span>TerraGuard</span><span class="crumb">Workspace</span></a>
     <div class="app-actions">
       <span id="engine-status" class="pill muted">Loading engine</span>
       <span id="privacy-pill" class="pill ok" title="Your Terraform is analyzed on this device and never uploaded"><svg class="ic sm"><use href="#i-lock"/></svg>Code stays local</span>
@@ -652,17 +955,18 @@ waivers:
   <form method="dialog" class="settings">
     <h2>AI settings <span class="pill muted">Optional</span></h2>
     <p class="hint">TerraGuard works fully without AI. A model only explains and suggests. Keys stay in this browser and are sent only to the provider you choose.</p>
-    <label class="check"><input type="checkbox" id="ai-private"> <span><b>Private mode.</b> Never call hosted AI. Use a local model or your self-hosted server only.</span></label>
+    <label class="check"><input type="checkbox" id="ai-private"> <span><b>Private mode.</b> Never call public AI services. Use a custom endpoint on your network or your self-hosted server only.</span></label>
     <label>Provider
       <select id="ai-provider">
         <option value="groq">Groq (free tier)</option>
         <option value="openrouter">OpenRouter (free models)</option>
         <option value="gemini">Google Gemini (free tier)</option>
-        <option value="local">Local model: Ollama, LM Studio, vLLM</option>
+        <option value="local">Custom endpoint: Ollama, vLLM, LiteLLM, OpenAI, Azure OpenAI, internal gateway</option>
         <option value="server">Self-hosted TerraGuard server</option>
       </select>
     </label>
     <label id="row-base">Base URL <input id="ai-base" placeholder="http://localhost:11434/v1"></label>
+    <label id="row-header">Auth header (optional) <input id="ai-header" placeholder="Leave empty for Authorization: Bearer. Azure OpenAI uses api-key"></label>
     <label id="row-model">Model <input id="ai-model" list="ai-models" autocomplete="off"></label>
     <datalist id="ai-models"></datalist>
     <label id="row-key">API key <input id="ai-key" type="password" autocomplete="off" placeholder="Paste key"></label>
@@ -680,8 +984,6 @@ waivers:
 <div id="toast" role="status"></div>
 
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <script src="ai.js"></script>
 <script src="cicd.js"></script>
 <script src="app.js"></script>

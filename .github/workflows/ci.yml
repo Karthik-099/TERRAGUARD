@@ -12,6 +12,8 @@ on:
       - "stats-worker/**"
       - "scripts/**"
       - "schema/**"
+      - "deploy/**"
+      - "templates/**"
       - "Dockerfile"
       - "evals/**"
       - "examples/**"
@@ -31,6 +33,8 @@ on:
       - "stats-worker/**"
       - "scripts/**"
       - "schema/**"
+      - "deploy/**"
+      - "templates/**"
       - "Dockerfile"
       - "evals/**"
       - "examples/**"
@@ -69,16 +73,17 @@ jobs:
         run: make test
       - name: WebAssembly build
         run: GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/wasm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Rule evals (recall/precision gate)
+      - name: Rule evals (every labelled case)
         run: make evals
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Stats worker unit tests
         run: cd stats-worker && npm test
+      - name: Deployment templates pass TerraGuard (dogfood)
+        run: for d in deploy/aws deploy/azure deploy/gcp; do bin/terraguard scan "$d" --fail-on MEDIUM; done
+      - name: Helm chart
+        run: helm lint deploy/helm/terraguard && helm template tg deploy/helm/terraguard > /dev/null
       - name: Example policy pack tests
         run: bin/terraguard policy test examples/policies/tests --config examples/policies/team-payments.yml
       - name: VS Code extension unit tests

@@ -1,0 +1,40 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/karthik-099/terraguard
+  tag: ""            # defaults to the chart appVersion
+  pullPolicy: IfNotPresent
+
+# Optional: an existing Secret whose keys become environment variables, e.g.
+# GROQ_API_KEY, TERRAGUARD_AI_BASE_URL, TERRAGUARD_AI_HEADERS, TERRAGUARD_SERVER_TOKEN.
+envFromSecret: ""
+
+# Extra plain environment variables.
+env:
+  TERRAGUARD_TRUST_PROXY: "true"
+  # TERRAGUARD_AI_LOCAL_ONLY: "true"
+  # TERRAGUARD_OLLAMA_URL: "http://ollama.ai.svc:11434/v1"
+
+service:
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  host: terraguard.internal.example.com
+  tlsSecretName: ""
+  annotations: {}
+
+# Restrict who may connect to the pods.
+networkPolicy:
+  enabled: true
+  # Namespaces allowed to reach TerraGuard (by label). Empty = same namespace only.
+  allowedNamespaceLabels: {}
+
+# Adds prometheus.io annotations for scraping /metrics.
+metrics:
+  annotations: true
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: "1", memory: 512Mi }

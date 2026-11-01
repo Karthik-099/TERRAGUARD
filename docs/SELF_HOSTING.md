@@ -75,6 +75,24 @@ SSO proxy (Cloudflare Access, oauth2-proxy, an internal ingress) **and** set
 `TERRAGUARD_SERVER_TOKEN`. Without a token, anyone who can reach the port can
 spend your AI quota.
 
+### Enterprise operations
+
+| Need | How |
+|---|---|
+| Your own models | `TERRAGUARD_AI_BASE_URL` for any OpenAI-compatible endpoint (Azure OpenAI v1, LiteLLM, Bedrock or Vertex gateways, vLLM), `TERRAGUARD_AI_HEADERS` for custom auth, or opt in to `openai` / `anthropic` with `TERRAGUARD_AI_PROVIDER` |
+| No internet at all | The Docker image vendors the editor, graph and Markdown libraries and serves them itself. Pair it with Ollama or vLLM and `TERRAGUARD_AI_LOCAL_ONLY=true` |
+| Single sign-on | Put the server behind your SSO proxy (oauth2-proxy, Cloudflare Access, an internal ingress) and set `TERRAGUARD_TRUST_PROXY=true`, so the audit log records the authenticated user |
+| Audit | `--audit-log FILE` or `TERRAGUARD_AUDIT_LOG`: one JSON line per API call with time, route, status, duration, client and user, never code |
+| Monitoring | `GET /metrics` in Prometheus format: requests by route and status, latency, scans, files, resources, findings, fixes, AI requests, in-flight requests |
+| Abuse protection | Per-client rate limits (120 per minute for the API, 20 for AI), 5 MB request limit, timeouts, security headers |
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: terraguard
+    static_configs: [{ targets: ["terraguard:8080"] }]
+```
+
 ### Server API
 
 | Endpoint | Purpose |
@@ -86,6 +104,7 @@ spend your AI quota.
 | `POST /api/ai/chat` | `{"messages": [...]}` → answer via the fallback route |
 | `GET /api/stats` | Anonymous usage counters for the dashboard |
 | `GET /healthz` | Liveness |
+| `GET /metrics` | Prometheus metrics |
 
 `/api/scan`, `/api/fix` and `/api/ai/chat` require `Authorization: Bearer $TERRAGUARD_SERVER_TOKEN` when the token is set.
 

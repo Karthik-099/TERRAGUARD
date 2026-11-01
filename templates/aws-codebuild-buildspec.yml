@@ -1,0 +1,13 @@
+# TerraGuard in AWS CodeBuild. Use the image as the build environment
+# (Environment image: ghcr.io/karthik-099/terraguard:latest, or a mirror in ECR).
+version: 0.2
+phases:
+  build:
+    commands:
+      - terraguard scan . --junit terraguard-junit.xml --sarif terraguard.sarif --markdown terraguard.md
+reports:
+  terraguard:
+    files: [terraguard-junit.xml]
+    file-format: JUNITXML
+artifacts:
+  files: [terraguard.sarif, terraguard.md]

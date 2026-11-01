@@ -1,3 +1,5 @@
+<p align="center"><img src="web/assets/og.jpg" alt="TerraGuard" width="720"></p>
+
 # TerraGuard
 
 **Catch Terraform failures and security risks before `apply`.**
@@ -209,9 +211,12 @@ new issue.
 | Google Gemini | https://aistudio.google.com/apikey | Free tier |
 | Ollama, LM Studio, vLLM | https://ollama.com/download | Local; nothing leaves your machine |
 
-TerraGuard falls back across models and providers automatically. Set
+Enterprises can bring any model: OpenAI, Anthropic, Azure OpenAI, AWS
+Bedrock or Google Vertex through a gateway, or any OpenAI-compatible endpoint
+with custom auth headers. Paid providers are used only when explicitly
+chosen. TerraGuard falls back across models and providers automatically. Set
 `TERRAGUARD_AI_LOCAL_ONLY=true`, or turn on Private mode in the web app, to
-never call a hosted model.
+never call a public AI service.
 
 ## Integrations
 
@@ -225,7 +230,8 @@ never call a hosted model.
 | Jenkins | [templates/Jenkinsfile](templates/Jenkinsfile) |
 | Any CI | JSON, SARIF, JUnit or Markdown output; exit codes |
 | AI agents | `terraguard mcp`: tools `scan_terraform`, `fix_terraform`, `generate_docs`, `generate_agents_md`, `list_rules` |
-| Platform | `terraguard serve`: web app plus HTTP API (`/api/scan`, `/api/fix`, `/api/ai/chat`, `/api/stats`), Docker image on GHCR |
+| Platform | `terraguard serve`: web app plus HTTP API (`/api/scan`, `/api/fix`, `/api/ai/chat`, `/api/stats`, `/metrics`), Docker image on GHCR |
+| AWS, Azure, Google Cloud | [deploy/](deploy): private deployments (ECS Fargate, Container Apps, Cloud Run) and a Helm chart; CI templates for CodeBuild, Azure Pipelines and Cloud Build in [templates/](templates) |
 
 The pipeline generator in the web app creates a full GitHub Actions workflow:
 fmt, validate, OIDC plan, TerraGuard gate, approval and apply.
@@ -258,12 +264,21 @@ documentation as of November 2026; corrections are welcome as an issue.
 
 Reproduce these with `go test -bench Scan ./engine` and `make evals`.
 
+## Security and enterprise
+
+- Code is analyzed where it lives: in the browser, on the runner, or in your network. No TerraGuard service ever receives it.
+- The website enforces a strict Content-Security-Policy and Subresource Integrity. The server adds security headers, rate limits, an audit log and Prometheus metrics.
+- The Docker image works fully air-gapped. Releases from v2.1 ship an SBOM, signed images and build provenance.
+
+See [SECURITY.md](SECURITY.md) and [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+
 ## Documentation
 
 - [docs/ACADEMY.md](docs/ACADEMY.md): how Terraform works, where it breaks, and how every TerraGuard feature works
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): HLD, LLD, pipelines and design decisions
 - [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md): Docker, private AI and secrets
 - [CONTRIBUTING.md](CONTRIBUTING.md): add a rule in about 20 lines plus two test cases
+- [GOVERNANCE.md](GOVERNANCE.md), [MAINTAINERS.md](MAINTAINERS.md), [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), [ADOPTERS.md](ADOPTERS.md)
 
 ## Develop
 
@@ -277,7 +292,11 @@ make secrets      # fail if a credential is tracked
 
 ## Contributing
 
-New rules, providers, policy packs and integrations are welcome. Start with
+I am building TerraGuard in the open while learning how good infrastructure
+tooling is designed, so I know parts of it can be done better. If you find it
+useful, contributions of any size are welcome, and never expected: a star, an
+issue, a review of the architecture, or a new rule. Advice from people with
+more experience is as valuable as code. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md), open a
 [rule request](https://github.com/Karthik-099/TERRAGUARD/issues/new?template=rule_request.yml),
 or join the [discussions](https://github.com/Karthik-099/TERRAGUARD/discussions).

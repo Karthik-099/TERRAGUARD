@@ -35,6 +35,10 @@ type Provider struct {
 	KeyEnv string
 	Models []string // tried in order
 	NoKey  bool     // local servers (Ollama, LM Studio, vLLM)
+	// OptIn providers are paid: they join the route only when named in
+	// TERRAGUARD_AI_PROVIDER or TERRAGUARD_AI_ROUTE, never just because a key exists.
+	OptIn   bool
+	Headers map[string]string
 }
 
 // Providers in default fallback order: free tiers only (no paid APIs), local last.
@@ -54,10 +58,28 @@ func Providers() []Provider {
 			Models: []string{orDefault(os.Getenv("TERRAGUARD_OLLAMA_MODEL"), "llama3.2")}})
 	}
 	if base := os.Getenv("TERRAGUARD_AI_BASE_URL"); base != "" {
+		// Any OpenAI-compatible endpoint: vLLM, LiteLLM, Azure OpenAI v1, Bedrock or Vertex gateways, internal proxies.
 		ps = append(ps, Provider{Name: "custom", Base: strings.TrimSuffix(base, "/"), KeyEnv: "TERRAGUARD_AI_KEY",
-			NoKey: os.Getenv("TERRAGUARD_AI_KEY") == "", Models: []string{orDefault(os.Getenv("TERRAGUARD_AI_MODEL"), "default")}})
+			NoKey: os.Getenv("TERRAGUARD_AI_KEY") == "", Models: []string{orDefault(os.Getenv("TERRAGUARD_AI_MODEL"), "default")},
+			Headers: parseHeaders(os.Getenv("TERRAGUARD_AI_HEADERS"))})
 	}
+	ps = append(ps,
+		Provider{Name: "openai", Base: "https://api.openai.com/v1", KeyEnv: "OPENAI_API_KEY", OptIn: true, Models: []string{"gpt-4.1-mini", "gpt-4.1"}},
+		Provider{Name: "anthropic", Base: "https://api.anthropic.com/v1", KeyEnv: "ANTHROPIC_API_KEY", OptIn: true, Models: []string{"claude-sonnet-4-5", "claude-haiku-4-5"}},
+	)
 	return ps
+}
+
+// parseHeaders reads "Name: value; Other: value" for gateways that need
+// custom auth, such as Azure OpenAI's "api-key" header.
+func parseHeaders(spec string) map[string]string {
+	h := map[string]string{}
+	for _, part := range strings.Split(spec, ";") {
+		if k, v, ok := strings.Cut(part, ":"); ok && strings.TrimSpace(k) != "" {
+			h[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return h
 }
 
 // Step is one (provider, model) attempt in the route.
@@ -83,7 +105,9 @@ func Route() []Step {
 		}
 		if p.NoKey || os.Getenv(p.KeyEnv) != "" {
 			all[p.Name] = p
-			order = append(order, p.Name)
+			if !p.OptIn {
+				order = append(order, p.Name)
+			}
 		}
 	}
 	var steps []Step
@@ -104,7 +128,7 @@ func Route() []Step {
 		}
 		return steps
 	}
-	pref := firstEnv("TERRAGUARD_AI_PROVIDER", "AI_PROVIDER")
+	pref := firstEnv("TERRAGUARD_AI_PROVIDER")
 	if _, ok := all[pref]; ok {
 		rest := []string{pref}
 		for _, n := range order {
@@ -182,6 +206,9 @@ func call(ctx context.Context, s Step, msgs []Message) (string, error) {
 	if key := os.Getenv(s.Provider.KeyEnv); key != "" {
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
+	for k, v := range s.Provider.Headers {
+		req.Header.Set(k, v)
+	}
 	if s.Provider.Name == "openrouter" {
 		req.Header.Set("HTTP-Referer", "https://github.com/Karthik-099/TERRAGUARD")
 		req.Header.Set("X-Title", "TerraGuard")
@@ -256,6 +283,11 @@ func Redact(s string) string {
 	for _, p := range Providers() {
 		if k := os.Getenv(p.KeyEnv); len(k) >= 8 {
 			s = strings.ReplaceAll(s, k, "[redacted]")
+		}
+		for _, v := range p.Headers {
+			if len(v) >= 8 {
+				s = strings.ReplaceAll(s, v, "[redacted]")
+			}
 		}
 	}
 	return keyLike.ReplaceAllString(s, "[redacted]")

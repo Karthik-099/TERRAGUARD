@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -25,6 +26,7 @@ import (
 func runServe(args []string) error {
 	fset := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fset.String("addr", "127.0.0.1:8080", "listen address (use 0.0.0.0:8080 in containers)")
+	auditPath := fset.String("audit-log", os.Getenv("TERRAGUARD_AUDIT_LOG"), "append a JSON line per API call (metadata only, never code)")
 	if err := fset.Parse(args); err != nil {
 		return err
 	}
@@ -35,14 +37,31 @@ func runServe(args []string) error {
 	if _, err := fs.Stat(web.FS, "terraguard.wasm"); err != nil {
 		log.Printf("warning: terraguard.wasm is not embedded; run `make web` before building, or use the Docker image")
 	}
-	srv := &http.Server{Addr: *addr, Handler: newServer(token), ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 120 * time.Second}
+	var audit io.Writer
+	if *auditPath != "" {
+		f, err := os.OpenFile(*auditPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return fmt.Errorf("audit log: %w", err)
+		}
+		defer f.Close()
+		audit = f
+	}
+	srv := &http.Server{Addr: *addr, Handler: newServerWith(token, audit), ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: 30 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 64 << 10}
 	log.Printf("TerraGuard %s on http://%s  (AI route: %d step(s)%s)", engine.Version, *addr, len(ai.Route()), map[bool]string{true: ", local-only"}[ai.LocalOnly()])
 	return srv.ListenAndServe()
 }
 
-func newServer(token string) http.Handler {
+func newServer(token string) http.Handler { return newServerWith(token, nil) }
+
+func newServerWith(token string, audit io.Writer) http.Handler {
 	mux := http.NewServeMux()
 	st := stats.New()
+	met := newMetrics()
+	apiLimit, aiLimit := newLimiter(120), newLimiter(20)
+	if audit != nil {
+		audit = &lockedWriter{w: audit}
+	}
 	mux.Handle("/", http.FileServerFS(web.FS))
 
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
@@ -54,8 +73,8 @@ func newServer(token string) http.Handler {
 			"ai": map[string]any{"enabled": len(route) > 0, "local_only": ai.LocalOnly(), "route": route}})
 	})
 
-	api := func(h func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
+	api := func(route string, lim *limiter, h func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return observe(route, lim, met, audit, func(w http.ResponseWriter, r *http.Request) {
 			if token != "" && subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), []byte(token)) != 1 {
 				writeJSON(w, 401, map[string]string{"error": "missing or invalid server token"})
 				return
@@ -64,10 +83,10 @@ func newServer(token string) http.Handler {
 			st.Begin()
 			defer st.End()
 			h(w, r)
-		}
+		})
 	}
 
-	mux.HandleFunc("POST /api/ai/chat", api(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/ai/chat", api("/api/ai/chat", aiLimit, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Messages []ai.Message `json:"messages"`
 		}
@@ -86,7 +105,7 @@ func newServer(token string) http.Handler {
 		writeJSON(w, 200, res)
 	}))
 
-	mux.HandleFunc("POST /api/scan", api(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/scan", api("/api/scan", apiLimit, func(w http.ResponseWriter, r *http.Request) {
 		var in engine.Input
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeJSON(w, 400, map[string]string{"error": "invalid JSON: " + err.Error()})
@@ -100,7 +119,7 @@ func newServer(token string) http.Handler {
 
 	// Public, anonymous counters for the dashboard (numbers only).
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, st.Snapshot()) })
-	mux.HandleFunc("POST /api/stats/hit", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/stats/hit", observe("/api/stats/hit", apiLimit, met, nil, func(w http.ResponseWriter, r *http.Request) {
 		var h stats.Hit
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&h); err != nil {
 			writeJSON(w, 400, map[string]string{"error": "invalid hit"})
@@ -108,9 +127,9 @@ func newServer(token string) http.Handler {
 		}
 		st.Record(h)
 		w.WriteHeader(204)
-	})
+	}))
 
-	mux.HandleFunc("POST /api/fix", api(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/fix", api("/api/fix", apiLimit, func(w http.ResponseWriter, r *http.Request) {
 		var in engine.Input
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
@@ -126,7 +145,11 @@ func newServer(token string) http.Handler {
 	}))
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") })
-	return mux
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		writeMetrics(w, met, st)
+	})
+	return secureHeaders(mux)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

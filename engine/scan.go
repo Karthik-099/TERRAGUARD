@@ -37,9 +37,22 @@ type Report struct {
 	Providers  map[string]int `json:"providers"` // resources per provider
 	Compliance []Framework    `json:"compliance"`
 	Errors     []string       `json:"errors,omitempty"`
+	// Trace shows how the result was produced, stage by stage.
+	Trace Trace `json:"trace"`
 	// GateFailures explains every reason Passed is false.
 	GateFailures []string `json:"gate_failures,omitempty"`
 }
+
+type Trace struct {
+	ParseMs     float64 `json:"parse_ms"`
+	ChecksMs    float64 `json:"checks_ms"`
+	RulesMs     float64 `json:"rules_ms"`
+	PolicyMs    float64 `json:"policy_ms"`
+	Evaluations int     `json:"evaluations"` // rule x resource checks performed
+	CustomRules int     `json:"custom_rules"`
+}
+
+func since(t time.Time) float64 { return float64(time.Since(t).Microseconds()) / 1000 }
 
 // Verdict answers "will terraform apply succeed?" from static evidence.
 type Verdict struct {
@@ -87,9 +100,14 @@ func Scan(in Input) *Report {
 	}
 	rep.FailOn = cfg.FailOn
 
+	t := time.Now()
 	m := Parse(in.Files)
+	rep.Trace.ParseMs = since(t)
+	t = time.Now()
 	resources := m.Resources
 	findings := moduleChecks(m)
+	rep.Trace.ChecksMs = since(t)
+	rep.Trace.CustomRules = len(cfg.CustomRules)
 	if strings.TrimSpace(in.Plan) != "" {
 		sum, planRes, planFindings, err := parsePlan(in.Plan)
 		if err != nil {
@@ -101,12 +119,14 @@ func Scan(in Input) *Report {
 		}
 	}
 
+	t = time.Now()
 	for _, r := range resources {
 		for i := range Rules {
 			rule := &Rules[i]
 			if !rule.applies(r.Type) {
 				continue
 			}
+			rep.Trace.Evaluations++
 			for _, h := range rule.Check(r) {
 				f := newFinding(rule.ID, h.Sev, h.Msg, r.Address, r.File, r.line(h.Path))
 				if h.Fix != nil && !r.FromPlan {
@@ -131,6 +151,8 @@ func Scan(in Input) *Report {
 		}
 	}
 
+	rep.Trace.RulesMs = since(t)
+	t = time.Now()
 	blockLine := map[string]int{}
 	for _, b := range m.Blocks {
 		blockLine[b.Address()] = b.Line
@@ -148,6 +170,7 @@ func Scan(in Input) *Report {
 		}
 	}
 	sortFindings(findings)
+	rep.Trace.PolicyMs = since(t)
 	rep.Findings = findings
 	if rep.Findings == nil {
 		rep.Findings = []Finding{}

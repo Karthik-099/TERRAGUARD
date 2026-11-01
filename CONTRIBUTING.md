@@ -1,16 +1,22 @@
 # Contributing to TerraGuard
 
+Thank you for being here. I am building TerraGuard in the open while learning,
+so contributions of every size are welcome and none are expected: a typo fix,
+a bug report, a review comment on the architecture, or a new rule. If you are
+new to open source too, this is a friendly place to start; issues labelled
+`good first issue` are a good entry point.
+
 Thanks for helping make Terraform safer. Every rule exists because someone hit
 that problem in production. If you have a story like that, it belongs here.
 
 ## Local setup (2 minutes)
 
-You need Go 1.25+ and Python 3.10+ (stdlib only, no `pip install`). Node 22 only if you touch `stats-worker/`. Everything is free; no paid services or keys are needed.
+You need Go 1.25+, nothing else. Node 22 only if you touch `stats-worker/`. Everything is free; no paid services or keys are needed.
 
 ```bash
 git clone https://github.com/Karthik-099/TERRAGUARD && cd TERRAGUARD
 make test      # vet + unit tests
-make evals     # rule recall/precision gate
+make evals     # every labelled rule case must pass
 make serve     # full app on http://127.0.0.1:8080 (reads .env if present)
 make secrets   # make sure no credential is tracked
 ln -s ../../scripts/check-secrets.sh .git/hooks/pre-commit   # recommended
@@ -32,7 +38,9 @@ bin/terraguard scan examples/insecure --plan examples/plan.json
 | `internal/stats/` | Anonymous counters for the self-hosted dashboard |
 | `internal/pulse/` | Adoption, waiver and trend aggregation for `terraguard pulse` |
 | `editors/vscode/` | VS Code extension (diagnostics and quick fixes via the CLI) |
-| `templates/` | GitLab CI and Jenkins templates |
+| `templates/` | CI templates: GitLab, Jenkins, AWS CodeBuild, Azure Pipelines, Google Cloud Build |
+| `deploy/` | Private deployments for AWS, Azure, Google Cloud and Kubernetes (Helm) |
+| `evals/` | Labelled rule cases and `evals/llmeval` (Go LLM benchmark) |
 | `schema/` | JSON Schema for `.terraguard.yml` |
 | `examples/policies/` | Example policy pack (org baseline, team policy, fixtures) |
 | `cmd/terraguard/` | CLI (`scan`, `fix`, `docs`, `ask`, `rules`), MCP server (`mcp`), self-hosted server (`serve`) |

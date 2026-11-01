@@ -7,7 +7,9 @@ on:
 
 permissions:
   contents: write
-  packages: write   # publish the Docker image to GHCR
+  packages: write      # publish the Docker image to GHCR
+  id-token: write      # keyless signing (cosign) and provenance, via GitHub OIDC
+  attestations: write  # build provenance for binaries and the image
 
 jobs:
   release:
@@ -34,8 +36,19 @@ jobs:
           cd editors/vscode
           npm version --no-git-tag-version "${GITHUB_REF_NAME#v}" >/dev/null
           npx --yes @vscode/vsce@3.2.1 package --no-dependencies -o "../../dist/terraguard-${GITHUB_REF_NAME#v}.vsix"
+      - name: SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/terraguard.spdx.json
+          upload-artifact: false
       - name: Checksums
         run: cd dist && sha256sum * > checksums.txt
+      - name: Build provenance for every artifact
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*"
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -57,3 +70,15 @@ jobs:
             --label org.opencontainers.image.source="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" .
           docker push "$image:${GITHUB_REF_NAME#v}"
           docker push "$image:latest"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:latest" | cut -d@ -f2)" >> "$GITHUB_OUTPUT"
+        id: push
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the image (keyless, Sigstore)
+        run: cosign sign --yes "${{ steps.push.outputs.image }}@${{ steps.push.outputs.digest }}"
+      - name: Image provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ steps.push.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

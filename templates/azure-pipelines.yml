@@ -1,0 +1,19 @@
+# TerraGuard in Azure Pipelines. Findings appear in the Tests tab (JUnit).
+trigger:
+  paths:
+    include: ["**/*.tf", "**/*.tfvars", ".terraguard.yml"]
+
+pool:
+  vmImage: ubuntu-latest
+
+container: ghcr.io/karthik-099/terraguard:latest
+
+steps:
+  - script: terraguard scan . --junit $(Build.ArtifactStagingDirectory)/terraguard-junit.xml --markdown $(Build.ArtifactStagingDirectory)/terraguard.md
+    displayName: TerraGuard
+  - task: PublishTestResults@2
+    condition: always()
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: $(Build.ArtifactStagingDirectory)/terraguard-junit.xml
+      testRunTitle: TerraGuard

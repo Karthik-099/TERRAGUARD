@@ -14,7 +14,7 @@ import (
 
 func clearEnv(t *testing.T) {
 	for _, k := range []string{"GROQ_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "TERRAGUARD_AI_ROUTE",
-		"TERRAGUARD_AI_PROVIDER", "AI_PROVIDER", "TERRAGUARD_AI_MODEL", "TERRAGUARD_OLLAMA_URL", "OLLAMA_URL", "TERRAGUARD_AI_BASE_URL", "TERRAGUARD_AI_KEY", "TERRAGUARD_AI_LOCAL_ONLY"} {
+		"TERRAGUARD_AI_PROVIDER", "AI_PROVIDER", "TERRAGUARD_AI_MODEL", "TERRAGUARD_OLLAMA_URL", "OLLAMA_URL", "TERRAGUARD_AI_BASE_URL", "TERRAGUARD_AI_KEY", "TERRAGUARD_AI_LOCAL_ONLY", "ANTHROPIC_API_KEY", "TERRAGUARD_AI_HEADERS"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
 	}
@@ -107,5 +107,39 @@ func TestRedactNeverLeaksKeys(t *testing.T) {
 		if out := Redact(in); strings.Contains(out, "supersecret") || strings.Contains(out, "abcdEFGH") || strings.Contains(out, "abc.def") || strings.Contains(out, "AIzaSy") {
 			t.Errorf("leaked: %q", out)
 		}
+	}
+}
+
+func TestPaidProvidersAreOptIn(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("OPENAI_API_KEY", "sk-test-not-used")
+	t.Setenv("GROQ_API_KEY", "g")
+	for _, s := range Route() {
+		if s.Provider.Name == "openai" {
+			t.Fatal("a paid provider must not join the route just because its key exists")
+		}
+	}
+	t.Setenv("TERRAGUARD_AI_PROVIDER", "openai")
+	if r := Route(); r[0].Provider.Name != "openai" {
+		t.Fatalf("explicit opt-in must put it first: %v", r)
+	}
+}
+
+func TestCustomHeadersAreSentAndRedacted(t *testing.T) {
+	clearEnv(t)
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("api-key")
+		http.Error(w, `{"error":"bad api-key azure-secret-123"}`, 400)
+	}))
+	defer srv.Close()
+	t.Setenv("TERRAGUARD_AI_BASE_URL", srv.URL)
+	t.Setenv("TERRAGUARD_AI_HEADERS", "api-key: azure-secret-123")
+	_, err := Chat(context.Background(), []Message{{Role: "user", Content: "x"}})
+	if got != "azure-secret-123" {
+		t.Fatalf("header not sent: %q", got)
+	}
+	if err == nil || strings.Contains(err.Error(), "azure-secret-123") {
+		t.Fatalf("header value leaked in error: %v", err)
 	}
 }

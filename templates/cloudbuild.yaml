@@ -1,0 +1,12 @@
+# TerraGuard in Google Cloud Build. Mirror the image into Artifact Registry
+# (a remote repository for ghcr.io) for fully private builds.
+steps:
+  - id: terraguard
+    name: ghcr.io/karthik-099/terraguard:latest
+    args: ["scan", ".", "--junit", "terraguard-junit.xml", "--markdown", "terraguard.md"]
+artifacts:
+  objects:
+    location: gs://${_REPORT_BUCKET}/terraguard/$BUILD_ID/
+    paths: [terraguard-junit.xml, terraguard.md]
+substitutions:
+  _REPORT_BUCKET: your-report-bucket

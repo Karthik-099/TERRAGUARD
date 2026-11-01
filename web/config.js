@@ -2,6 +2,10 @@
 window.TERRAGUARD_CONFIG = {
   repo: "Karthik-099/TERRAGUARD",
 
+  // Serve the editor, graph and Markdown libraries from this origin instead of
+  // a CDN (the Docker image sets "vendor" so air-gapped installs work).
+  assetsBase: "",
+
   // Public anonymous usage counters (numbers only, never code). Deploy
   // stats-worker/ to Cloudflare and paste its URL, e.g.
   // "https://terraguard-stats.<your-subdomain>.workers.dev". Empty = off.
