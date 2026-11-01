@@ -2,7 +2,7 @@
 #   docker build -t terraguard .
 #   docker run --rm -p 127.0.0.1:8080:8080 --env-file .env terraguard
 #   docker run --rm -v "$PWD:/src" -w /src terraguard scan .
-FROM golang:1.25-alpine AS build
+FROM golang:1.26.10-alpine AS build
 RUN apk add --no-cache make curl
 WORKDIR /src
 COPY go.mod go.sum ./

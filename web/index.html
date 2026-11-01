@@ -7,7 +7,7 @@
 <meta name="description" content="Catch Terraform security risks, apply-time failures and destructive plans before terraform apply. Open source, runs in your browser, CI, editor and AI agents.">
 <meta property="og:title" content="TerraGuard: catch Terraform failures before apply">
 <meta property="og:description" content="Open-source Terraform guardrails: 271 rules across 14 providers, plan risk, attack paths, auto-fix and policy-as-code. Free.">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://giscus.app 'sha256-zr7+dZuqT+VgxE9ckmQ6xhn/OtqkYeV6SQAom7vG4BY='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; frame-src https://giscus.app; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://giscus.app 'sha256-Fji/kHRvia6kekU9t69usOiTyCX9awSIU0QTnvFaVzA='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; frame-src https://giscus.app; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#06070a">
@@ -26,7 +26,7 @@
  "url":"https://karthik-099.github.io/TERRAGUARD/","codeRepository":"https://github.com/Karthik-099/TERRAGUARD","license":"https://opensource.org/licenses/MIT",
  "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
 </script>
-<script>try { const t = localStorage.getItem("tg.theme"); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+<script>try { const t = localStorage.getItem("tg.theme.v2"); if (t === "light") document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
 <body>
 <!-- line icons (stroke, currentColor) -->
@@ -48,12 +48,25 @@
   <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/></symbol>
   <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5a3 3 0 0 1 0 6M21 20c0-2.6-1.6-4.8-4-5.6"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-align" viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+  <symbol id="i-badge" viewBox="0 0 24 24"><path d="M12 3l2.5 2 3.2-.3.8 3.1 2.7 1.8-1.2 3 1.2 3-2.7 1.8-.8 3.1-3.2-.3L12 21l-2.5-2-3.2.3-.8-3.1L2.8 14.4l1.2-3-1.2-3 2.7-1.8.8-3.1 3.2.3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></symbol>
   <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4 1.5-4-2-6-2.5M15 21v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></symbol>
 </svg>
 
 <!-- ═════════════════════════════ PRODUCT PAGE ═════════════════════════════ -->
 <div id="landing">
+  <canvas id="net" aria-hidden="true"></canvas>
+  <div class="scroll-progress" aria-hidden="true"></div>
   <header class="site-header">
     <div class="container nav">
       <a class="brand" href="#/" aria-label="TerraGuard home"><img class="logo" src="assets/logo.svg" alt="" width="30" height="30"><span>TerraGuard</span></a>
@@ -595,20 +608,20 @@ waivers:
           <div class="install-panel">
             <div data-panel="cli">
               <h3>CLI binary</h3>
-              <p>A single static binary with no dependencies. Download it for your platform, or build it with Go.</p>
-              <div class="dl-list">
-                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_linux_amd64">Linux x64</a>
-                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_linux_arm64">Linux ARM64</a>
-                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_darwin_arm64">macOS Apple silicon</a>
-                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_darwin_amd64">macOS Intel</a>
-                <a class="btn sm" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_windows_amd64.exe">Windows x64</a>
-                <a class="btn sm ghost" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/checksums.txt">Checksums</a>
+              <p>A single static binary with no dependencies. Pick your platform to see its install command.</p>
+              <div class="platforms" role="radiogroup" aria-label="Platform">
+                <button type="button" role="radio" data-platform="linux_amd64">Linux x64</button>
+                <button type="button" role="radio" data-platform="linux_arm64">Linux ARM64</button>
+                <button type="button" role="radio" data-platform="darwin_arm64">macOS Apple silicon</button>
+                <button type="button" role="radio" data-platform="darwin_amd64">macOS Intel</button>
+                <button type="button" role="radio" data-platform="windows_amd64">Windows x64</button>
               </div>
-<pre>curl -fsSL -o terraguard https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_linux_amd64
-chmod +x terraguard && sudo mv terraguard /usr/local/bin/
-terraguard scan .
-
-# or, with Go installed
+<pre id="install-cmd"></pre>
+              <div class="row dl-row">
+                <a class="btn primary sm" id="dl-binary" href="#" download rel="noopener">Download</a>
+                <a class="btn sm ghost" href="https://github.com/Karthik-099/TERRAGUARD/releases/latest" target="_blank" rel="noopener">All releases and checksums</a>
+              </div>
+<pre># or, with Go 1.26.10+ installed
 go install github.com/Karthik-099/TERRAGUARD/cmd/terraguard@latest</pre>
             </div>
             <div data-panel="docker" hidden>
@@ -923,16 +936,16 @@ curl -s localhost:8080/metrics                           # Prometheus</pre>
     </div>
   </header>
   <nav class="ws-nav" role="tablist" aria-label="Workspace">
-    <button data-tab="overview" class="active">Overview</button>
-    <button data-tab="findings">Findings</button>
-    <button data-tab="plan">Plan</button>
-    <button data-tab="graph">Graph</button>
-    <button data-tab="compliance">Compliance</button>
-    <button data-tab="policy">Policy</button>
-    <button data-tab="docs">Docs</button>
-    <button data-tab="ai">Assistant</button>
-    <button data-tab="cicd">Pipeline</button>
-    <button data-tab="rules">Rules</button>
+    <button data-tab="overview" class="active"><svg class="ic"><use href="#i-gauge"/></svg>Overview</button>
+    <button data-tab="findings"><svg class="ic"><use href="#i-shield"/></svg>Findings<span class="tab-count" id="count-findings" hidden></span></button>
+    <button data-tab="plan"><svg class="ic"><use href="#i-layers"/></svg>Plan<span class="tab-count" id="count-plan" hidden></span></button>
+    <button data-tab="graph"><svg class="ic"><use href="#i-graph"/></svg>Graph</button>
+    <button data-tab="compliance"><svg class="ic"><use href="#i-badge"/></svg>Compliance<span class="tab-count" id="count-compliance" hidden></span></button>
+    <button data-tab="policy"><svg class="ic"><use href="#i-file"/></svg>Policy</button>
+    <button data-tab="docs"><svg class="ic"><use href="#i-book"/></svg>Docs</button>
+    <button data-tab="ai"><svg class="ic"><use href="#i-chat"/></svg>Assistant</button>
+    <button data-tab="cicd"><svg class="ic"><use href="#i-git"/></svg>Pipeline</button>
+    <button data-tab="rules"><svg class="ic"><use href="#i-list"/></svg>Rules</button>
   </nav>
 
   <div class="layout">
@@ -940,9 +953,9 @@ curl -s localhost:8080/metrics                           # Prometheus</pre>
       <div class="toolbar">
         <div class="tabs" id="file-tabs" role="tablist"></div>
         <div class="toolbar-actions">
-          <button class="btn sm" id="btn-new">New file</button>
-          <label class="btn sm">Upload<input type="file" id="upload" multiple hidden accept=".tf,.tfvars,.json,.yml,.yaml"></label>
-          <label class="btn sm">Folder<input type="file" id="upload-dir" webkitdirectory hidden></label>
+          <div class="btn-group"><button class="btn sm" id="btn-new" title="New file"><svg class="ic"><use href="#i-plus"/></svg>New</button>
+          <label class="btn sm" title="Upload files"><svg class="ic"><use href="#i-upload"/></svg>Upload<input type="file" id="upload" multiple hidden accept=".tf,.tfvars,.json,.yml,.yaml"></label>
+          <label class="btn sm" title="Open a folder"><svg class="ic"><use href="#i-folder"/></svg>Folder<input type="file" id="upload-dir" webkitdirectory hidden></label></div>
           <select id="example-select" class="btn sm" aria-label="Load example">
             <option value="">Examples</option>
             <option value="insecure">AWS and Cloudflare (vulnerable)</option>
@@ -951,8 +964,7 @@ curl -s localhost:8080/metrics                           # Prometheus</pre>
             <option value="secure">Hardened project</option>
             <option value="plan">Risky terraform plan</option>
           </select>
-          <button class="btn sm" id="btn-format" title="terraform fmt">Format</button>
-          <button class="btn sm" id="btn-download">Download</button>
+          <div class="btn-group"><button class="btn sm icon-only" id="btn-format" title="Format (terraform fmt)" aria-label="Format"><svg class="ic"><use href="#i-align"/></svg></button><button class="btn sm icon-only" id="btn-download" title="Download files" aria-label="Download files"><svg class="ic"><use href="#i-download"/></svg></button></div>
         </div>
       </div>
       <div id="editor" class="editor"><div class="drop-hint">Paste Terraform, drop files or a folder, or load an example.</div></div>

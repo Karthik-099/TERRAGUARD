@@ -7,6 +7,7 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Require Go 1.26.10: Go 1.25.0's standard library has known net/http and crypto/tls vulnerabilities. Docker builds use golang:1.26.10-alpine.
 - Server: `/metrics` requires the token when one is set; no directory listings or Go source from the embedded site; the rate limiter uses the proxy-appended client address; usage stats stay bounded under floods and keep counting known rules.
 - CLI: every flag has a description, and `-h` exits cleanly on every command.
 - Repositories with local modules no longer get false "duplicate declaration" findings: declarations, references, tfvars and unused-variable checks are scoped to each directory.
@@ -14,6 +15,8 @@ All notable changes are documented here. The format follows
 - Share links are capped at 5 MB when expanded and their contents are validated before loading.
 
 ### Added
+- Redesigned site and workspace: animated node-network background, 3D hero, cursor light, scroll progress, a teal-to-violet palette in both themes, self-hosted Manrope and Space Grotesk fonts (no Google Fonts request). Workspace tabs show icons and live counts; the status bar shows a severity distribution; the graph draws clearly visible, hover-highlighted connections.
+- Install picker: choosing a platform shows its command; downloads only start from the Download button.
 - Provider schema checks: `scan --schema` (and the Action's `schema` input) checks every argument and block against `terraform providers schema -json`: unknown and read-only arguments with "did you mean" hints, missing required arguments and blocks, block limits, deprecations.
 - HCP Terraform and Terraform Enterprise run task at `/api/run-task`: HMAC-verified, outbound calls limited to the configured host.
 - Rule catalog filters (provider, severity, category, blocks apply) and a "Propose as built-in rule" flow that opens a pre-filled GitHub issue for review.

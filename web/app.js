@@ -61,7 +61,7 @@
   function toggleTheme() {
     const next = isDark() ? "light" : "dark";
     document.documentElement.dataset.theme = next;
-    try { localStorage.setItem("tg.theme", next); } catch {}
+    try { localStorage.setItem("tg.theme.v2", next); } catch {}
     monacoRef?.editor.setTheme(next === "dark" ? "vs-dark" : "vs");
     if (S.tab === "graph") renderGraph();
   }
@@ -355,16 +355,6 @@
         <div class="track"><div class="fill" style="width:${(v / max) * 100}%"></div></div><span class="val">${fmtN(v)}</span></div>`).join("")}</div>`;
   }
 
-  function ring(score, grade) {
-    const r = 36, c = 2 * Math.PI * r;
-    const color = score >= 90 ? "var(--ok)" : score >= 60 ? "var(--med)" : score >= 40 ? "var(--high)" : "var(--crit)";
-    return `<svg class="ring" viewBox="0 0 88 88" role="img" aria-label="Score ${score} of 100, grade ${grade}">
-      <circle cx="44" cy="44" r="${r}" fill="none" stroke="var(--bg-3)" stroke-width="8"/>
-      <circle cx="44" cy="44" r="${r}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(score / 100) * c} ${c}" transform="rotate(-90 44 44)"/>
-      <text x="44" y="46" text-anchor="middle" font-size="24" font-weight="800" fill="var(--text)" font-family="Inter">${grade}</text>
-      <text x="44" y="62" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="Inter">${score}/100</text></svg>`;
-  }
-
   // Workspace rendering
   function renderAll() {
     renderTabs();
@@ -378,16 +368,22 @@
     if (!r) return;
     const perr = (r.errors || []).find((e) => /terraguard\.yml|custom_rules|policy|max_findings|fail_on/.test(e));
     if ($("#policy-status")) { $("#policy-status").textContent = perr ? `Policy error: ${perr}` : S.config ? "Policy applied" : ""; $("#policy-status").style.color = perr ? "var(--crit)" : ""; }
-    const counts = SEVS.map((s) => `<span class="count"><span class="sevdot" style="background:${sevColor(s)}"></span><b>${r.summary[s] || 0}</b>${s.toLowerCase()}</span>`).join("");
+    const total = SEVS.reduce((n, v) => n + (r.summary[v] || 0), 0);
+    const bar = SEVS.filter((v) => r.summary[v]).map((v) => `<span style="flex:${r.summary[v]};background:${sevColor(v)}" title="${r.summary[v]} ${v.toLowerCase()}"></span>`).join("");
     $("#scorecard").innerHTML = `
       <div class="grade g-${r.grade}">${r.grade}<small>${r.score}/100</small></div>
-      <div>
-        <div class="verdict ${r.verdict.will_apply ? "ok" : "bad"}">${r.verdict.will_apply ? "Expected to apply" : "Apply is expected to fail"}
-          ${r.passed ? `<span class="pill ok">Policy passed</span>` : `<span class="pill bad">Policy failed at ${esc(r.fail_on)}</span>`}</div>
-        <div class="counts">${counts}<span class="count">${r.waived} waived</span><span class="count">${r.fixable} fixable</span><span class="count">${r.stats.files} files · ${r.stats.resources} resources · ${r.ms} ms</span></div>
+      <div class="sc-main">
+        <div class="sc-line"><span class="verdict ${r.verdict.will_apply ? "ok" : "bad"}">${icon(r.verdict.will_apply ? "check" : "x", "ic sm")}${r.verdict.will_apply ? "Expected to apply" : "Apply is expected to fail"}</span>
+          ${r.passed ? `<span class="pill ok">Policy passed</span>` : `<span class="pill bad">Policy failed at ${esc(r.fail_on)}</span>`}
+          <span class="sc-meta">${r.stats.files} files · ${r.stats.resources} resources · ${r.ms} ms</span></div>
+        <div class="sevbar" aria-label="${total} active findings by severity">${bar || `<span style="flex:1;background:var(--ok)"></span>`}</div>
+        <div class="sc-legend">${SEVS.map((v) => `<span><i style="background:${sevColor(v)}"></i><b>${r.summary[v] || 0}</b> ${v.toLowerCase()}</span>`).join("")}<span class="muted">${r.fixable} fixable · ${r.waived} waived</span></div>
       </div>`;
+    const setCount = (id, n, bad) => { const el = $(id); if (el) { el.hidden = !n; el.textContent = n; el.classList.toggle("bad", !!bad); } };
+    setCount("#count-findings", total, r.summary.CRITICAL || r.summary.HIGH);
+    setCount("#count-plan", r.plan ? r.plan.create + r.plan.update + r.plan.delete + r.plan.replace : 0, r.plan && (r.plan.delete || r.plan.replace));
+    setCount("#count-compliance", (r.compliance || []).reduce((n, c) => n + c.total - c.passing, 0), true);
   }
-
   const VALIDATION = [
     ["TG-VAL-001", "HCL syntax parses"],
     ["TG-VAL-002", "No duplicate resources, variables, outputs, modules or locals"],
@@ -400,6 +396,9 @@
     ["TG-VAL-006", "Port ranges are not inverted"],
     ["TG-AWS-LAMBDA-002", "Lambda runtimes are supported"],
   ];
+
+  // A pass, fail or warning mark for checklists.
+  const mark = (ok) => `<span class="mark ${ok === null ? "warn" : ok ? "pass" : "fail"}">${icon(ok === null ? "spark" : ok ? "check" : "x", "ic sm")}</span>`;
 
   function renderOverview() {
     const r = S.report;
@@ -421,27 +420,24 @@
         <button class="btn sm ghost" id="guide-close" aria-label="Hide the guide">Got it</button>
       </div>` : ""}
       <div class="dash">
-        <div class="tile w8"><h4>Posture</h4>
-          <div class="hero-tile">${ring(r.score, r.grade)}
-            <div><div class="verdict ${r.verdict.will_apply ? "ok" : "bad"}">${r.verdict.will_apply ? "Expected to apply" : "Apply is expected to fail"}</div>
-              <p class="hint">${esc(r.verdict.message)}</p>
-              ${(r.gate_failures || []).map((g) => `<p class="hint" style="color:var(--crit);margin:0 0 4px">Gate: ${esc(g)}</p>`).join("")}
-              <div class="kpis">${SEVS.map((s) => `<div><div class="kpi">${r.summary[s] || 0}</div><div class="kpi-label"><span class="sevdot" style="background:${sevColor(s)}"></span>${s.toLowerCase()}</div></div>`).join("")}</div></div></div></div>
-        <div class="tile w4"><h4>Fix</h4><div class="kpi">${r.fixable}</div><div class="kpi-label">findings fixable in one click</div>
-          <div class="row">${r.fixable ? `<button class="btn primary sm" data-fixall>Fix all</button>` : ""}<button class="btn sm" data-ai-fix>AI fix (verified)</button></div></div>
+        <div class="tile w8"><h4>Why</h4>
+          <p class="why ${r.verdict.will_apply ? "ok" : "bad"}">${esc(r.verdict.message)}</p>
+          ${(r.gate_failures || []).length ? `<ul class="checks">${r.gate_failures.map((g) => `<li>${mark(false)}<span>${esc(g)}</span></li>`).join("")}</ul>` : `<ul class="checks"><li>${mark(true)}<span>Nothing at or above ${esc(r.fail_on)} is active, so the gate passes.</span></li></ul>`}</div>
+        <div class="tile w4 fix-tile"><h4>Fix</h4><div class="kpi">${r.fixable}</div><div class="kpi-label">findings fixable in one click</div>
+          <div class="row">${r.fixable ? `<button class="btn primary sm" data-fixall>${icon("wrench", "ic sm")}Fix all</button>` : ""}<button class="btn sm" data-ai-fix>${icon("spark", "ic sm")}AI fix (verified)</button></div></div>
         <div class="tile"><h4>Will it apply?</h4><ul class="checks">
-          ${VALIDATION.map(([id, label]) => `<li><span class="status ${blocking.has(id) ? "fail" : "pass"}">${blocking.has(id) ? "Fail" : "Pass"}</span><span>${label}</span></li>`).join("")}
-          ${warn.slice(0, 4).map((f) => `<li><span class="status warn">Warn</span><span>${esc(f.message)}</span></li>`).join("")}</ul>
-          <p class="hint" style="margin:10px 0 0">Provider-side checks (quotas, permissions, name availability) need a real plan. Add one in the Plan tab.</p></div>
+          ${VALIDATION.map(([id, label]) => `<li>${mark(!blocking.has(id))}<span>${label}</span></li>`).join("")}
+          ${warn.slice(0, 4).map((f) => `<li>${mark(null)}<span>${esc(f.message)}</span></li>`).join("")}</ul>
+          <p class="hint" style="margin:10px 0 0">Quotas, permissions and name availability need a real plan; add one in the Plan tab.</p></div>
         <div class="tile"><h4>Top risks</h4>${active.length ? `<ul class="toplist">${active.slice(0, 8).map((f) => `<li><span class="sev ${f.severity}">${f.severity}</span><span class="grow">${esc(f.title)}</span><button class="loc" data-jump="${esc(f.file)}" data-line="${f.line || 0}">${esc(f.file)}${f.line ? ":" + f.line : ""}</button></li>`).join("")}</ul>` : `<div class="empty-sm">No active findings.</div>`}</div>
         <div class="tile"><h4>Findings by category</h4>${bars(Object.entries(r.by_category || {}).sort((a, b) => b[1] - a[1]), { label: (k) => CATEGORY[k] || k, empty: "No active findings." })}</div>
         <div class="tile"><h4>Resources by provider</h4>${bars(Object.entries(r.providers || {}).sort((a, b) => b[1] - a[1]), { label: (k) => CLOUDS[k] || k, empty: "No resources yet." })}</div>
-        <div class="tile w12"><h4>Compliance</h4><div class="kpis">${comp.map((c) => `<div><div class="kpi">${c.passing}/${c.total}</div><div class="kpi-label">${esc(c.name)}</div></div>`).join("")}</div>
+        <div class="tile w12"><h4>Compliance</h4><div class="comp-grid">${comp.map((c) => `<div class="comp"><div class="comp-head"><span>${esc(c.name)}</span><b>${c.passing}/${c.total}</b></div><div class="meter"><span style="width:${c.total ? (100 * c.passing) / c.total : 100}%"></span></div></div>`).join("")}</div>
           <p class="hint" style="margin:10px 0 0">Controls with no failing evidence. <button class="loc" data-tab-go="compliance">View controls</button></p></div>
         <div class="tile"><h4>How this result was produced</h4>${r.trace ? `<ul class="checks">
-          ${[["Parse", r.trace.parse_ms], ["Resource rules", r.trace.rules_ms], ["Module and graph checks", r.trace.checks_ms], ["Policy", r.trace.policy_ms]].map(([n, ms]) => `<li><span class="status pass">${ms.toFixed(1)} ms</span><span>${n}</span></li>`).join("")}
-          <li><span class="status pass">${fmtN(r.trace.evaluations)}</span><span>rule evaluations on ${r.stats.resources} resources</span></li>
-          <li><span class="status pass">${r.stats.rules}</span><span>rules active, fail_on ${esc(r.fail_on)}${r.trace.custom_rules ? `, ${r.trace.custom_rules} custom` : ""}</span></li></ul>` : `<div class="empty-sm">Trace unavailable.</div>`}</div>
+          ${[["Parse", r.trace.parse_ms], ["Resource rules", r.trace.rules_ms], ["Module and graph checks", r.trace.checks_ms], ["Policy", r.trace.policy_ms]].map(([n, ms]) => `<li><span class="num">${ms.toFixed(1)} ms</span><span>${n}</span></li>`).join("")}
+          <li><span class="num">${fmtN(r.trace.evaluations)}</span><span>rule evaluations on ${r.stats.resources} resources</span></li>
+          <li><span class="num">${r.stats.rules}</span><span>rules active, fail_on ${esc(r.fail_on)}${r.trace.custom_rules ? `, ${r.trace.custom_rules} custom` : ""}</span></li></ul>` : `<div class="empty-sm">Trace unavailable.</div>`}</div>
         <div class="tile"><h4>Activity</h4>${S.activity.length ? `<ul class="checks">${S.activity.slice(0, 8).map((a) => `<li><span class="status ${a.ok ? "pass" : "fail"}">${esc(a.kind)}</span><span>${esc(a.text)} <span class="muted">${a.at.toLocaleTimeString()}</span></span></li>`).join("")}</ul>` : `<div class="empty-sm">Fixes and AI proposals appear here, with the engine's decision.</div>`}</div>
         ${r.plan ? `<div class="tile w12"><h4>Plan</h4><div class="kpis"><div><div class="kpi">${r.plan.create}</div><div class="kpi-label">to add</div></div><div><div class="kpi">${r.plan.update}</div><div class="kpi-label">to change</div></div><div><div class="kpi" style="color:var(--crit)">${r.plan.delete}</div><div class="kpi-label">to destroy</div></div><div><div class="kpi" style="color:var(--high)">${r.plan.replace}</div><div class="kpi-label">to replace</div></div></div></div>` : ""}
       </div>`;
@@ -597,7 +593,7 @@
     const present = [...new Set(g.nodes.map(provOf))];
     $("#graph-legend").innerHTML = present.map((p) => `<span><i style="background:${PROVIDER_COLOR[p] || "#64748b"}"></i>${esc(CLOUDS[p] || (p === "module" ? "Module" : p))}</span>`).join("")
       + `<span><i style="background:transparent;border:2px solid #d92d20"></i>Attack path</span>`;
-    const ink = isDark() ? "#c9d2e3" : "#334155", edge = isDark() ? "#3a4559" : "#c3cbd8";
+    const ink = isDark() ? "#c9d2e3" : "#334155", edge = isDark() ? "#6b7c9e" : "#8a96ab";
     graph = cytoscape({
       container: $("#graph"),
       elements: [
@@ -607,14 +603,15 @@
         } })),
         ...g.edges.map((e) => ({ data: { id: e.source + ">" + e.target, source: e.source, target: e.target, path: pathNodes.has(e.source) && pathNodes.has(e.target) } })),
       ],
-      layout: graphLayout === "cose" ? { name: "cose", animate: !reduceMotion, animationDuration: 500, padding: 30, nodeRepulsion: 16000, idealEdgeLength: 95 } : { name: "breadthfirst", directed: true, spacingFactor: 1.15, padding: 30, animate: !reduceMotion },
+      layout: graphLayout === "cose" ? { name: "cose", animate: !reduceMotion, animationDuration: 500, padding: 30, nodeRepulsion: 22000, idealEdgeLength: 110, edgeElasticity: 80, gravity: 0.6, numIter: 1500 } : { name: "breadthfirst", directed: true, spacingFactor: 1.6, padding: 30, animate: !reduceMotion },
       style: [
         { selector: "node", style: { "background-color": "data(fill)", "background-image": "data(icon)", "background-width": "100%", "background-height": "100%", "background-clip": "node",
           shape: "round-rectangle", width: 52, height: 52, "border-width": 3, "border-color": "data(ring)", label: "data(label)", color: ink, "font-size": 12, "font-family": "JetBrains Mono, monospace",
           "text-valign": "bottom", "text-margin-y": 7, "text-wrap": "wrap", "line-height": 1.25, "text-background-color": isDark() ? "#0b0d12" : "#ffffff", "text-background-opacity": 0.75, "text-background-padding": 2,
           "transition-property": "opacity, border-width", "transition-duration": "200ms" } },
         { selector: "node[?path]", style: { "border-color": "#d92d20", "border-width": 5, "underlay-color": "#d92d20", "underlay-padding": 8, "underlay-opacity": 0.25, "underlay-shape": "round-rectangle" } },
-        { selector: "edge", style: { width: 1.4, "line-color": edge, "target-arrow-color": edge, "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8, "transition-property": "opacity", "transition-duration": "200ms" } },
+        { selector: "edge", style: { width: 2, "line-color": edge, "target-arrow-color": edge, "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 1, opacity: 0.85, "transition-property": "opacity, line-color, width", "transition-duration": "200ms" } },
+        { selector: "edge.hot", style: { "line-color": "#5eead4", "target-arrow-color": "#5eead4", width: 3, opacity: 1 } },
         { selector: "edge[?path]", style: { "line-color": "#d92d20", "target-arrow-color": "#d92d20", width: 3 } },
         { selector: ".faded", style: { opacity: 0.15 } },
         { selector: "node:selected", style: { "border-width": 5, "border-color": isDark() ? "#ffffff" : "#0b0d12" } },
@@ -628,7 +625,8 @@
       tip.style.top = `${p.y - 10}px`;
       tip.hidden = false;
     });
-    graph.on("mouseout", "node", () => (tip.hidden = true));
+    graph.on("mouseout", "node", () => { tip.hidden = true; graph.edges().removeClass("hot"); });
+    graph.on("mouseover", "node", (e) => e.target.connectedEdges().addClass("hot"));
     graph.on("tap", "node", (e) => {
       const hood = e.target.closedNeighborhood();
       graph.elements().addClass("faded");
@@ -1316,12 +1314,88 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     }
   }
 
-  // Point visitors at the download for their own OS.
-  function markDownload() {
+  // Install commands per platform; selecting one never downloads anything.
+  const RELEASE_URL = "https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_";
+  function installCommand(p) {
+    if (p.startsWith("windows")) {
+      return `# PowerShell
+Invoke-WebRequest -Uri ${RELEASE_URL}${p}.exe -OutFile terraguard.exe
+.\\terraguard.exe scan .`;
+    }
+    return `curl -fsSL -o terraguard ${RELEASE_URL}${p}
+chmod +x terraguard && sudo mv terraguard /usr/local/bin/
+terraguard scan .`;
+  }
+  function selectPlatform(p) {
+    for (const b of $$("[data-platform]")) {
+      const on = b.dataset.platform === p;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-checked", on);
+    }
+    $("#install-cmd").textContent = installCommand(p);
+    const ext = p.startsWith("windows") ? ".exe" : "";
+    $("#dl-binary").href = `${RELEASE_URL}${p}${ext}`;
+    $("#dl-binary").textContent = `Download terraguard_${p}${ext}`;
+  }
+  function setupDownloads() {
+    if (!$("#install-cmd")) return;
     const ua = navigator.userAgent, arm = /arm|aarch64/i.test(navigator.userAgentData?.architecture || ua);
-    const os = /Windows/.test(ua) ? "windows_amd64.exe" : /Mac/.test(ua) ? (arm || !/Intel/.test(ua) ? "darwin_arm64" : "darwin_amd64") : /Linux|X11/.test(ua) ? (arm ? "linux_arm64" : "linux_amd64") : "";
-    const a = os && $(`.dl-list a[href$="terraguard_${os}"]`);
-    if (a) { a.classList.add("primary"); a.textContent += " (your system)"; }
+    const detected = /Windows/.test(ua) ? "windows_amd64" : /Mac/.test(ua) ? (arm || !/Intel/.test(ua) ? "darwin_arm64" : "darwin_amd64") : arm ? "linux_arm64" : "linux_amd64";
+    $(`[data-platform="${detected}"]`)?.insertAdjacentHTML("beforeend", ` <span class="mine">(yours)</span>`);
+    for (const b of $$("[data-platform]")) b.onclick = () => selectPlatform(b.dataset.platform);
+    selectPlatform(detected);
+  }
+
+  // Background: a slowly drifting graph of nodes, like the infrastructure it
+  // checks. Links follow the pointer; it pauses when hidden or in the workspace.
+  function network(canvas) {
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d"), dpr = Math.min(devicePixelRatio || 1, 2), pointer = { x: -1e4, y: -1e4 };
+    let nodes = [], w = 0, h = 0;
+    const size = () => {
+      w = canvas.width = innerWidth * dpr; h = canvas.height = innerHeight * dpr;
+      const n = Math.min(90, Math.round((innerWidth * innerHeight) / 18000));
+      nodes = Array.from({ length: n }, () => ({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.25 * dpr, vy: (Math.random() - 0.5) * 0.25 * dpr, r: (Math.random() * 1.4 + 0.8) * dpr }));
+    };
+    const draw = () => {
+      const dark = isDark(), reach = 150 * dpr;
+      ctx.clearRect(0, 0, w, h);
+      for (const a of nodes) {
+        a.x += a.vx; a.y += a.vy;
+        if (a.x < 0 || a.x > w) a.vx *= -1;
+        if (a.y < 0 || a.y > h) a.vy *= -1;
+      }
+      ctx.lineWidth = dpr;
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < reach) {
+            ctx.strokeStyle = dark ? `rgba(79,227,193,${(1 - d / reach) * 0.22})` : `rgba(13,148,136,${(1 - d / reach) * 0.18})`;
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          }
+        }
+        const a = nodes[i], d = Math.hypot(a.x - pointer.x, a.y - pointer.y);
+        if (d < reach * 1.4) {
+          ctx.strokeStyle = `rgba(167,139,250,${(1 - d / (reach * 1.4)) * 0.5})`;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(pointer.x, pointer.y); ctx.stroke();
+        }
+        ctx.fillStyle = dark ? "rgba(154,245,223,.7)" : "rgba(13,148,136,.55)";
+        ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2); ctx.fill();
+      }
+    };
+    let raf = 0;
+    const loop = () => { draw(); raf = requestAnimationFrame(loop); };
+    const run = () => {
+      cancelAnimationFrame(raf);
+      if (document.hidden || $("#landing").hidden) return;
+      reduceMotion ? draw() : loop();
+    };
+    size();
+    addEventListener("resize", () => { size(); run(); });
+    addEventListener("pointermove", (e) => { pointer.x = e.clientX * dpr; pointer.y = e.clientY * dpr; }, { passive: true });
+    document.addEventListener("visibilitychange", run);
+    addEventListener("hashchange", () => setTimeout(run));
+    run();
   }
 
   function setupMotion() {
@@ -1341,6 +1415,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       io.observe(el);
     }
     countUp($(".facts"));
+    network($("#net"));
     if (reduceMotion) return;
     // Background orbs drift with scroll; cards tilt slightly toward the pointer.
     let ticking = false;
@@ -1351,6 +1426,9 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
         const y = scrollY;
         document.documentElement.style.setProperty("--sx", `${Math.sin(y / 900) * 60}px`);
         document.documentElement.style.setProperty("--sy", `${(y % 1200) / 20}px`);
+        const max = document.documentElement.scrollHeight - innerHeight;
+        document.documentElement.style.setProperty("--progress", max > 0 ? (y / max).toFixed(4) : 0);
+        document.documentElement.style.setProperty("--hx", `${Math.max(0, 14 - y / 30)}deg`);
         ticking = false;
       });
     }, { passive: true });
@@ -1360,6 +1438,8 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
         const r = card.getBoundingClientRect();
         card.style.setProperty("--ry", `${((e.clientX - r.left) / r.width - 0.5) * 6}deg`);
         card.style.setProperty("--rx", `${-((e.clientY - r.top) / r.height - 0.5) * 6}deg`);
+        card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+        card.style.setProperty("--my", `${e.clientY - r.top}px`);
         card.style.setProperty("--ty", "-3px");
       });
       card.addEventListener("pointerleave", () => { card.style.setProperty("--rx", "0deg"); card.style.setProperty("--ry", "0deg"); card.style.setProperty("--ty", "0"); });
@@ -1427,17 +1507,11 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     });
   }
 
-  // Boot (fonts and GitHub stats are skipped when air-gapped)
-  if (!LOCAL) {
-    const font = document.createElement("link");
-    font.rel = "stylesheet";
-    font.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap";
-    document.head.appendChild(font);
-  }
+  // Boot (fonts are self-hosted; GitHub stats are skipped when air-gapped)
   wire();
   setupMotion();
+  setupDownloads();
   addCopyButtons($("#landing"));
-  markDownload();
   setupTry();
   setupInstall();
   setupScrollButtons();

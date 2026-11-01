@@ -30,7 +30,7 @@ reviewed.
 
 ## Local setup (2 minutes)
 
-You need Go 1.25+, nothing else. Node 22 only if you touch `stats-worker/`. Everything is free; no paid services or keys are needed.
+You need Go 1.26.10+, nothing else. Node 22 only if you touch `stats-worker/`. Everything is free; no paid services or keys are needed.
 
 ```bash
 git clone https://github.com/Karthik-099/TERRAGUARD && cd TERRAGUARD
