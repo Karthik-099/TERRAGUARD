@@ -50,6 +50,9 @@ resource "aws_db_instance" "main" {
   storage_encrypted       = true
   deletion_protection     = true
   backup_retention_period = 7
+
+  iam_database_authentication_enabled = true
+  enabled_cloudwatch_logs_exports     = ["postgresql"]
 }
 
 resource "aws_instance" "web" {

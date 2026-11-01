@@ -19,10 +19,10 @@ import (
 	"github.com/Karthik-099/TERRAGUARD/internal/ai"
 	"github.com/Karthik-099/TERRAGUARD/internal/stats"
 	"github.com/Karthik-099/TERRAGUARD/web"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// runServe self-hosts the web app plus a small API. AI keys stay server-side
-// in .env, so a team shares one configuration and browsers never see keys.
+// runServe: web app plus API; AI keys stay on the server.
 func runServe(args []string) error {
 	fset := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fset.String("addr", "127.0.0.1:8080", "listen address (use 0.0.0.0:8080 in containers)")
@@ -56,13 +56,14 @@ func newServer(token string) http.Handler { return newServerWith(token, nil) }
 
 func newServerWith(token string, audit io.Writer) http.Handler {
 	mux := http.NewServeMux()
+	mcpServer := newMCPServer(false)
 	st := stats.New()
 	met := newMetrics()
 	apiLimit, aiLimit := newLimiter(120), newLimiter(20)
 	if audit != nil {
 		audit = &lockedWriter{w: audit}
 	}
-	mux.Handle("/", http.FileServerFS(web.FS))
+	mux.Handle("/", staticFiles(web.FS))
 
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		var route []string
@@ -73,10 +74,16 @@ func newServerWith(token string, audit io.Writer) http.Handler {
 			"ai": map[string]any{"enabled": len(route) > 0, "local_only": ai.LocalOnly(), "route": route}})
 	})
 
+	authorized := func(w http.ResponseWriter, r *http.Request) bool {
+		if token != "" && subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), []byte(token)) != 1 {
+			writeJSON(w, 401, map[string]string{"error": "missing or invalid server token"})
+			return false
+		}
+		return true
+	}
 	api := func(route string, lim *limiter, h func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		return observe(route, lim, met, audit, func(w http.ResponseWriter, r *http.Request) {
-			if token != "" && subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), []byte(token)) != 1 {
-				writeJSON(w, 401, map[string]string{"error": "missing or invalid server token"})
+			if !authorized(w, r) {
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
@@ -144,12 +151,37 @@ func newServerWith(token string, audit io.Writer) http.Handler {
 		writeJSON(w, 200, map[string]any{"files": changed, "errors": msgs})
 	}))
 
+	// Remote MCP: token-protected, inline files only.
+	remote := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	mux.Handle("/mcp", api("/mcp", apiLimit, remote.ServeHTTP))
+
+	// HCP Terraform / Terraform Enterprise run task; authenticated by HMAC, not the token.
+	if rt := newRunTask(); rt != nil {
+		mux.Handle("POST /api/run-task", observe("/api/run-task", apiLimit, met, audit, rt.ServeHTTP))
+	}
+
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") })
+	// Metrics need the token when one is set (Prometheus: authorization.credentials).
 	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(w, r) {
+			return
+		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		writeMetrics(w, met, st)
 	})
 	return secureHeaders(mux)
+}
+
+// staticFiles: no directory listings, no Go source.
+func staticFiles(fsys fs.FS) http.Handler {
+	files := http.FileServerFS(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") || strings.HasSuffix(r.URL.Path, ".go") {
+			http.NotFound(w, r)
+			return
+		}
+		files.ServeHTTP(w, r)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -170,8 +202,7 @@ func scanHit(surface string, rep *engine.Report, ms int) stats.Hit {
 	return h
 }
 
-// reportUsage sends anonymous counts to TERRAGUARD_TELEMETRY_URL when the user
-// opts in. It is fire-and-forget with a short timeout so it never slows CI.
+// reportUsage is opt-in and fire-and-forget, so it never slows CI.
 func reportUsage(rep *engine.Report, ms int) {
 	url := os.Getenv("TERRAGUARD_TELEMETRY_URL")
 	if url == "" {

@@ -12,9 +12,8 @@
     alicloud: "Alibaba Cloud", vultr: "Vultr", kubernetes: "Kubernetes", helm: "Helm",
   };
   const CATEGORY = { security: "Security", validate: "Validation", reliability: "Reliability", "best-practice": "Best practice", "attack-path": "Attack path", plan: "Plan risk", policy: "Policy", cost: "Cost" };
-  const EXAMPLES = { insecure: ["main.tf", "variables.tf", "terraform.tfvars", ".terraguard.yml"], multicloud: ["main.tf"], secure: ["main.tf"] };
-  // assetsBase (set by the Docker image) serves every library from this
-  // origin, so an air-gapped install makes no outside requests.
+  const EXAMPLES = { insecure: ["main.tf", "variables.tf", "terraform.tfvars", ".terraguard.yml"], "aws-network": ["main.tf"], multicloud: ["main.tf"], secure: ["main.tf"] };
+  // assetsBase: serve libraries from this origin (air-gapped Docker image).
   const JSD = "https://cdn.jsdelivr.net/npm";
   const LOCAL = CFG.assetsBase ? CFG.assetsBase.replace(/\/$/, "") : "";
   const CDN = {
@@ -40,14 +39,15 @@
     "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js": "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi",
     "https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js": "sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a",
   };
-  const loadScript = (src) => new Promise((ok, fail) => {
+  const scripts = {};
+  const loadScript = (src) => (scripts[src] ||= new Promise((ok, fail) => {
     const s = document.createElement("script");
     s.src = src;
     if (SRI[src]) { s.integrity = SRI[src]; s.crossOrigin = "anonymous"; }
     s.onload = ok;
-    s.onerror = fail;
+    s.onerror = () => { delete scripts[src]; fail(new Error(`failed to load ${src}`)); };
     document.head.appendChild(s);
-  });
+  }));
 
   const S = {
     files: {}, active: null, config: "", plan: "", report: null, aiFindings: [], chat: [], activity: [],
@@ -56,8 +56,7 @@
   };
   let editor, monacoRef, models = {}, graph, appReady;
 
-  // ── theme ───────────────────────────────────────────────────────────────
-  // Black is the default theme; light is an explicit choice that is remembered.
+  // Theme: dark by default, light is remembered.
   const isDark = () => document.documentElement.dataset.theme !== "light";
   function toggleTheme() {
     const next = isDark() ? "light" : "dark";
@@ -67,7 +66,7 @@
     if (S.tab === "graph") renderGraph();
   }
 
-  // ── persistence & share links ───────────────────────────────────────────
+  // Persistence & share links
   function persist() {
     try { localStorage.setItem(STORE, JSON.stringify({ files: S.files, active: S.active, config: S.config, plan: S.plan, chat: S.chat.slice(-40) })); } catch {}
   }
@@ -79,9 +78,23 @@
   }
   async function decodeShare(s) {
     const bin = Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
-    const stream = new Blob([bin]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-    return JSON.parse(await new Response(stream).text());
+    const reader = new Blob([bin]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+    const chunks = [];
+    let size = 0;
+    for (;;) { // cap the expanded size so a crafted link cannot exhaust memory
+      const { done, value } = await reader.read();
+      if (done) break;
+      if ((size += value.length) > SHARE_MAX) { reader.cancel(); throw new Error("share link too large"); }
+      chunks.push(value);
+    }
+    const obj = JSON.parse(await new Blob(chunks).text());
+    const files = obj?.files;
+    if (!files || typeof files !== "object" || Array.isArray(files) || Object.keys(files).length > 500
+      || Object.entries(files).some(([k, v]) => typeof v !== "string" || k.length > 300 || /(^|\/)\.\.(\/|$)/.test(k))
+      || (obj.config != null && typeof obj.config !== "string")) throw new Error("share link has an unexpected shape");
+    return { files, config: obj.config || "" };
   }
+  const SHARE_MAX = 5 << 20;
 
   function toast(msg) {
     const t = $("#toast");
@@ -91,7 +104,7 @@
     t._h = setTimeout(() => t.classList.remove("show"), 3200);
   }
 
-  // ── anonymous usage counters (numbers only, never code) ─────────────────
+  // Anonymous usage counters (numbers only, never code)
   const T = { session: crypto.randomUUID?.() || String(Math.random()).slice(2), last: 0 };
   const resetPending = () => ({ scans: 0, files: 0, resources: 0, findings: 0, fixes: 0, ai: 0, ms: 0, rules: {} });
   T.pending = resetPending();
@@ -121,8 +134,8 @@
     else fetch(url, { method: "POST", body, headers: { "Content-Type": "text/plain" }, keepalive: true }).catch(() => {});
   }
 
-  // ── routing: product page <-> workspace ─────────────────────────────────
-  const PAGES = ["home", "product", "ai", "policy", "compare", "integrations", "enterprise", "architecture", "open-source"];
+  // Routing: product page <-> workspace
+  const PAGES = ["home", "product", "ai", "policy", "compare", "integrations", "docs", "architecture", "open-source"];
   const inApp = () => location.hash.startsWith("#/app") || location.hash.startsWith("#s=");
   function route() {
     const app = inApp();
@@ -134,15 +147,53 @@
       if (location.hash.includes("demo")) appReady.then(() => { fillSettings(); $("#settings").showModal(); });
       return;
     }
-    const name = (location.hash.match(/^#\/([\w-]+)/) || [])[1];
+    let name = (location.hash.match(/^#\/([\w-]+)/) || [])[1];
+    // the old Enterprise page now lives under Integrations ("Run it anywhere")
+    const anchor = name === "enterprise" ? "deploy" : (location.hash.match(/\?([\w-]+)$/) || [])[1];
+    if (name === "enterprise") name = "integrations";
     const page = PAGES.includes(name) ? name : "home";
     $$("#landing .page").forEach((p) => (p.hidden = p.dataset.page !== page));
     $$(".nav-links a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#/${page}`));
-    document.title = page === "home" ? "TerraGuard" : `${$(`.nav-links a[href="#/${page}"]`)?.textContent || "TerraGuard"} · TerraGuard`;
-    scrollTo({ top: 0, behavior: "instant" });
+    document.title = page === "home" ? "TerraGuard: open-source Terraform security scanner and validator" : `${$(`.nav-links a[href="#/${page}"]`)?.textContent || "TerraGuard"} · TerraGuard`;
+    if (page === "docs") renderDoc((location.hash.match(/^#\/docs\/([\w-]+)/) || [])[1] || "guide");
+    const target = anchor && document.getElementById(anchor);
+    if (target) requestAnimationFrame(() => target.scrollIntoView({ behavior: "instant" }));
+    else scrollTo({ top: 0, behavior: "instant" });
   }
 
-  // ── engine & editor (loaded only when the workspace opens) ──────────────
+  // Documentation: the repository's Markdown, rendered in the site
+  const DOCS = {
+    guide: "GUIDE.md", reference: "REFERENCE.md", rules: "RULES.md", "self-hosting": "SELF_HOSTING.md",
+    security: "SECURITY.md", academy: "ACADEMY.md", architecture: "ARCHITECTURE.md", contributing: "CONTRIBUTING.md",
+  };
+  const DOC_SLUG = Object.fromEntries(Object.entries(DOCS).map(([k, v]) => [v, k]));
+  const REPO_DOC = (file) => `https://github.com/${CFG.repo}/blob/main/${["SECURITY.md", "CONTRIBUTING.md"].includes(file) ? "" : "docs/"}${file}`;
+  async function renderDoc(slug) {
+    const file = DOCS[slug] || DOCS.guide, body = $("#docs-body");
+    $$(".docs-nav [data-doc]").forEach((a) => a.classList.toggle("on", a.dataset.doc === (DOCS[slug] ? slug : "guide")));
+    $("#docs-edit").href = REPO_DOC(file);
+    try {
+      const [res] = await Promise.all([fetch(`docs/${file}`), loadScript(CDN.marked), loadScript(CDN.dompurify)]);
+      if (!res.ok) throw new Error(res.status);
+      // Diagrams are Mermaid source; link to GitHub, which renders them.
+      const text = (await res.text()).replace(/```mermaid[\s\S]*?```/g, `> Diagram: [view it on GitHub](${REPO_DOC(file)}).`);
+      body.innerHTML = DOMPurify.sanitize(marked.parse(text));
+    } catch {
+      body.innerHTML = `<p>Could not load this page. Read it on <a href="${esc(REPO_DOC(file))}" target="_blank" rel="noopener">GitHub</a>.</p>`;
+      return;
+    }
+    addCopyButtons(body);
+    // Links between docs stay in the site; other repository links open GitHub.
+    for (const a of $$("a[href]", body)) {
+      const href = a.getAttribute("href"), name = href.split("#")[0].split("/").pop();
+      if (/^https?:/.test(href)) { a.target = "_blank"; a.rel = "noopener"; }
+      else if (href.startsWith("#") && !href.startsWith("#/")) a.onclick = (e) => { e.preventDefault(); document.getElementById(href.slice(1))?.scrollIntoView({ behavior: "smooth" }); };
+      else if (DOC_SLUG[name]) a.href = `#/docs/${DOC_SLUG[name]}`;
+      else if (!href.startsWith("#")) { a.href = `https://github.com/${CFG.repo}/blob/main/${href.replace(/^(\.\.\/)+/, "")}`; a.target = "_blank"; a.rel = "noopener"; }
+    }
+  }
+
+  // Engine & editor (loaded only when the workspace opens)
   let enginePromise;
   const bootEngine = () => (enginePromise ||= loadEngine());
   async function loadEngine() {
@@ -181,8 +232,7 @@
       history.replaceState(null, "", "#/app");
     }
     try {
-      // UMD libraries must load before Monaco's AMD loader installs a global
-      // define(), or they register with it instead of the page.
+      // Load UMD libraries before Monaco's AMD loader, or they register with its define().
       await Promise.all([loadScript(CDN.marked), loadScript(CDN.dompurify), loadScript(CDN.cytoscape)]);
       await Promise.all([bootEngine(), bootEditor()]);
     } catch (e) {
@@ -223,7 +273,7 @@
   let scanTimer;
   const scanSoon = () => { clearTimeout(scanTimer); scanTimer = setTimeout(scan, 250); };
 
-  // ── files ───────────────────────────────────────────────────────────────
+  // Files
   const langOf = (n) => (n.endsWith(".json") ? "json" : /\.ya?ml$/.test(n) ? "yaml" : "hcl");
 
   function setFiles(files, active) {
@@ -296,7 +346,7 @@
     for (const [n, m] of Object.entries(models)) monacoRef.editor.setModelMarkers(m, "terraguard", byFile[n] || []);
   }
 
-  // ── small chart helpers ─────────────────────────────────────────────────
+  // Small chart helpers
   function bars(entries, { label = (k) => k, empty = "Nothing to show." } = {}) {
     if (!entries.length) return `<div class="empty-sm">${empty}</div>`;
     const max = Math.max(1, ...entries.map(([, v]) => v));
@@ -315,7 +365,7 @@
       <text x="44" y="62" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="Inter">${score}/100</text></svg>`;
   }
 
-  // ── workspace rendering ─────────────────────────────────────────────────
+  // Workspace rendering
   function renderAll() {
     renderTabs();
     setMarkers();
@@ -326,6 +376,8 @@
   function renderScorecard() {
     const r = S.report;
     if (!r) return;
+    const perr = (r.errors || []).find((e) => /terraguard\.yml|custom_rules|policy|max_findings|fail_on/.test(e));
+    if ($("#policy-status")) { $("#policy-status").textContent = perr ? `Policy error: ${perr}` : S.config ? "Policy applied" : ""; $("#policy-status").style.color = perr ? "var(--crit)" : ""; }
     const counts = SEVS.map((s) => `<span class="count"><span class="sevdot" style="background:${sevColor(s)}"></span><b>${r.summary[s] || 0}</b>${s.toLowerCase()}</span>`).join("");
     $("#scorecard").innerHTML = `
       <div class="grade g-${r.grade}">${r.grade}<small>${r.score}/100</small></div>
@@ -340,6 +392,8 @@
     ["TG-VAL-001", "HCL syntax parses"],
     ["TG-VAL-002", "No duplicate resources, variables, outputs, modules or locals"],
     ["TG-VAL-003", "Every reference resolves (var, local, module, data, resource)"],
+    ["TG-VAL-011", "Local module calls pass only declared inputs"],
+    ["TG-VAL-012", "Local module calls set every required input"],
     ["TG-VAL-007", "count and for_each are not combined"],
     ["TG-VAL-004", "CIDR blocks are valid network addresses"],
     ["TG-VAL-005", "S3 bucket names follow AWS naming rules"],
@@ -354,7 +408,18 @@
     const blocking = new Set(active.filter((f) => f.blocking).map((f) => f.rule_id));
     const warn = active.filter((f) => ["TG-VAL-008", "TG-VAL-009", "TG-STATE-001", "TG-TF-001", "TG-TF-003"].includes(f.rule_id));
     const comp = r.compliance || [];
-    $("#tab-overview").innerHTML = `
+    let guide = true;
+    try { guide = localStorage.getItem("terraguard.guide") !== "done"; } catch {}
+    $("#tab-overview").innerHTML = `${guide ? `
+      <div class="guide">
+        <div><b>Start here</b><span class="hint inline">Three steps. Nothing you paste leaves this browser. Press <kbd>?</kbd> for shortcuts.</span></div>
+        <ol>
+          <li><span>1</span><div><b>Add your Terraform</b><p>Paste into the editor, or use Upload, Folder or Examples above it.</p></div></li>
+          <li><span>2</span><div><b>Read the verdict, then fix</b><p>The score and "will it apply" update as you type. <button class="loc" data-tab-go="findings">Open findings</button> to fix one, or all at once.</p></div></li>
+          <li><span>3</span><div><b>Keep it fixed</b><p>Add your own rules in <button class="loc" data-tab-go="policy">Policy</button>, then gate every pull request from <button class="loc" data-tab-go="cicd">Pipeline</button>.</p></div></li>
+        </ol>
+        <button class="btn sm ghost" id="guide-close" aria-label="Hide the guide">Got it</button>
+      </div>` : ""}
       <div class="dash">
         <div class="tile w8"><h4>Posture</h4>
           <div class="hero-tile">${ring(r.score, r.grade)}
@@ -403,6 +468,7 @@
       <div class="f-actions">
         ${f.fix && !f.waived ? `<button class="btn primary sm" data-fix="${i}">${esc(f.fix.description)}</button>` : ""}
         <button class="btn sm" data-ask="${isAI ? "ai" : ""}${i}">Explain</button>
+        ${!isAI ? `<button class="btn sm ghost" data-copy-finding="${i}" title="Copy as text for a ticket or chat">Copy</button>` : ""}
         ${!isAI && f.file && models[f.file] && f.line ? `<button class="btn sm" data-ignore="${i}">Ignore here</button>` : ""}
         ${!isAI ? `<button class="btn sm" data-waive="${i}">Add waiver</button><a class="btn sm ghost" href="${issueURL}" target="_blank" rel="noopener">Report false positive</a>` : ""}
       </div>
@@ -453,6 +519,70 @@
       </tbody></table>`;
   }
 
+  // Graph colours and our own line icons (vendor logos are trademarks).
+  const PROVIDER_COLOR = {
+    aws: "#FF9900", google: "#4285F4", azurerm: "#0078D4", cloudflare: "#FBAD41", digitalocean: "#0080FF", hcloud: "#D50C2D",
+    linode: "#00A95C", openstack: "#ED1944", ovh: "#123F6D", oci: "#C74634", alicloud: "#FF6A00", vultr: "#007BFC",
+    kubernetes: "#326CE5", helm: "#0F1689", module: "#8B5CF6",
+  };
+  // Own line icons per kind of resource (no vendor logos: they are trademarks).
+  const KIND_ICON = {
+    bucket: '<path d="M5 7c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3z"/><path d="M5 7l1.5 11c.3 1.2 2.6 2 5.5 2s5.2-.8 5.5-2L19 7"/>',
+    volume: '<rect x="4" y="6" width="16" height="12" rx="2"/><circle cx="16" cy="12" r="1.5"/><path d="M7 12h5"/>',
+    database: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/>',
+    cache: '<path d="M13 3L6 13h5l-1 8 7-10h-5z"/><ellipse cx="12" cy="20" rx="7" ry="1.6"/>',
+    queue: '<rect x="3" y="7" width="4" height="10" rx="1"/><rect x="10" y="7" width="4" height="10" rx="1"/><rect x="17" y="7" width="4" height="10" rx="1"/>',
+    function: '<path d="M8 4c-2 0-2 2-2 4v1c0 1.5-1 3-2 3 1 0 2 1.5 2 3v1c0 2 0 4 2 4M16 4c2 0 2 2 2 4v1c0 1.5 1 3 2 3-1 0-2 1.5-2 3v1c0 2 0 4-2 4M10 9l4 6M14 9l-4 6"/>',
+    container: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+    cluster: '<path d="M12 2l8 4.5v11L12 22l-8-4.5v-11z"/><circle cx="12" cy="12" r="3"/><path d="M12 5v4M12 15v4M6 8.5l3.4 2M14.6 13.5L18 15.5M6 15.5l3.4-2M14.6 10.5L18 8.5"/>',
+    compute: '<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4"/>',
+    vpc: '<rect x="3" y="4" width="18" height="16" rx="2" stroke-dasharray="3 2"/><path d="M7 9h4v4H7zM13 11h4v4h-4z"/>',
+    subnet: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/>',
+    nat: '<rect x="3" y="8" width="18" height="8" rx="4"/><path d="M7 12h10M14 9.5l3 2.5-3 2.5"/>',
+    gateway: '<path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-6h6v6"/>',
+    route: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/>',
+    firewall: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 15h18M9 4v5M15 9v6M9 15v5"/>',
+    lb: '<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="12" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v9M11 7L6 16.5M13 7l5 9.5"/>',
+    api: '<path d="M8 6l-5 6 5 6M16 6l5 6-5 6M14 4l-4 16"/>',
+    dns: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+    cdn: '<circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="M6 7l3.5 3M18 7l-3.5 3M6 17l3.5-3M18 17l-3.5-3"/>',
+    waf: '<path d="M12 3l8 3v6c0 4.6-3.4 7.7-8 9-4.6-1.3-8-4.4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+    key: '<circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M21 12v3"/>',
+    secret: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/>',
+    cert: '<rect x="3" y="4" width="18" height="12" rx="1"/><circle cx="15" cy="15" r="3"/><path d="M13.5 17.5L13 22l2-1 2 1-.5-4.5M7 8h8M7 11h4"/>',
+    identity: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
+    logs: '<path d="M6 3h9l4 4v14H6z"/><path d="M9 11h7M9 15h7"/>',
+    monitor: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
+    scope: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    module: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
+    other: '<rect x="4" y="4" width="16" height="16" rx="3"/>',
+  };
+  // First match wins, so specific kinds come before broad ones.
+  const KINDS = [
+    ["cluster", /eks_cluster|kubernetes_cluster|container_cluster|containerengine_cluster|lke_cluster|cs_managed_kubernetes|cs_kubernetes|vultr_kubernetes|gke|aks|_k8s|node_pool|node_group/],
+    ["function", /lambda|function|workers?_script|worker_route/],
+    ["bucket", /s3_bucket|storage_bucket|storage_account|storage_container|spaces_bucket|objectstorage|object_storage|oss_bucket|r2_bucket|_bucket/],
+    ["container", /^(kubernetes_|helm_)|ecs_|ecr_|container|cloud_run|app_service|_app$/],
+    ["nat", /nat_gateway|_nat\b|_nat_|_eip$|eip_address|public_ip|floating_?ip|reserved_ip|primary_ip|_address$/], ["waf", /waf|ruleset|firewall_policy|ddos/],
+    ["api", /api_gateway|apigateway|api_management|apigee/],
+    ["lb", /lb|load_?balancer|nodebalancer|listener|target_group|backend_service|forwarding_rule|alb|elb|application_gateway/], ["cdn", /cloudfront|cdn|front_?door/],
+    ["dns", /route53|dns|record|zone|_domain$/], ["gateway", /internet_gateway|vpn_gateway|transit_gateway|egress_only|router$|_gateway|private_endpoint|vpc_endpoint|privatelink/],
+    ["route", /route_table|route|peering/], ["subnet", /subnet|vswitch/], ["vpc", /_vpc$|_vpc_|virtual_network|compute_network|networking_network|_network$|vcn/],
+    ["firewall", /security_group|firewall|network_security|secgroup|network_acl|security_list/],
+    ["cache", /elasticache|redis|memcache|memorystore/], ["queue", /sqs|sns|pubsub|queue|servicebus|eventhub|kinesis|kafka|msk|event_bus/],
+    ["database", /db_instance|rds|sql|dynamodb|database|cosmos|docdb|neptune|opensearch|elasticsearch|bigtable|spanner|firestore|redshift|bigquery|warehouse/],
+    ["volume", /ebs|volume|disk|efs|filestore|file_share|block_storage/], ["secret", /secret|ssm_parameter|key_vault_secret/], ["key", /kms|key_vault|crypto_key|_key$/],
+    ["cert", /certificate|acm_|_cert/], ["logs", /cloudtrail|log/], ["monitor", /cloudwatch|monitor|alarm|alert|insights/],
+    ["scope", /resource_group|_project$|_folder$|organization|management_group|compartment/],
+    ["identity", /iam|role|policy|identity|service_account|user|principal/],
+    ["compute", /instance|droplet|server|vm|virtual_machine|launch_template|autoscaling|scale_set|compute/],
+  ];
+  const PROVIDER_TAG = { aws: "AWS", google: "GCP", azurerm: "AZURE", cloudflare: "CF", digitalocean: "DO", hcloud: "HETZNER", linode: "LINODE", openstack: "OPENSTACK", ovh: "OVH", oci: "OCI", alicloud: "ALIBABA", vultr: "VULTR", kubernetes: "K8S", helm: "HELM", module: "MODULE" };
+  const kindOf = (type) => (type === "module" ? "module" : (KINDS.find(([, re]) => re.test(type.replace(/^data\./, ""))) || ["other"])[0]);
+  // Each node is one image: provider colour, icon and tag.
+  const nodeImage = (kind, prov, fill) => "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 48 48"><rect width="48" height="48" rx="7" fill="${fill}"/><g transform="translate(10.4 4.5) scale(1.13)" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${KIND_ICON[kind]}</g><text x="24" y="43" text-anchor="middle" font-family="monospace" font-size="${(PROVIDER_TAG[prov] || prov).length > 6 ? 5.5 : 7}" font-weight="700" fill="#fff" fill-opacity=".92">${esc((PROVIDER_TAG[prov] || prov).slice(0, 9))}</text></svg>`);
+  let graphLayout = "cose";
+
   function renderGraph() {
     const g = S.report?.graph;
     if (!g) return;
@@ -461,24 +591,51 @@
     for (const f of S.report.findings) if (f.category === "attack-path" && !f.waived) (f.related || []).forEach((n) => pathNodes.add(n));
     graph?.destroy();
     graph = null;
-    if (!g.nodes.length) { $("#graph").innerHTML = `<div class="empty">No resources yet.</div>`; return; }
+    if (!g.nodes.length) { $("#graph").innerHTML = `<div class="empty">No resources yet.</div>`; $("#graph-legend").innerHTML = ""; return; }
     $("#graph").innerHTML = "";
-    const ink = isDark() ? "#b4bfd1" : "#3b4658", edge = isDark() ? "#2f3a4f" : "#cfd6e1";
+    const provOf = (n) => (n.type === "module" ? "module" : n.type.replace(/^data\./, "").split("_")[0]);
+    const present = [...new Set(g.nodes.map(provOf))];
+    $("#graph-legend").innerHTML = present.map((p) => `<span><i style="background:${PROVIDER_COLOR[p] || "#64748b"}"></i>${esc(CLOUDS[p] || (p === "module" ? "Module" : p))}</span>`).join("")
+      + `<span><i style="background:transparent;border:2px solid #d92d20"></i>Attack path</span>`;
+    const ink = isDark() ? "#c9d2e3" : "#334155", edge = isDark() ? "#3a4559" : "#c3cbd8";
     graph = cytoscape({
       container: $("#graph"),
       elements: [
-        ...g.nodes.map((n) => ({ data: { id: n.id, label: n.id, color: SEV_HEX[n.severity] || "#94a3b8", file: n.file, line: n.line, path: pathNodes.has(n.id) } })),
+        ...g.nodes.map((n) => ({ data: {
+          id: n.id, label: n.type === "module" ? n.id : `${n.id.split(".").slice(-1)[0]}\n${n.type.replace(/^data\./, "").replace(/^[a-z]+_/, "")}`, type: n.type, file: n.file, line: n.line, findings: n.findings, sev: n.severity || "",
+          fill: PROVIDER_COLOR[provOf(n)] || "#64748b", ring: SEV_HEX[n.severity] || (isDark() ? "#2a303d" : "#cfd5df"), icon: nodeImage(kindOf(n.type), provOf(n), PROVIDER_COLOR[provOf(n)] || "#64748b"), kind: kindOf(n.type), path: pathNodes.has(n.id),
+        } })),
         ...g.edges.map((e) => ({ data: { id: e.source + ">" + e.target, source: e.source, target: e.target, path: pathNodes.has(e.source) && pathNodes.has(e.target) } })),
       ],
-      layout: { name: "cose", animate: false, padding: 24, nodeRepulsion: 9000 },
+      layout: graphLayout === "cose" ? { name: "cose", animate: !reduceMotion, animationDuration: 500, padding: 30, nodeRepulsion: 16000, idealEdgeLength: 95 } : { name: "breadthfirst", directed: true, spacingFactor: 1.15, padding: 30, animate: !reduceMotion },
       style: [
-        { selector: "node", style: { "background-color": "data(color)", label: "data(label)", color: ink, "font-size": 9, "text-valign": "bottom", "text-margin-y": 4, width: 16, height: 16 } },
-        { selector: "node[?path]", style: { "border-color": "#d92d20", "border-width": 3, width: 22, height: 22 } },
-        { selector: "edge", style: { width: 1.2, "line-color": edge, "target-arrow-color": edge, "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8 } },
-        { selector: "edge[?path]", style: { "line-color": "#d92d20", "target-arrow-color": "#d92d20", width: 2.5 } },
+        { selector: "node", style: { "background-color": "data(fill)", "background-image": "data(icon)", "background-width": "100%", "background-height": "100%", "background-clip": "node",
+          shape: "round-rectangle", width: 52, height: 52, "border-width": 3, "border-color": "data(ring)", label: "data(label)", color: ink, "font-size": 12, "font-family": "JetBrains Mono, monospace",
+          "text-valign": "bottom", "text-margin-y": 7, "text-wrap": "wrap", "line-height": 1.25, "text-background-color": isDark() ? "#0b0d12" : "#ffffff", "text-background-opacity": 0.75, "text-background-padding": 2,
+          "transition-property": "opacity, border-width", "transition-duration": "200ms" } },
+        { selector: "node[?path]", style: { "border-color": "#d92d20", "border-width": 5, "underlay-color": "#d92d20", "underlay-padding": 8, "underlay-opacity": 0.25, "underlay-shape": "round-rectangle" } },
+        { selector: "edge", style: { width: 1.4, "line-color": edge, "target-arrow-color": edge, "target-arrow-shape": "triangle", "curve-style": "bezier", "arrow-scale": 0.8, "transition-property": "opacity", "transition-duration": "200ms" } },
+        { selector: "edge[?path]", style: { "line-color": "#d92d20", "target-arrow-color": "#d92d20", width: 3 } },
+        { selector: ".faded", style: { opacity: 0.15 } },
+        { selector: "node:selected", style: { "border-width": 5, "border-color": isDark() ? "#ffffff" : "#0b0d12" } },
       ],
     });
-    graph.on("tap", "node", (e) => jump(e.target.data("file"), e.target.data("line")));
+    const tip = $("#graph-tip");
+    graph.on("mouseover", "node", (e) => {
+      const d = e.target.data(), p = e.renderedPosition;
+      tip.innerHTML = `<b>${esc(d.id)}</b>${esc(CLOUDS[d.type.replace(/^data\./, "").split("_")[0]] || (d.type === "module" ? "Module" : d.type))} · ${esc(d.kind)}<br>${d.findings} finding(s)${d.sev ? ` · worst <span class="sev ${d.sev}">${d.sev}</span>` : ""}${d.path ? "<br><span style='color:var(--crit)'>Part of an attack path</span>" : ""}`;
+      tip.style.left = `${p.x + 18}px`;
+      tip.style.top = `${p.y - 10}px`;
+      tip.hidden = false;
+    });
+    graph.on("mouseout", "node", () => (tip.hidden = true));
+    graph.on("tap", "node", (e) => {
+      const hood = e.target.closedNeighborhood();
+      graph.elements().addClass("faded");
+      hood.removeClass("faded");
+      jump(e.target.data("file"), e.target.data("line"));
+    });
+    graph.on("tap", (e) => { if (e.target === graph) graph.elements().removeClass("faded"); });
   }
 
   function renderCompliance() {
@@ -499,18 +656,43 @@
     $("#docs-view").innerHTML = md(S.docs);
   }
 
+  const RULE_PROVIDER = { AWS: "AWS", AZ: "Azure", GCP: "Google Cloud", K8S: "Kubernetes", HELM: "Kubernetes", CF: "Cloudflare", DO: "DigitalOcean", HZ: "Hetzner",
+    LIN: "Akamai / Linode", OCI: "Oracle Cloud", ALI: "Alibaba Cloud", OS: "OpenStack", OVH: "OVHcloud", VULTR: "Vultr", GH: "GitHub" };
+  const ruleProvider = (id) => RULE_PROVIDER[id.split("-")[1]] || "Any provider";
+
   function renderRules() {
     const rules = JSON.parse(terraguard.rules("{}"));
+    const providers = [...new Set(rules.map((r) => ruleProvider(r.id)))].sort();
+    const cats = [...new Set(rules.map((r) => r.category))].sort();
     $("#rules-list").innerHTML = `
-      <p class="hint">${rules.length} built-in rules. The same catalog runs in the browser, CLI, GitHub Action, VS Code, MCP server and self-hosted server. <a href="${REPO_URL}/blob/main/CONTRIBUTING.md#adding-a-rule" target="_blank" rel="noopener">Add a rule</a></p>
-      <input type="search" id="rules-q" placeholder="Search rules, providers or controls" style="width:100%;margin-bottom:10px">
+      <p class="hint">${rules.length} built-in rules, the same in the browser, CLI, GitHub Action, VS Code, MCP and server. Missing one? Write it in the Policy tab and propose it, or <a href="${REPO_URL}/blob/main/CONTRIBUTING.md#adding-a-rule" target="_blank" rel="noopener">add it in Go</a>.</p>
+      <div class="rules-filters">
+        <input type="search" id="rules-q" placeholder="Search: s3, encryption, CWE-284, aws_db_instance" aria-label="Search rules">
+        <select id="rules-provider" aria-label="Provider"><option value="">All providers</option>${providers.map((p) => `<option>${esc(p)}</option>`).join("")}</select>
+        <select id="rules-sev" aria-label="Severity"><option value="">All severities</option>${SEVS.map((v) => `<option>${v}</option>`).join("")}</select>
+        <select id="rules-cat" aria-label="Category"><option value="">All categories</option>${cats.map((c) => `<option value="${esc(c)}">${esc(CATEGORY[c] || c)}</option>`).join("")}</select>
+        <label class="inline-check"><input type="checkbox" id="rules-blocking"> Blocks apply</label>
+      </div>
+      <p class="hint" id="rules-count"></p>
       <table><thead><tr><th>ID</th><th>Severity</th><th>Rule</th></tr></thead><tbody id="rules-body">
-      ${rules.map((r) => `<tr data-search="${esc([r.id, r.title, r.remediation, (r.resource_types || []).join(" "), (r.compliance_themes || []).join(" ")].join(" ").toLowerCase())}"><td class="mono">${esc(r.id)}</td><td><span class="sev ${r.severity}">${r.severity}</span></td><td><b>${esc(r.title)}</b>${r.blocking ? ` <span class="badge block">Blocks apply</span>` : ""} <span class="badge">${esc(CATEGORY[r.category] || r.category)}</span><div class="remedy">${esc(r.remediation)}</div></td></tr>`).join("")}
+      ${rules.map((r) => `<tr data-provider="${esc(ruleProvider(r.id))}" data-sev="${r.severity}" data-cat="${esc(r.category)}" data-blocking="${r.blocking ? 1 : ""}"
+        data-search="${esc([r.id, r.title, r.remediation, r.cwe, ruleProvider(r.id), (r.resource_types || []).join(" "), (r.compliance_themes || []).join(" ")].join(" ").toLowerCase())}">
+        <td class="mono">${esc(r.id)}</td><td><span class="sev ${r.severity}">${r.severity}</span></td>
+        <td><b>${esc(r.title)}</b>${r.blocking ? ` <span class="badge block">Blocks apply</span>` : ""} <span class="badge">${esc(CATEGORY[r.category] || r.category)}</span> <span class="badge">${esc(ruleProvider(r.id))}</span>${r.cwe ? ` <span class="badge">${esc(r.cwe)}</span>` : ""}
+          <div class="remedy">${esc(r.remediation)}</div>${r.resource_types?.length ? `<div class="rid">${esc(r.resource_types.slice(0, 6).join(", "))}${r.resource_types.length > 6 ? ` and ${r.resource_types.length - 6} more` : ""}</div>` : ""}</td></tr>`).join("")}
       </tbody></table>`;
-    $("#rules-q").oninput = (e) => {
-      const q = e.target.value.toLowerCase();
-      $$("#rules-body tr").forEach((tr) => (tr.hidden = q && !tr.dataset.search.includes(q)));
+    const apply = () => {
+      const q = $("#rules-q").value.toLowerCase().trim(), p = $("#rules-provider").value, sev = $("#rules-sev").value, cat = $("#rules-cat").value, blk = $("#rules-blocking").checked;
+      let n = 0;
+      for (const tr of $$("#rules-body tr")) {
+        const d = tr.dataset;
+        tr.hidden = (q && !q.split(/\s+/).every((w) => d.search.includes(w))) || (p && d.provider !== p) || (sev && d.sev !== sev) || (cat && d.cat !== cat) || (blk && !d.blocking);
+        n += tr.hidden ? 0 : 1;
+      }
+      $("#rules-count").textContent = `Showing ${n} of ${rules.length}`;
     };
+    for (const id of ["#rules-q", "#rules-provider", "#rules-sev", "#rules-cat", "#rules-blocking"]) $(id).addEventListener("input", apply);
+    apply();
   }
 
   function renderCICD() {
@@ -547,7 +729,7 @@
     $("#ci-self").textContent = CICD.selfHost();
   }
 
-  // ── product page: live usage and GitHub stats ───────────────────────────
+  // Product page: live usage and GitHub stats
   async function renderLiveStats() {
     const url = AI.server() ? "api/stats" : CFG.statsUrl ? CFG.statsUrl.replace(/\/$/, "") + "/stats" : null;
     if (!url) return;
@@ -598,7 +780,7 @@
     $("#giscus-box").appendChild(sc);
   }
 
-  // ── AI assistant ────────────────────────────────────────────────────────
+  // AI assistant
   function contextBlock(maxChars = 24000) {
     let budget = maxChars;
     const files = Object.entries(S.files).map(([n, c]) => {
@@ -626,6 +808,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
         ${m.meta ? `<div class="meta">${esc(m.meta)}</div>` : ""}</div>`).join("")
       : `<div class="empty">Ask about your Terraform. The assistant sees your files and the engine's findings.<br><br>
           AI is optional: every scan, fix and validation works without it. Use a free key from Groq, OpenRouter or Gemini, or a local model so nothing leaves your machine.</div>`;
+    addCopyButtons($("#chat-log"));
     $("#chat-log").scrollTop = $("#chat-log").scrollHeight;
   }
 
@@ -661,8 +844,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     explainplan: () => (S.plan ? "Explain this terraform plan for a reviewer: what changes, what is risky (destroys/replacements and why), and what to check before approving." : (toast("Add a plan first"), null)),
   };
 
-  // AI proposes, the engine decides: changes to existing files are kept only if
-  // engine.Verify (via WASM) accepts them. New files (tests, modules) are added as-is.
+  // AI proposes, Verify decides; new files are added as-is.
   function verifyAndApply(changed) {
     const existing = Object.fromEntries(Object.entries(changed).filter(([n]) => S.files[n] !== undefined));
     if (Object.keys(existing).length) {
@@ -706,8 +888,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     setMarkers();
   }
 
-  // ── actions ─────────────────────────────────────────────────────────────
-  // log records what changed and why, so users can see how the result evolved.
+  // Actions (log records what changed and why)
   function log(kind, text, ok = true) {
     S.activity.unshift({ at: new Date(), kind, text, ok });
     S.activity.length = Math.min(S.activity.length, 30);
@@ -742,6 +923,100 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     $("#policy-input").value = c;
     showTab("policy");
     scan();
+  }
+
+  // Custom rule builder: writes valid YAML into the policy
+  const yamlScalar = (v) => (/^-?\d+(\.\d+)?$/.test(v) ? v : v === "true" || v === "false" ? v : JSON.stringify(v));
+
+  function addCustomRule() {
+    const val = (id) => $(id).value.trim();
+    const id = val("#cr-id").toUpperCase(), attr = val("#cr-attr"), op = $("#cr-op").value, raw = val("#cr-value");
+    const msg = (t, bad) => { $("#cr-msg").textContent = t; $("#cr-msg").style.color = bad ? "var(--crit)" : ""; };
+    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(id)) return msg("Rule ID: 3-40 characters, letters, digits and dashes (e.g. ORG-OWNER-001).", true);
+    if (!attr) return msg("Attribute is required, e.g. tags.owner.", true);
+    if (op !== "exists" && !raw) return msg("Value is required for this check.", true);
+    let cond;
+    if (op === "exists") cond = `exists: ${raw === "false" ? "false" : "true"}`;
+    else if (op === "in" || op === "not_in") cond = `${op}: [${raw.split(",").map((x) => yamlScalar(x.trim())).join(", ")}]`;
+    else if (op === "min" || op === "max") {
+      if (!/^-?\d+(\.\d+)?$/.test(raw)) return msg("Value must be a number for at least / at most.", true);
+      cond = `${op}: ${raw}`;
+    } else cond = `${op}: ${yamlScalar(raw)}`;
+    const types = val("#cr-types").split(",").map((t) => t.trim()).filter(Boolean);
+    const lines = [`  - id: ${id}`, `    title: ${JSON.stringify(val("#cr-title") || id)}`, `    severity: ${$("#cr-sev").value}`];
+    if (types.length) lines.push(`    resource_types: [${types.map((t) => JSON.stringify(t)).join(", ")}]`);
+    if (val("#cr-where-attr")) lines.push(`    where: [{ attribute: ${JSON.stringify(val("#cr-where-attr"))}, equals: ${yamlScalar(val("#cr-where-val"))} }]`);
+    lines.push(`    attribute: ${JSON.stringify(attr)}`, `    ${cond}`);
+    if (val("#cr-fix")) lines.push(`    remediation: ${JSON.stringify(val("#cr-fix"))}`);
+    let c = S.config.trimEnd();
+    if (new RegExp(`^\\s*-\\s*id:\\s*${id}\\s*$`, "m").test(c)) return msg(`${id} already exists in the policy.`, true);
+    c = /^custom_rules:\s*$/m.test(c) ? c.replace(/^custom_rules:\s*$/m, "custom_rules:\n" + lines.join("\n")) : `${c}${c ? "\n\n" : ""}custom_rules:\n${lines.join("\n")}`;
+    S.config = c + "\n";
+    $("#policy-input").value = S.config;
+    scan();
+    if (S.report.errors?.length) return msg(S.report.errors[0], true);
+    const hits = S.report.findings.filter((f) => f.rule_id === id && !f.waived).length;
+    log("Policy", `Added ${id}: ${hits} resource(s) currently fail it`);
+    msg(`${id} added. ${hits} resource(s) currently fail it.`);
+    $("#cr-propose").hidden = false;
+    $("#cr-propose").onclick = () => proposeRule(lines.join("\n"), val("#cr-title") || id);
+  }
+
+  // Plain-English standards: AI drafts one rule, the engine validates it
+  let draft = null;
+  async function draftFromText() {
+    const text = $("#nl-rule").value.trim(), msg = (t, bad) => { $("#nl-msg").textContent = t; $("#nl-msg").style.color = bad ? "var(--crit)" : ""; };
+    if (!text) return msg("Describe the standard first.", true);
+    $("#nl-preview").hidden = true;
+    msg("Drafting...");
+    const input = JSON.stringify({ files: S.files });
+    const types = JSON.parse(terraguard.resourceTypes(input)).join(", ") || "none yet";
+    const msgs = [{ role: "system", content: terraguard.ruleDraftPrompt }, { role: "user", content: `Resource types in this project: ${types}\nStandard: ${text}` }];
+    try {
+      for (let round = 0; round < 2; round++) { // one repair round with the validation error
+        const r = await AI.chat(msgs);
+        draft = JSON.parse(terraguard.draftRule(r.text, input));
+        if (!draft.error) break;
+        msgs.push({ role: "assistant", content: r.text }, { role: "user", content: `That rule was rejected: ${draft.error}. Answer with the corrected YAML only.` });
+      }
+    } catch (e) { draft = null; return msg(e.message.split("\n")[0], true); }
+    if (draft.error) return msg(`Rejected: ${draft.error}`, true);
+    if (new RegExp(`^\\s*-\\s*id:\\s*${draft.rule.id}\\s*$`, "m").test(S.config)) return msg(`${draft.rule.id} already exists in the policy.`, true);
+    $("#nl-yaml").textContent = draft.yaml;
+    $("#nl-hits").innerHTML = draft.hits.length
+      ? `Would flag ${draft.hits.length} resource(s): ${draft.hits.slice(0, 8).map((h) => `<button class="loc" data-jump="${esc(h.file)}" data-line="${h.line || 0}">${esc(h.resource)}</button>`).join(" ")}`
+      : "Would flag nothing in the current files.";
+    $("#nl-preview").hidden = false;
+    msg("Validated by the engine. Review it before adding.");
+  }
+  // Opens a pre-filled GitHub issue; a maintainer reviews it and adds the rule in Go with tests.
+  function proposeRule(yaml, problem) {
+    const offending = (draft?.hits || []).slice(0, 1).map((h) => resourceSource(h.file, h.line)).join("");
+    const q = new URLSearchParams({ template: "rule_proposal.yml", title: `Rule proposal: ${problem.slice(0, 80)}`, problem, rule: yaml.replace(/^ {2}/gm, ""), bad: offending });
+    window.open(`${REPO_URL}/issues/new?${q}`, "_blank", "noopener");
+  }
+  // The resource block starting at line, for a proposal's example.
+  function resourceSource(file, line) {
+    const lines = (S.files[file] || "").split("\n");
+    let i = line - 1, depth = 0, out = [];
+    for (; i < lines.length && out.length < 40; i++) {
+      out.push(lines[i]);
+      depth += (lines[i].match(/{/g) || []).length - (lines[i].match(/}/g) || []).length;
+      if (depth <= 0 && out.length > 1) break;
+    }
+    return out.join("\n");
+  }
+
+  function addDraft() {
+    if (!draft || draft.error) return;
+    const c = S.config.trimEnd();
+    S.config = (/^custom_rules:\s*$/m.test(c) ? c.replace(/^custom_rules:\s*$/m, "custom_rules:\n" + draft.yaml) : `${c}${c ? "\n\n" : ""}custom_rules:\n${draft.yaml}`) + "\n";
+    $("#policy-input").value = S.config;
+    scan();
+    log("Policy", `Added ${draft.rule.id} from a plain-English standard`);
+    $("#nl-preview").hidden = true;
+    $("#nl-msg").textContent = `${draft.rule.id} added.`;
+    draft = null;
   }
 
   function download(name, content, type = "text/plain") {
@@ -800,7 +1075,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     else renderAll();
   }
 
-  // ── AI settings dialog ──────────────────────────────────────────────────
+  // AI settings dialog
   function fillSettings(provider) {
     const s = AI.load();
     const p = provider || s.provider || "groq";
@@ -840,7 +1115,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       : "Your Terraform is analyzed on this device and never uploaded.";
   }
 
-  // ── wiring ──────────────────────────────────────────────────────────────
+  // Wiring
   function wire() {
     addEventListener("hashchange", route);
     $$("[data-theme-toggle]").forEach((b) => (b.onclick = toggleTheme));
@@ -869,6 +1144,12 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       if (!S.active || !/\.(tf|tfvars)$/.test(S.active)) return;
       setFileContent(S.active, terraguard.fmt(S.files[S.active]));
       toast("Formatted");
+    };
+    $("#graph-fit").onclick = () => graph?.animate({ fit: { padding: 30 } }, { duration: reduceMotion ? 0 : 300 });
+    $("#graph-layout").onclick = (e) => {
+      graphLayout = graphLayout === "cose" ? "breadthfirst" : "cose";
+      e.target.textContent = graphLayout === "cose" ? "Layered layout" : "Organic layout";
+      renderGraph();
     };
     $("#btn-docs-copy").onclick = () => { navigator.clipboard.writeText(S.docs || ""); toast("Copied"); };
     $("#btn-docs-download").onclick = () => download($("#docs-kind").value === "agents" ? "AGENTS.md" : "README.md", S.docs || "", "text/markdown");
@@ -909,7 +1190,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
 
     // Actions on finding cards and tiles, shared across tabs.
     document.addEventListener("click", (e) => {
-      const el = e.target.closest("[data-jump],[data-fix],[data-fixall],[data-ai-fix],[data-ignore],[data-waive],[data-ask],[data-apply-ai],[data-copy],[data-q],[data-tab-go],[data-filter-rule]");
+      const el = e.target.closest("[data-jump],[data-fix],[data-fixall],[data-ai-fix],[data-ignore],[data-waive],[data-ask],[data-apply-ai],[data-copy],[data-copy-finding],[data-q],[data-tab-go],[data-filter-rule]");
       if (!el) return;
       const d = el.dataset;
       const all = S.report?.findings || [];
@@ -924,6 +1205,11 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
         ask(`Explain finding ${f.rule_id} "${f.title}" at ${f.file}:${f.line} (${f.resource || ""}): ${f.message}\nWhy does it matter, how would it be exploited or cause an outage, and what exact Terraform change fixes it? Note side effects such as forced replacement.`);
       } else if (d.applyAi !== undefined) verifyAndApply(extractFiles(S.chat[+d.applyAi].content));
       else if (d.copy) { navigator.clipboard.writeText($("#" + d.copy).textContent); toast("Copied"); }
+      else if (d.copyFinding !== undefined) {
+        const f = all[+d.copyFinding];
+        navigator.clipboard.writeText(`[${f.severity}] ${f.rule_id} ${f.title}\n${f.file}${f.line ? ":" + f.line : ""}${f.resource ? " (" + f.resource + ")" : ""}\n${f.message}${f.remediation ? "\nFix: " + f.remediation : ""}`);
+        toast("Finding copied");
+      }
       else if (d.tabGo) showTab(d.tabGo);
       else if (d.filterRule) { S.filter.q = d.filterRule; $("#filter-q").value = d.filterRule; showTab("findings"); }
       else if (d.q) { const q = typeof QUICK[d.q] === "function" ? QUICK[d.q]() : QUICK[d.q]; if (q) ask(q); }
@@ -943,6 +1229,28 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     $("#plan-upload").onchange = async (e) => { S.plan = await e.target.files[0].text(); $("#plan-input").value = S.plan; scan(); };
     $("#btn-plan-clear").onclick = () => { S.plan = ""; $("#plan-input").value = ""; scan(); };
     $("#policy-input").oninput = (e) => { S.config = e.target.value; scanSoon(); };
+    $("#cr-add").onclick = addCustomRule;
+    // Shortcuts work everywhere except while typing in a field or the editor.
+    document.addEventListener("keydown", (e) => {
+      if ($("#app").hidden || e.ctrlKey || e.metaKey) return;
+      const typing = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.closest(".monaco-editor");
+      const tabs = $$(".ws-nav [data-tab]");
+      if (e.altKey && /^[1-9]$/.test(e.key) && tabs[+e.key - 1]) { e.preventDefault(); showTab(tabs[+e.key - 1].dataset.tab); }
+      else if (e.altKey && e.code === "KeyF") { e.preventDefault(); fixAll(); }
+      else if (e.altKey && e.code === "KeyS") { e.preventDefault(); $("#btn-share").click(); }
+      else if (typing || e.altKey) return;
+      else if (e.key === "/") { e.preventDefault(); if (S.tab !== "rules") showTab("findings"); $(S.tab === "rules" ? "#rules-q" : "#filter-q")?.focus(); }
+      else if (e.key === "?") { e.preventDefault(); $("#shortcuts").showModal(); }
+    });
+    $("#nl-draft").onclick = draftFromText;
+    $("#nl-add").onclick = addDraft;
+    $("#nl-propose").onclick = () => draft && proposeRule(draft.yaml, $("#nl-rule").value.trim() || draft.rule.title);
+    $("#nl-discard").onclick = () => { draft = null; $("#nl-preview").hidden = true; $("#nl-msg").textContent = ""; };
+    $("#tab-overview").addEventListener("click", (e) => {
+      if (e.target.id !== "guide-close") return;
+      try { localStorage.setItem("terraguard.guide", "done"); } catch {}
+      e.target.closest(".guide").remove();
+    });
     $("#btn-policy-example").onclick = async () => { S.config = await (await fetch("examples/insecure/.terraguard.yml")).text(); $("#policy-input").value = S.config; scan(); };
 
     $("#chat-form").onsubmit = (e) => {
@@ -984,8 +1292,37 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     addEventListener("pagehide", () => flush(true));
   }
 
-  // ── product page: motion, live try panel, install tabs ──────────────────
+  // Product page: motion, live try panel, install tabs
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Every code block gets a copy button; commands are meant to be pasted.
+  function addCopyButtons(root) {
+    for (const pre of $$("pre", root)) {
+      if (pre.parentElement.classList.contains("copy-wrap") || pre.classList.contains("code")) continue;
+      const wrap = document.createElement("div");
+      wrap.className = "copy-wrap";
+      pre.replaceWith(wrap);
+      wrap.append(pre);
+      const b = document.createElement("button");
+      b.className = "copy-btn";
+      b.type = "button";
+      b.textContent = "Copy";
+      b.setAttribute("aria-label", "Copy to clipboard");
+      b.onclick = async () => {
+        try { await navigator.clipboard.writeText(pre.innerText.trim()); b.textContent = "Copied"; } catch { b.textContent = "Press Ctrl+C"; }
+        setTimeout(() => (b.textContent = "Copy"), 1600);
+      };
+      wrap.append(b);
+    }
+  }
+
+  // Point visitors at the download for their own OS.
+  function markDownload() {
+    const ua = navigator.userAgent, arm = /arm|aarch64/i.test(navigator.userAgentData?.architecture || ua);
+    const os = /Windows/.test(ua) ? "windows_amd64.exe" : /Mac/.test(ua) ? (arm || !/Intel/.test(ua) ? "darwin_arm64" : "darwin_amd64") : /Linux|X11/.test(ua) ? (arm ? "linux_arm64" : "linux_amd64") : "";
+    const a = os && $(`.dl-list a[href$="terraguard_${os}"]`);
+    if (a) { a.classList.add("primary"); a.textContent += " (your system)"; }
+  }
 
   function setupMotion() {
     const targets = $$("#landing .section-head, #landing .card, #landing .stage, #landing .metric, #landing .lane, #landing .diagram, #landing .table-wrap, #landing .policy-code, #landing .cap-list > div, #landing .try-panel, #landing .install, #landing .layer, #landing .flow");
@@ -1004,6 +1341,29 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       io.observe(el);
     }
     countUp($(".facts"));
+    if (reduceMotion) return;
+    // Background orbs drift with scroll; cards tilt slightly toward the pointer.
+    let ticking = false;
+    addEventListener("scroll", () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = scrollY;
+        document.documentElement.style.setProperty("--sx", `${Math.sin(y / 900) * 60}px`);
+        document.documentElement.style.setProperty("--sy", `${(y % 1200) / 20}px`);
+        ticking = false;
+      });
+    }, { passive: true });
+    for (const card of $$("#landing .grid-3 > .card, #landing .grid-4 > .card, #landing .demo-steps > .card, #landing .deploy-grid > .card")) {
+      card.classList.add("tilt");
+      card.addEventListener("pointermove", (e) => {
+        const r = card.getBoundingClientRect();
+        card.style.setProperty("--ry", `${((e.clientX - r.left) / r.width - 0.5) * 6}deg`);
+        card.style.setProperty("--rx", `${-((e.clientY - r.top) / r.height - 0.5) * 6}deg`);
+        card.style.setProperty("--ty", "-3px");
+      });
+      card.addEventListener("pointerleave", () => { card.style.setProperty("--rx", "0deg"); card.style.setProperty("--ry", "0deg"); card.style.setProperty("--ty", "0"); });
+    }
   }
 
   // Animate the leading number in metric labels like "2,400" or "0.25 s".
@@ -1067,9 +1427,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     });
   }
 
-  // ── boot ────────────────────────────────────────────────────────────────
-  // Web fonts and GitHub stats are cosmetic: an air-gapped install skips them
-  // so the page makes no outside request at all (system fonts are used).
+  // Boot (fonts and GitHub stats are skipped when air-gapped)
   if (!LOCAL) {
     const font = document.createElement("link");
     font.rel = "stylesheet";
@@ -1078,6 +1436,8 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
   }
   wire();
   setupMotion();
+  addCopyButtons($("#landing"));
+  markDownload();
   setupTry();
   setupInstall();
   setupScrollButtons();

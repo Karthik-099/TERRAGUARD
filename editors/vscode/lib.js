@@ -1,5 +1,4 @@
-// Pure mapping from a TerraGuard JSON report to editor diagnostics; no vscode
-// import so it can be unit-tested with plain Node.
+// Report-to-diagnostics mapping, kept free of the vscode import so it's testable.
 const RANK = { CRITICAL: 5, HIGH: 4, MEDIUM: 3, LOW: 2, INFO: 1 };
 // VS Code DiagnosticSeverity: 0 Error, 1 Warning, 2 Information, 3 Hint
 const LEVEL = { CRITICAL: 0, HIGH: 0, MEDIUM: 1, LOW: 2, INFO: 3 };

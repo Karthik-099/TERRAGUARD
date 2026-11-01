@@ -33,6 +33,11 @@ variable "certificate_arn" {
   description = "ACM certificate for the internal HTTPS listener."
 }
 
+variable "access_logs_bucket" {
+  type        = string
+  description = "Existing S3 bucket for load balancer access logs (with the ELB log delivery bucket policy)."
+}
+
 variable "image" {
   type        = string
   description = "Container image. Mirror it into ECR for fully private pulls."
@@ -116,6 +121,12 @@ resource "aws_lb" "this" {
   subnets                    = var.private_subnet_ids
   security_groups            = [aws_security_group.lb.id]
   drop_invalid_header_fields = true
+
+  access_logs {
+    bucket  = var.access_logs_bucket
+    prefix  = var.name
+    enabled = true
+  }
 }
 
 resource "aws_lb_target_group" "this" {

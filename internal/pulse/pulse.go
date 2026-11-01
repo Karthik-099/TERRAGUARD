@@ -1,6 +1,4 @@
-// Package pulse turns many per-module scans into an adoption report for
-// platform teams: which engineering controls each module meets, which
-// waivers are expiring, which rules fail most, and the trend since last run.
+// Package pulse: control adoption, expiring waivers and trend across modules.
 package pulse
 
 import (

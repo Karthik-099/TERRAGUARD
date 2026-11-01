@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -25,5 +26,23 @@ func TestRecordClampsAndAggregates(t *testing.T) {
 	now = now.Add(3 * time.Minute)
 	if s.Snapshot().ActiveNow != 0 {
 		t.Fatal("stale sessions must expire")
+	}
+}
+
+func TestRecordStaysBoundedAndKeepsCountingKnownRules(t *testing.T) {
+	s := New()
+	s.Record(Hit{Rules: map[string]int{"TG-AWS-S3-001": 1}})
+	for i := 0; i < 600; i++ {
+		s.Record(Hit{Session: fmt.Sprint("s", i), Rules: map[string]int{fmt.Sprint("R", i): 1}})
+	}
+	for i := 0; i < maxSessions+50; i++ {
+		s.Record(Hit{Session: fmt.Sprint("x", i)})
+	}
+	s.Record(Hit{Rules: map[string]int{"TG-AWS-S3-001": 1}})
+	if len(s.rules) > 500 || len(s.sessions) > maxSessions {
+		t.Fatalf("unbounded: %d rules, %d sessions", len(s.rules), len(s.sessions))
+	}
+	if s.rules["TG-AWS-S3-001"] != 2 {
+		t.Fatalf("known rule stopped counting once the table was full: %d", s.rules["TG-AWS-S3-001"])
 	}
 }

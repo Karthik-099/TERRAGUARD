@@ -1,7 +1,6 @@
 //go:build js && wasm
 
-// Command wasm exposes the engine to the browser as globalThis.terraguard, so
-// the GitHub Pages site analyzes Terraform locally with no backend.
+// Command wasm exposes the engine to the browser as globalThis.terraguard.
 package main
 
 import (
@@ -89,8 +88,17 @@ func main() {
 			}
 			return engine.Docs(in.Files)
 		}),
-		// verifyChange({files, plan, config, changed}) scans before and after a
-		// proposed edit and returns the engine's accept/reject decision.
+		// verifyChange scans before and after an edit and returns Verify's decision.
+		"ruleDraftPrompt": engine.RuleDraftPrompt,
+		"resourceTypes":   jsonFn(func(in engine.Input) any { return engine.ResourceTypes(in.Files) }),
+		"draftRule": js.FuncOf(func(_ js.Value, args []js.Value) any {
+			var in engine.Input
+			if len(args) < 2 || json.Unmarshal([]byte(args[1].String()), &in) != nil {
+				return `{"error":"invalid input JSON"}`
+			}
+			b, _ := json.Marshal(engine.DraftRule(args[0].String(), in))
+			return string(b)
+		}),
 		"verifyChange": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			var in struct {
 				engine.Input

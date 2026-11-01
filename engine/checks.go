@@ -2,17 +2,19 @@ package engine
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 )
 
-// ModuleRules documents checks that need the whole module (cross-file or
-// cross-resource) rather than a single resource. Their logic lives below.
+// ModuleRules need the whole module (cross-file or cross-resource).
 var ModuleRules = []Rule{
 	{ID: "TG-VAL-001", Title: "HCL syntax error", Severity: High, Category: CatValidate, Blocking: true, Remediation: "Fix the syntax error; terraform cannot parse this file."},
 	{ID: "TG-VAL-002", Title: "Duplicate declaration (validate will fail)", Severity: High, Category: CatValidate, Blocking: true, Remediation: "Each resource, data source, variable, output, module and local must have a unique name."},
 	{ID: "TG-VAL-003", Title: "Reference to undeclared object (validate will fail)", Severity: High, Category: CatValidate, Blocking: true, Remediation: "Declare the referenced object, fix the typo, or include the file that declares it in the scan."},
+	{ID: "TG-VAL-011", Title: "Module call passes an undeclared input (validate will fail)", Severity: High, Category: CatValidate, Blocking: true, Remediation: "Remove the argument or declare a variable with that name in the module."},
+	{ID: "TG-VAL-012", Title: "Module call is missing a required input (validate will fail)", Severity: High, Category: CatValidate, Blocking: true, Remediation: "Set the input in the module block, or give the variable a default in the module."},
 	{ID: "TG-VAL-008", Title: "Required variable has no value", Severity: Medium, Category: CatValidate, Remediation: "Add it to a .tfvars file, give it a default, or export TF_VAR_<name>; CI runs with -input=false fail otherwise."},
 	{ID: "TG-VAL-009", Title: "tfvars sets an undeclared variable", Severity: Low, Category: CatValidate, Remediation: "Remove the value or declare the variable; terraform warns and the value is silently ignored."},
 	{ID: "TG-TF-004", Title: "Variable or output has no description", Severity: Info, Category: CatBestPrac, Remediation: "Add description = \"...\" so module users (and generated docs) know what it is for."},
@@ -64,6 +66,9 @@ var ruleIndex = func() map[string]*Rule {
 	}
 	for i := range ModuleRules {
 		m[ModuleRules[i].ID] = &ModuleRules[i]
+	}
+	for i := range schemaRules {
+		m[schemaRules[i].ID] = &schemaRules[i]
 	}
 	return m
 }()
@@ -136,7 +141,95 @@ func stateChecks(m *Module) []Finding {
 	return out
 }
 
+// declarationChecks runs per directory: each folder is its own module.
 func declarationChecks(m *Module) []Finding {
+	var out []Finding
+	subs := splitByDir(m)
+	dirs := make([]string, 0, len(subs))
+	for d := range subs {
+		dirs = append(dirs, d)
+	}
+	sort.Strings(dirs) // stable output order
+	for _, d := range dirs {
+		out = append(out, dirDeclarationChecks(subs[d])...)
+	}
+	return append(out, moduleCallChecks(m)...)
+}
+
+func splitByDir(m *Module) map[string]*Module {
+	subs := map[string]*Module{}
+	get := func(file string) *Module {
+		d := path.Dir(file)
+		if subs[d] == nil {
+			subs[d] = &Module{Files: m.Files, Locals: map[string]int{}, Tfvars: map[string]map[string]int{}}
+		}
+		return subs[d]
+	}
+	for _, b := range m.Blocks {
+		sub := get(b.File)
+		sub.Blocks = append(sub.Blocks, b)
+	}
+	for name, line := range m.Locals {
+		get(m.LocalFile[name]).Locals[name] = line
+	}
+	for file, vars := range m.Tfvars {
+		get(file).Tfvars[file] = vars
+	}
+	return subs
+}
+
+// moduleCallChecks: unknown or missing inputs on local module calls.
+func moduleCallChecks(m *Module) []Finding {
+	vars := map[string]map[string]bool{} // dir -> variable -> required
+	for _, b := range m.Blocks {
+		if b.Kind == "variable" && len(b.Labels) == 1 {
+			d := path.Dir(b.File)
+			if vars[d] == nil {
+				vars[d] = map[string]bool{}
+			}
+			_, hasDefault := b.Attrs["default"]
+			vars[d][b.Labels[0]] = !hasDefault
+		}
+	}
+	meta := map[string]bool{"source": true, "version": true, "count": true, "for_each": true, "providers": true, "depends_on": true}
+	var out []Finding
+	for _, b := range m.Blocks {
+		src, _ := asString(b.Attrs["source"])
+		if b.Kind != "module" || len(b.Labels) != 1 || !(strings.HasPrefix(src, "./") || strings.HasPrefix(src, "../")) {
+			continue
+		}
+		dir := path.Clean(path.Join(path.Dir(b.File), src))
+		declared, scanned := vars[dir]
+		if !scanned {
+			continue // module folder not part of the scan, or it has no variables
+		}
+		names := make([]string, 0, len(b.Attrs))
+		for k := range b.Attrs {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		for _, k := range names {
+			if !meta[k] {
+				if _, ok := declared[k]; !ok {
+					out = append(out, newFinding("TG-VAL-011", "", fmt.Sprintf("module.%s passes %q, but %s declares no variable with that name.", b.Labels[0], k, dir), b.Address(), b.File, b.Lines[k]))
+				}
+			}
+		}
+		var missing []string
+		for v, required := range declared {
+			if _, set := b.Attrs[v]; required && !set {
+				missing = append(missing, v)
+			}
+		}
+		sort.Strings(missing)
+		for _, v := range missing {
+			out = append(out, newFinding("TG-VAL-012", "", fmt.Sprintf("module.%s does not set required input %q (no default in %s).", b.Labels[0], v, dir), b.Address(), b.File, b.Line))
+		}
+	}
+	return out
+}
+
+func dirDeclarationChecks(m *Module) []Finding {
 	var out []Finding
 	declared := map[string]bool{}
 	firstSeen := map[string]string{}
@@ -343,8 +436,7 @@ func refsTo(r *Resource, set map[string]bool) []string {
 	return hit
 }
 
-// graphChecks find risks that only exist in combination: each resource may
-// look acceptable alone, but the reference graph forms an attack path.
+// graphChecks: risks that only appear when resources are combined (attack paths).
 func graphChecks(m *Module) []Finding {
 	var out []Finding
 	byType := map[string][]*Resource{}

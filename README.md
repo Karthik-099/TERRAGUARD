@@ -14,6 +14,7 @@ own server. It is open source and costs nothing to run.
 [![pages](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/pages.yml/badge.svg)](https://karthik-099.github.io/TERRAGUARD/)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-334155)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Karthik-099/TERRAGUARD/badge)](https://scorecard.dev/viewer/?uri=github.com/Karthik-099/TERRAGUARD)
 
 **[Open the web app](https://karthik-099.github.io/TERRAGUARD/)**: no install, no signup, your code stays in the browser.
 
@@ -44,7 +45,7 @@ discovered too late:
 
 | Stage | What goes wrong | How TerraGuard helps |
 |---|---|---|
-| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 89 rules with exact lines and fixes, verified AI fixes |
+| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 271 rules with exact lines and fixes, verified AI fixes |
 | **Init** | Unpinned providers; local, unencrypted or unlocked state; committed `*.tfstate` | Pinning, backend and state-file checks |
 | **Validate** | `terraform validate` needs init and credentials, and misses provider-side errors | Syntax, reference and apply-time checks with no init |
 | **Plan** | A destroy or replace of a database hides in a long plan | Plan risk with the attribute that forced replacement; rules on resolved values |
@@ -57,7 +58,7 @@ discovered too late:
 | Capability | Details |
 |---|---|
 | **Will it apply?** | Syntax, duplicates, undeclared references, `count` + `for_each`, invalid CIDRs, S3 bucket names, port ranges, deprecated Lambda runtimes, missing tfvars. No `terraform init`. |
-| **Security and correctness rules** | 89 rules across AWS, Google Cloud, Azure, Cloudflare, DigitalOcean, Hetzner, Akamai/Linode, OVHcloud/OpenStack, Oracle Cloud, Alibaba Cloud, Vultr, Kubernetes and Helm |
+| **Security and correctness rules** | 271 rules across AWS, Google Cloud, Azure, Cloudflare, DigitalOcean, Hetzner, Akamai/Linode, OVHcloud/OpenStack, Oracle Cloud, Alibaba Cloud, Vultr, Kubernetes and Helm |
 | **Attack paths** | Cross-resource graph checks, e.g. a public Lambda running as an admin role |
 | **Plan risk** | Destroys and replaces of stateful resources, with the forcing attribute |
 | **Auto-fix** | Syntax-tree edits that keep comments; `terraguard fix` |
@@ -116,7 +117,7 @@ flowchart TB
   subgraph Engine["engine/ (Go, no I/O)"]
     P[HCL parser] --> N[Normalized resource model]
     PL[Plan JSON] --> N
-    N --> R[89 rules] & M[Module and graph checks]
+    N --> R[271 rules] & M[Module and graph checks]
     R & M --> POL[Policy: packs, budgets, baselines, waivers]
     POL --> REP[Report, verdict, compliance]
     REP --> OUT[SARIF / JUnit / Code Quality / JSON / Markdown]
@@ -134,8 +135,8 @@ flowchart TB
 
 ### Phase 3: next
 
-- Validate arguments against provider schemas (`terraform providers schema -json`).
-- Module-aware analysis that follows local modules with their inputs.
+- Done: provider schema checks (`--schema`) and local module input checks.
+- Allowed-value checks per argument (instance types, regions), beyond names.
 - A language server so every editor gets diagnostics.
 - SARIF inline fix suggestions.
 - OPA/Rego import.
@@ -188,6 +189,28 @@ waivers:
 
 A complete example lives in [examples/policies](examples/policies).
 
+
+### Provider schema checks
+
+```bash
+terraform providers schema -json > schema.json
+terraguard scan . --schema schema.json
+```
+
+Checks every argument and block against what the provider accepts: typos (with
+a "did you mean"), read-only and missing arguments, block limits, deprecations.
+
+### Standards in plain English
+
+```bash
+terraguard policy suggest "every production database keeps 14 days of backups"
+```
+
+AI drafts one rule; the engine accepts exactly one custom rule with known
+fields (no waivers, disables or threshold changes), rejects built-in IDs and
+rules that would match everything, dry-runs it, and lists what it would flag.
+Only resource type names are sent to the model, never code. The same flow is in
+the workspace's Policy tab.
 ## How AI is used
 
 AI is **optional**, and it never decides pass or fail.
@@ -229,9 +252,9 @@ never call a public AI service.
 | GitLab CI | [templates/gitlab-ci.yml](templates/gitlab-ci.yml): Code Quality and JUnit in the merge request |
 | Jenkins | [templates/Jenkinsfile](templates/Jenkinsfile) |
 | Any CI | JSON, SARIF, JUnit or Markdown output; exit codes |
-| AI agents | `terraguard mcp`: tools `scan_terraform`, `fix_terraform`, `generate_docs`, `generate_agents_md`, `list_rules` |
-| Platform | `terraguard serve`: web app plus HTTP API (`/api/scan`, `/api/fix`, `/api/ai/chat`, `/api/stats`, `/metrics`), Docker image on GHCR |
-| AWS, Azure, Google Cloud | [deploy/](deploy): private deployments (ECS Fargate, Container Apps, Cloud Run) and a Helm chart; CI templates for CodeBuild, Azure Pipelines and Cloud Build in [templates/](templates) |
+| AI agents | `terraguard mcp` (local, stdio) or `/mcp` on `terraguard serve` (remote, HTTP, token-protected): tools `scan_terraform`, `fix_terraform`, `generate_docs`, `generate_agents_md`, `validate_rule`, `list_rules` |
+| Platform | `terraguard serve`: web app plus HTTP API (`/api/scan`, `/api/fix`, `/api/ai/chat`, `/api/stats`, `/metrics`, remote MCP at `/mcp`), Docker image on GHCR |
+| AWS, Azure, Google Cloud | [deploy/](deploy): private deployments (ECS Fargate, Container Apps, Cloud Run) and a Helm chart; CI templates for CodeBuild, Azure Pipelines, Cloud Build, Bitbucket, CircleCI and Atlantis in [templates/](templates) |
 
 The pipeline generator in the web app creates a full GitHub Actions workflow:
 fmt, validate, OIDC plan, TerraGuard gate, approval and apply.
@@ -241,7 +264,7 @@ fmt, validate, OIDC plan, TerraGuard gate, approval and apply.
 | | TerraGuard | Checkov | Trivy (tfsec) | TFLint | `terraform validate` |
 |---|---|---|---|---|---|
 | Runs in the browser, no install | Yes | No | No | No | No |
-| Security policy breadth | 89 rules | 1,000+ policies | Hundreds | Correctness focus | None |
+| Security policy breadth | 271 rules | 1,000+ policies | Hundreds | Correctness focus | None |
 | Apply-time validation | Common failures | No | No | Deep, provider rulesets | Syntax and references |
 | Plan destroy and replace risk | Yes, with cause | Security only | Security only | No | No |
 | Diff-aware PR gating | Yes | Baseline file | No | No | No |
@@ -264,7 +287,7 @@ documentation as of November 2026; corrections are welcome as an issue.
 
 Reproduce these with `go test -bench Scan ./engine` and `make evals`.
 
-## Security and enterprise
+## Security and self-hosting
 
 - Code is analyzed where it lives: in the browser, on the runner, or in your network. No TerraGuard service ever receives it.
 - The website enforces a strict Content-Security-Policy and Subresource Integrity. The server adds security headers, rate limits, an audit log and Prometheus metrics.
@@ -274,6 +297,11 @@ See [SECURITY.md](SECURITY.md) and [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
 
 ## Documentation
 
+Also on the website: [karthik-099.github.io/TERRAGUARD/#/docs](https://karthik-099.github.io/TERRAGUARD/#/docs).
+
+- [docs/GUIDE.md](docs/GUIDE.md): getting started, from a first scan to a pull-request gate
+- [docs/REFERENCE.md](docs/REFERENCE.md): CLI, policy file, HTTP API, MCP tools, environment variables
+- [docs/RULES.md](docs/RULES.md): every rule, generated from the engine
 - [docs/ACADEMY.md](docs/ACADEMY.md): how Terraform works, where it breaks, and how every TerraGuard feature works
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): HLD, LLD, pipelines and design decisions
 - [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md): Docker, private AI and secrets
@@ -292,14 +320,29 @@ make secrets      # fail if a credential is tracked
 
 ## Contributing
 
-I am building TerraGuard in the open while learning how good infrastructure
-tooling is designed, so I know parts of it can be done better. If you find it
-useful, contributions of any size are welcome, and never expected: a star, an
-issue, a review of the architecture, or a new rule. Advice from people with
-more experience is as valuable as code. Start with
+This is not a company or a product for sale. It is a learning project. I
+have worked in a tech firm, so I know some things about infrastructure, but
+certainly not everything, and I am building TerraGuard to learn how these tools
+can be made better. It is free, I am not asking for money, and it does not even
+have its own domain yet; it lives on GitHub Pages, and maybe one day it will
+have a proper home.
+
+If you know a better way to do something here, I would genuinely like to learn
+from you. Contributions of any size are welcome and never expected: a star, an
+issue, a review of the architecture, a correction, or a new rule.
+Start with
 [CONTRIBUTING.md](CONTRIBUTING.md), open a
 [rule request](https://github.com/Karthik-099/TERRAGUARD/issues/new?template=rule_request.yml),
 or join the [discussions](https://github.com/Karthik-099/TERRAGUARD/discussions).
+
+## Trademarks
+
+AWS, Azure, Google Cloud, Cloudflare, Terraform and other product names are
+trademarks of their owners and are used here only to say which providers
+TerraGuard supports. TerraGuard is an independent project, not affiliated with
+or endorsed by any of them. The resource icons in the graph are original line
+drawings, not vendor logos.
+
 
 ## License
 

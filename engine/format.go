@@ -131,8 +131,7 @@ func Text(r *Report) string {
 	return b.String()
 }
 
-// JUnit renders one test case per active finding, for CI systems that only
-// understand JUnit XML (GitLab, Jenkins, Azure DevOps, CircleCI).
+// JUnit: one test case per active finding.
 func JUnit(r *Report) ([]byte, error) {
 	type failure struct {
 		Message string `xml:"message,attr"`
@@ -178,8 +177,7 @@ func JUnit(r *Report) ([]byte, error) {
 
 var cqSeverity = map[Severity]string{Critical: "critical", High: "major", Medium: "minor", Low: "info", Info: "info"}
 
-// CodeQuality renders the GitLab Code Quality report format, shown in merge
-// request widgets and diffs.
+// CodeQuality: GitLab's merge request report format.
 func CodeQuality(r *Report) ([]byte, error) {
 	type lines struct {
 		Begin int `json:"begin"`

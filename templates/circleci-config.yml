@@ -1,0 +1,17 @@
+# TerraGuard for CircleCI. Copy the job into .circleci/config.yml.
+# JUnit results appear in the Tests tab; the Markdown report is an artifact.
+version: 2.1
+jobs:
+  terraguard:
+    docker:
+      - image: ghcr.io/karthik-099/terraguard:latest
+    steps:
+      - checkout
+      - run: mkdir -p results && terraguard scan . --junit results/terraguard.xml --markdown results/terraguard.md
+      - store_test_results:
+          path: results
+      - store_artifacts:
+          path: results
+workflows:
+  terraform:
+    jobs: [terraguard]

@@ -71,8 +71,7 @@ var funcs = map[string]function.Function{
 	"lookup":     stdlib.LookupFunc,
 }
 
-// Parse reads .tf and .tfvars sources. Syntax errors become blocking findings
-// rather than aborting, so one broken file doesn't hide issues in the rest.
+// Parse turns syntax errors into findings so one bad file doesn't hide the rest.
 func Parse(files map[string]string) *Module {
 	m := &Module{Files: map[string][]byte{}, Locals: map[string]int{}, LocalFile: map[string]string{}, Tfvars: map[string]map[string]int{}}
 	names := make([]string, 0, len(files))
@@ -240,8 +239,7 @@ func collectRefs(expr hclsyntax.Expression, refs *[]Ref, skipRoots map[string]bo
 
 func evalExpr(expr hclsyntax.Expression, src []byte) any {
 	text := string(expr.Range().SliceBytes(src))
-	// Keep jsonencode() arguments structured so policy rules still see literal
-	// statements even when one field references another resource.
+	// Keep jsonencode() arguments as data so policy statements stay checkable.
 	if fc, ok := expr.(*hclsyntax.FunctionCallExpr); ok && fc.Name == "jsonencode" && len(fc.Args) == 1 {
 		expr = fc.Args[0]
 	}

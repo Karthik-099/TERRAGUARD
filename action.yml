@@ -21,6 +21,9 @@ inputs:
   plan:
     description: Optional path to `terraform show -json tfplan` output.
     default: ""
+  schema:
+    description: Optional path to `terraform providers schema -json` output; checks every argument against the provider.
+    default: ""
   config:
     description: Optional path to .terraguard.yml (auto-detected in `path` otherwise).
     default: ""
@@ -51,7 +54,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
       with:
         go-version-file: ${{ github.action_path }}/go.mod
         cache-dependency-path: ${{ github.action_path }}/go.sum
@@ -81,6 +84,7 @@ runs:
       env:
         TG_PATH: ${{ inputs.path }}
         TG_PLAN: ${{ inputs.plan }}
+        TG_SCHEMA: ${{ inputs.schema }}
         TG_CONFIG: ${{ inputs.config }}
         TG_FAIL_ON: ${{ inputs.fail-on }}
         TG_AI: ${{ inputs.ai }}
@@ -93,6 +97,7 @@ runs:
           args=(scan "$TG_PATH" --format text --sarif "$RUNNER_TEMP/terraguard.sarif" --markdown "$RUNNER_TEMP/terraguard.md" --json "$RUNNER_TEMP/terraguard.json")
           [ -n "$TG_PLAN" ] && args+=(--plan "$TG_PLAN")
         fi
+        [ -n "$TG_SCHEMA" ] && args+=(--schema "$TG_SCHEMA")
         [ -n "$TG_CONFIG" ] && args+=(--config "$TG_CONFIG")
         [ -n "$TG_FAIL_ON" ] && args+=(--fail-on "$TG_FAIL_ON")
         [ "$TG_AI" = "true" ] && args+=(--ai)
@@ -110,7 +115,7 @@ runs:
       if: inputs.command == 'scan' && inputs.sarif == 'true'
       # Code scanning needs GitHub Advanced Security on private repos; never fail the gate on it.
       continue-on-error: true
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3.39.1
       with:
         sarif_file: ${{ runner.temp }}/terraguard.sarif
         category: terraguard

@@ -7,7 +7,7 @@ import (
 )
 
 // Rules is the full resource-rule catalog.
-var Rules = concatRules(coreRules, moreAWSRules, gcpAzureRules, otherCloudRules, kubernetesRules, dnsCDNRules, costRules)
+var Rules = concatRules(coreRules, moreAWSRules, gcpAzureRules, otherCloudRules, kubernetesRules, dnsCDNRules, costRules, extraRules, moreRules, tableRules())
 
 func concatRules(sets ...[]Rule) []Rule {
 	var out []Rule
@@ -255,7 +255,7 @@ var gcpAzureRules = []Rule{
 }
 
 var otherCloudRules = []Rule{
-	// ── DigitalOcean ──
+	// DigitalOcean
 	{ID: "TG-DO-FW-001", Title: "DigitalOcean firewall open to the internet", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types: []string{"digitalocean_firewall"}, Remediation: "Limit source_addresses to your office/VPN or use a bastion droplet tag.",
 		Check: func(r *Resource) []Hit {
@@ -284,7 +284,7 @@ var otherCloudRules = []Rule{
 			return nil
 		}},
 
-	// ── Akamai / Linode ──
+	// Akamai / Linode
 	{ID: "TG-LIN-FW-001", Title: "Linode firewall open to the internet", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types: []string{"linode_firewall"}, Remediation: `Set inbound_policy = "DROP" and allow only specific ipv4/ipv6 ranges.`,
 		Check: func(r *Resource) []Hit {
@@ -303,7 +303,7 @@ var otherCloudRules = []Rule{
 			return hits
 		}},
 
-	// ── Hetzner Cloud ──
+	// Hetzner Cloud
 	{ID: "TG-HZ-FW-001", Title: "Hetzner firewall open to the internet", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types: []string{"hcloud_firewall"}, Remediation: "Restrict source_ips; reach SSH through a VPN or Hetzner private network.",
 		Check: func(r *Resource) []Hit {
@@ -319,7 +319,7 @@ var otherCloudRules = []Rule{
 			return hits
 		}},
 
-	// ── OVHcloud & any OpenStack cloud ──
+	// OVHcloud & any OpenStack cloud
 	{ID: "TG-OS-SG-001", Title: "OpenStack/OVH security group rule open to the internet", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types: []string{"openstack_networking_secgroup_rule_v2"}, Remediation: "Set remote_ip_prefix to a trusted range or use remote_group_id.",
 		Check: func(r *Resource) []Hit {
@@ -355,7 +355,7 @@ var otherCloudRules = []Rule{
 			return nil
 		}},
 
-	// ── Oracle Cloud ──
+	// Oracle Cloud
 	{ID: "TG-OCI-NET-001", Title: "OCI security list open to the internet", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types: []string{"oci_core_security_list", "oci_core_network_security_group_security_rule"}, Remediation: "Restrict source CIDRs; use OCI Bastion for SSH.",
 		Check: func(r *Resource) []Hit {
@@ -399,7 +399,7 @@ var otherCloudRules = []Rule{
 			return nil
 		}},
 
-	// ── Alibaba Cloud ──
+	// Alibaba Cloud
 	{ID: "TG-ALI-001", Title: "Alibaba Cloud resource exposed to the internet", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types: []string{"alicloud_security_group_rule", "alicloud_oss_bucket", "alicloud_oss_bucket_acl"}, Remediation: "Restrict cidr_ip and keep OSS buckets private.",
 		Check: func(r *Resource) []Hit {
@@ -420,7 +420,7 @@ var otherCloudRules = []Rule{
 			return nil
 		}},
 
-	// ── Vultr ──
+	// Vultr
 	{ID: "TG-VULTR-001", Title: "Vultr firewall rule open to the internet", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types: []string{"vultr_firewall_rule"}, Remediation: "Use a specific subnet/subnet_size instead of 0.0.0.0/0.",
 		Check: func(r *Resource) []Hit {
@@ -435,7 +435,7 @@ var otherCloudRules = []Rule{
 			return nil
 		}},
 
-	// ── Cloudflare Workers ──
+	// Cloudflare Workers
 	{ID: "TG-CF-003", Title: "Worker secret stored as plain-text binding", Severity: High, Category: CatSecurity, CWE: "CWE-798",
 		Types: []string{"cloudflare_workers_script", "cloudflare_worker_script"}, Remediation: "Use secret_text_binding (or `wrangler secret put`) for credentials.",
 		Check: func(r *Resource) []Hit {
@@ -546,8 +546,7 @@ var costRules = []Rule{
 		}},
 }
 
-// Hosts that are free to re-register once the target resource is deleted,
-// which turns a stale CNAME into a subdomain takeover.
+// Hosts anyone can re-register after deletion: a stale CNAME means takeover.
 var takeoverSuffixes = []string{".s3-website", ".s3.amazonaws.com", ".cloudfront.net", ".elasticbeanstalk.com", ".azurewebsites.net",
 	".cloudapp.net", ".trafficmanager.net", ".blob.core.windows.net", ".herokuapp.com", ".github.io", ".netlify.app", ".pages.dev", ".vercel.app", ".fly.dev"}
 

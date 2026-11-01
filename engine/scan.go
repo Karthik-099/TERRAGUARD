@@ -12,9 +12,10 @@ type Input struct {
 	Plan   string            `json:"plan,omitempty"`    // terraform show -json output
 	Config string            `json:"config,omitempty"`  // .terraguard.yml contents
 	FailOn string            `json:"fail_on,omitempty"` // overrides config fail_on
-	// Baseline lists FindingKey values accepted as existing debt: they are
-	// reported as waived so the gate fails only on new findings.
+	// Baseline: FindingKeys accepted as existing debt (reported as waived).
 	Baseline []string `json:"baseline,omitempty"`
+	// Schema: optional terraform providers schema -json output.
+	Schema string `json:"schema,omitempty"`
 }
 
 type Report struct {
@@ -106,6 +107,13 @@ func Scan(in Input) *Report {
 	t = time.Now()
 	resources := m.Resources
 	findings := moduleChecks(m)
+	if strings.TrimSpace(in.Schema) != "" {
+		if s, err := parseSchemas(in.Schema); err != nil {
+			rep.Errors = append(rep.Errors, err.Error())
+		} else {
+			findings = append(findings, schemaChecks(m, s)...)
+		}
+	}
 	rep.Trace.ChecksMs = since(t)
 	rep.Trace.CustomRules = len(cfg.CustomRules)
 	if strings.TrimSpace(in.Plan) != "" {
@@ -311,7 +319,7 @@ func FixAll(in Input) (map[string]string, []error) {
 
 // Catalog lists every built-in rule, sorted by ID.
 func Catalog() []Rule {
-	all := append(append([]Rule{}, Rules...), ModuleRules...)
+	all := append(append(append([]Rule{}, Rules...), ModuleRules...), schemaRules...)
 	for i := range all {
 		all[i].Themes = ThemesFor(all[i].ID)
 	}

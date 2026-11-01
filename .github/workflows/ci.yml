@@ -56,26 +56,38 @@ jobs:
   secrets:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: No credentials in the repository
         run: scripts/check-secrets.sh --all
 
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - name: vet + unit tests
         run: make test
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+      - name: Race detector
+        run: go test -race ./...
+      - name: Fuzz the scanner and policy loader (short)
+        run: |
+          go test ./engine -run '^$' -fuzz '^FuzzScan$' -fuzztime 30s
+          go test ./engine -run '^$' -fuzz '^FuzzConfig$' -fuzztime 30s
+      - name: Known vulnerabilities in dependencies and the Go toolchain
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: WebAssembly build
         run: GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/wasm
       - name: Rule evals (every labelled case)
         run: make evals
-      - uses: actions/setup-node@v4
+      - name: Rule reference is up to date
+        run: make rules-doc && git diff --exit-code docs/RULES.md
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "22"
       - name: Stats worker unit tests
@@ -94,7 +106,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Hardened example must pass
         uses: ./
         with:
@@ -121,7 +133,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Build self-hosted image
         run: docker build -t terraguard:ci .
       - name: Smoke test

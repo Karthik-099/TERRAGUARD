@@ -1,5 +1,4 @@
-// Package ai routes chat requests across free LLM providers with automatic
-// fallback. It is advisory only: nothing in TerraGuard gates on its output.
+// Package ai routes chat across free providers with fallback. Advisory only.
 package ai
 
 import (
@@ -35,8 +34,7 @@ type Provider struct {
 	KeyEnv string
 	Models []string // tried in order
 	NoKey  bool     // local servers (Ollama, LM Studio, vLLM)
-	// OptIn providers are paid: they join the route only when named in
-	// TERRAGUARD_AI_PROVIDER or TERRAGUARD_AI_ROUTE, never just because a key exists.
+	// OptIn (paid) providers join the route only when named, never because a key exists.
 	OptIn   bool
 	Headers map[string]string
 }
@@ -58,7 +56,7 @@ func Providers() []Provider {
 			Models: []string{orDefault(os.Getenv("TERRAGUARD_OLLAMA_MODEL"), "llama3.2")}})
 	}
 	if base := os.Getenv("TERRAGUARD_AI_BASE_URL"); base != "" {
-		// Any OpenAI-compatible endpoint: vLLM, LiteLLM, Azure OpenAI v1, Bedrock or Vertex gateways, internal proxies.
+		// Any OpenAI-compatible endpoint (vLLM, LiteLLM, Azure OpenAI, gateways).
 		ps = append(ps, Provider{Name: "custom", Base: strings.TrimSuffix(base, "/"), KeyEnv: "TERRAGUARD_AI_KEY",
 			NoKey: os.Getenv("TERRAGUARD_AI_KEY") == "", Models: []string{orDefault(os.Getenv("TERRAGUARD_AI_MODEL"), "default")},
 			Headers: parseHeaders(os.Getenv("TERRAGUARD_AI_HEADERS"))})
@@ -70,8 +68,7 @@ func Providers() []Provider {
 	return ps
 }
 
-// parseHeaders reads "Name: value; Other: value" for gateways that need
-// custom auth, such as Azure OpenAI's "api-key" header.
+// parseHeaders reads "Name: value; Other: value" for gateways like Azure OpenAI.
 func parseHeaders(spec string) map[string]string {
 	h := map[string]string{}
 	for _, part := range strings.Split(spec, ";") {
@@ -151,7 +148,7 @@ func Route() []Step {
 	return steps
 }
 
-// LocalOnly reports TERRAGUARD_AI_LOCAL_ONLY=true: only Ollama / custom local endpoints are used.
+// LocalOnly: only local endpoints (Ollama, custom) are used.
 func LocalOnly() bool {
 	v := strings.ToLower(os.Getenv("TERRAGUARD_AI_LOCAL_ONLY"))
 	return v == "1" || v == "true" || v == "yes"
@@ -166,9 +163,7 @@ type httpError struct {
 
 func (e *httpError) Error() string { return fmt.Sprintf("HTTP %d: %s", e.status, e.msg) }
 
-// Chat walks the route until one step answers. Rate limits, outages, timeouts
-// and unknown models fall through to the next step; a rejected key skips the
-// rest of that provider's models.
+// Chat tries each step; a bad key skips the rest of that provider.
 func Chat(ctx context.Context, msgs []Message) (*Result, error) {
 	steps := Route()
 	if len(steps) == 0 {
@@ -244,8 +239,7 @@ func call(ctx context.Context, s Step, msgs []Message) (string, error) {
 	return out.Choices[0].Message.Content, nil
 }
 
-// LoadDotenv reads KEY=VALUE lines into the environment without overriding
-// variables that are already set. Keys are upper-cased (groq_api_key works).
+// LoadDotenv doesn't override variables already set; keys are upper-cased.
 func LoadDotenv(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -277,8 +271,7 @@ func LoadDotenv(path string) error {
 
 var keyLike = regexp.MustCompile(`(sk-[A-Za-z0-9_\-*]{8,}|gsk_[A-Za-z0-9]{8,}|AIza[0-9A-Za-z_\-]{20,}|sk-or-v1-[a-f0-9*]{8,}|Bearer\s+\S+)`)
 
-// Redact masks anything that looks like an API key so provider error
-// messages can be shown in logs, PR comments and the UI safely.
+// Redact masks API-key-looking strings before errors are shown or logged.
 func Redact(s string) string {
 	for _, p := range Providers() {
 		if k := os.Getenv(p.KeyEnv); len(k) >= 8 {

@@ -15,8 +15,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
       - name: Cross-compile
@@ -27,7 +27,7 @@ jobs:
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w" \
               -o "dist/terraguard_${os}_${arch}${ext}" ./cmd/terraguard
           done
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "22"
       - name: Package VS Code extension
@@ -37,7 +37,7 @@ jobs:
           npm version --no-git-tag-version "${GITHUB_REF_NAME#v}" >/dev/null
           npx --yes @vscode/vsce@3.2.1 package --no-dependencies -o "../../dist/terraguard-${GITHUB_REF_NAME#v}.vsix"
       - name: SBOM (SPDX)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: .
           format: spdx-json
@@ -46,7 +46,7 @@ jobs:
       - name: Checksums
         run: cd dist && sha256sum * > checksums.txt
       - name: Build provenance for every artifact
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: "dist/*"
       - name: Publish release
@@ -57,8 +57,8 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -73,11 +73,11 @@ jobs:
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:latest" | cut -d@ -f2)" >> "$GITHUB_OUTPUT"
         id: push
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
       - name: Sign the image (keyless, Sigstore)
         run: cosign sign --yes "${{ steps.push.outputs.image }}@${{ steps.push.outputs.digest }}"
       - name: Image provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-name: ${{ steps.push.outputs.image }}
           subject-digest: ${{ steps.push.outputs.digest }}

@@ -7,8 +7,7 @@ import (
 	"strings"
 )
 
-// Docs renders terraform-docs style Markdown (inputs, outputs, providers,
-// resources, modules) for a module, so READMEs never drift from the code.
+// Docs renders a module README (inputs, outputs, providers, resources).
 func Docs(files map[string]string) string {
 	m := Parse(files)
 	var b strings.Builder

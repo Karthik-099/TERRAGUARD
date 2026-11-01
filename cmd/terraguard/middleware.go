@@ -16,8 +16,7 @@ import (
 	"github.com/Karthik-099/TERRAGUARD/internal/stats"
 )
 
-// secureHeaders sets defensive headers on every response. The page also
-// carries a Content-Security-Policy meta tag; frame-ancestors must be a header.
+// secureHeaders: frame-ancestors only works as a header, not in the page's CSP meta tag.
 func secureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -27,12 +26,14 @@ func secureHeaders(next http.Handler) http.Handler {
 		h.Set("Content-Security-Policy", "frame-ancestors 'none'")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+		if r.TLS != nil || (os.Getenv("TERRAGUARD_TRUST_PROXY") == "true" && r.Header.Get("X-Forwarded-Proto") == "https") {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-// limiter is a per-client token bucket for the API. It keeps one entry per
-// active client and forgets idle ones, so memory stays bounded.
+// limiter is a per-client token bucket; idle clients are dropped.
 type limiter struct {
 	mu      sync.Mutex
 	rate    float64 // tokens per second
@@ -73,13 +74,12 @@ func (l *limiter) allow(client string, now time.Time) bool {
 	return true
 }
 
-// clientIP uses the socket address unless the server sits behind a trusted
-// proxy (TERRAGUARD_TRUST_PROXY=true), where X-Forwarded-For is authoritative.
+// clientIP trusts X-Forwarded-For only when TERRAGUARD_TRUST_PROXY=true.
 func clientIP(r *http.Request) string {
 	if os.Getenv("TERRAGUARD_TRUST_PROXY") == "true" {
+		// Take the rightmost entry: the proxy added it, the rest can be forged.
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			ip, _, _ := strings.Cut(xff, ",")
-			return strings.TrimSpace(ip)
+			return strings.TrimSpace(xff[strings.LastIndex(xff, ",")+1:])
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -123,8 +123,7 @@ func newMetrics() *metrics {
 	return &metrics{requests: map[string]int{}, seconds: map[string]float64{}}
 }
 
-// lockedWriter serializes audit records from every route onto one writer,
-// so concurrent requests never interleave lines.
+// lockedWriter keeps audit lines from different requests from interleaving.
 type lockedWriter struct {
 	mu sync.Mutex
 	w  io.Writer
@@ -136,8 +135,7 @@ func (l *lockedWriter) Write(p []byte) (int, error) {
 	return l.w.Write(p)
 }
 
-// observe wraps an API route: rate limit, measure, and append an audit record.
-// Audit records hold metadata only, never request bodies.
+// observe: rate limit, metrics and an audit line (metadata only, never bodies).
 func observe(route string, lim *limiter, m *metrics, audit io.Writer, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

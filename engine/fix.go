@@ -9,8 +9,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// ApplyFixes edits files with hclwrite, which preserves comments and formatting.
-// It returns only the files that changed, plus one error per fix that failed.
+// ApplyFixes uses hclwrite to keep comments and formatting; returns changed files only.
 func ApplyFixes(files map[string]string, fixes []*Fix) (map[string]string, []error) {
 	changed := map[string]string{}
 	var errs []error

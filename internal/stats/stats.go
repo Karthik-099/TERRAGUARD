@@ -1,6 +1,4 @@
-// Package stats keeps anonymous usage counters for the self-hosted server:
-// numbers only, never code, file names, IPs or keys. Same JSON shape as the
-// public Cloudflare Worker (stats-worker/), so one dashboard renders both.
+// Package stats: anonymous counters (numbers only), same JSON as stats-worker.
 package stats
 
 import (
@@ -45,7 +43,7 @@ type Store struct {
 	now       func() time.Time
 }
 
-// shortcut: in-memory only, counters reset on restart; persist to a file or KV if long-term history matters.
+// In memory only: counters reset on restart.
 func New() *Store {
 	return &Store{days: map[string]*Counters{}, surfaces: map[string]int{}, rules: map[string]int{},
 		sessions: map[string]time.Time{}, startedAt: time.Now(), now: time.Now}
@@ -87,12 +85,29 @@ func (s *Store) Record(h Hit) {
 	}
 	s.surfaces[surface] += c.Scans
 	for id, n := range h.Rules {
-		if len(id) <= 40 && len(s.rules) < 500 {
+		if _, known := s.rules[id]; known || (len(id) <= 40 && len(s.rules) < 500) {
 			s.rules[id] += clamp(n, 1000)
 		}
 	}
 	if h.Session != "" && len(h.Session) <= 64 {
-		s.sessions[h.Session] = s.now()
+		if len(s.sessions) >= maxSessions {
+			s.pruneSessions(s.now())
+		}
+		if len(s.sessions) < maxSessions {
+			s.sessions[h.Session] = s.now()
+		}
+	}
+}
+
+// maxSessions bounds memory when untrusted clients send many session IDs.
+const maxSessions = 10000
+
+// pruneSessions forgets sessions idle for more than two minutes.
+func (s *Store) pruneSessions(now time.Time) {
+	for id, t := range s.sessions {
+		if now.Sub(t) > 2*time.Minute {
+			delete(s.sessions, id)
+		}
 	}
 }
 
@@ -140,13 +155,8 @@ func (s *Store) Snapshot() Snapshot {
 		snap.Days = append(snap.Days, d)
 	}
 	snap.Today = snap.Days[len(snap.Days)-1].Counters
-	for id, t := range s.sessions {
-		if now.Sub(t) <= 2*time.Minute {
-			snap.ActiveNow++
-		} else {
-			delete(s.sessions, id)
-		}
-	}
+	s.pruneSessions(now)
+	snap.ActiveNow = len(s.sessions)
 	for id, n := range s.rules {
 		snap.TopRules = append(snap.TopRules, RuleCount{id, n})
 	}

@@ -2,8 +2,7 @@ package engine
 
 import "fmt"
 
-// RiskWeight sums active findings by severity (the unclamped form of Score),
-// so improvements stay measurable even when the score is already 0.
+// RiskWeight is Score without the floor, so progress shows even at 0.
 func RiskWeight(r *Report) int {
 	w := 0
 	for _, f := range r.Findings {
@@ -14,9 +13,7 @@ func RiskWeight(r *Report) int {
 	return w
 }
 
-// Verify decides whether a proposed change (typically written by an LLM) is
-// kept: it must not break apply, must not introduce any new medium-or-worse
-// finding, and must lower the risk weight. The engine, not the model, decides.
+// Verify keeps an AI change only if apply still works, nothing new at MEDIUM+ appears and risk drops.
 func Verify(before, after *Report) (bool, string) {
 	if after.Verdict.Blocking > before.Verdict.Blocking {
 		return false, "rejected: the change would make terraform apply fail"

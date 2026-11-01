@@ -1,6 +1,7 @@
 // Generates a GitOps pipeline for the user's own repository.
 const CICD = (() => {
   const REPO = "Karthik-099/TERRAGUARD";
+  const RELEASE = "v2.0.0"; // bump on each release so generated workflows use a fixed version
 
   function workflow(o) {
     const dir = o.dir || ".";
@@ -12,7 +13,7 @@ const CICD = (() => {
     const aiEnv = o.ai ? `\n        env:\n          ${o.ai.toUpperCase()}_API_KEY: \${{ secrets.${o.ai.toUpperCase()}_API_KEY }}` : "";
     const creds = aws ? `
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${o.role || "arn:aws:iam::123456789012:role/terraform-plan"}
           aws-region: ${o.region || "us-east-1"}
@@ -24,6 +25,9 @@ const CICD = (() => {
 
       - name: terraform init
         run: terraform init -input=false${wd}
+
+      - name: provider schema (lets TerraGuard check every argument)
+        run: terraform providers schema -json > schema.json${wd}
 
       - name: terraform validate
         run: terraform validate -no-color${wd}
@@ -65,16 +69,16 @@ jobs:
     outputs:
       changes: \${{ steps.plan.outputs.exitcode == '2' }}` : ""}
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
 ${o.plan ? planSteps : `      - name: terraform fmt
         run: terraform fmt -check -recursive${wd}
 
 `}      - name: TerraGuard policy gate
-        uses: ${REPO}@main
+        uses: ${REPO}@${RELEASE}
         with:
           path: ${dir}
-${o.plan ? `          plan: ${dir === "." ? "" : dir + "/"}plan.json\n` : ""}          fail-on: ${o.failOn}
+${o.plan ? `          plan: ${dir === "." ? "" : dir + "/"}plan.json\n          schema: ${dir === "." ? "" : dir + "/"}schema.json\n` : ""}          fail-on: ${o.failOn}
           comment: "true"
           sarif: "true"${o.ai ? `\n          ai: "true"` : ""}${aiEnv}
 `;
@@ -101,8 +105,8 @@ ${o.plan ? `          plan: ${dir === "." ? "" : dir + "/"}plan.json\n` : ""}   
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
 ${creds.replace("terraform-plan", "terraform-apply")}
       - run: terraform init -input=false${wd}
       - run: terraform apply -input=false -auto-approve${wd}

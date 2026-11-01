@@ -1,13 +1,32 @@
 # Contributing to TerraGuard
 
-Thank you for being here. I am building TerraGuard in the open while learning,
-so contributions of every size are welcome and none are expected: a typo fix,
-a bug report, a review comment on the architecture, or a new rule. If you are
-new to open source too, this is a friendly place to start; issues labelled
-`good first issue` are a good entry point.
+Thank you for being here. A short, honest note first.
+
+This is not a company or a product for sale. It is a learning project. I
+have worked in a tech firm, so I know some things about infrastructure, but
+certainly not everything, and I am building TerraGuard to learn how these tools
+can be made better. It is free, I am not asking for money, and it does not even
+have its own domain yet; it lives on GitHub Pages, and maybe one day it will
+have a proper home.
+
+If you know a better way to do something here, I would genuinely like to learn
+from you. Contributions of any size are welcome and never expected: a star, an
+issue, a review of the architecture, a correction, or a new rule.
+
+If you are new to open source too, this is a friendly place to start; issues
+labelled `good first issue` are a good entry point.
 
 Thanks for helping make Terraform safer. Every rule exists because someone hit
 that problem in production. If you have a story like that, it belongs here.
+
+## Proposing a rule without writing Go
+
+Write the rule as a custom rule, in the workspace's Policy tab (form or plain
+English) or in `.terraguard.yml`, then press **Propose as built-in rule**. It
+opens a pre-filled GitHub issue with your YAML and an example. A maintainer
+reviews it and adds it in Go with two test cases. Nothing is merged
+automatically: built-in rules run in other people's CI, so every one is
+reviewed.
 
 ## Local setup (2 minutes)
 

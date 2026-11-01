@@ -1,7 +1,4 @@
-// Command llmeval benchmarks an LLM as a Terraform reviewer against the same
-// labelled cases that gate TerraGuard's rules (evals/cases). It shows where a
-// model alone misses or invents issues, which is why TerraGuard gates on the
-// deterministic engine and uses AI only to explain and propose.
+// Command llmeval scores an LLM as a reviewer on the same cases as the rules.
 //
 //	go run ./evals/llmeval --provider groq [--summary $GITHUB_STEP_SUMMARY]
 package main

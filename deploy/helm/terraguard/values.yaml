@@ -31,7 +31,8 @@ networkPolicy:
   # Namespaces allowed to reach TerraGuard (by label). Empty = same namespace only.
   allowedNamespaceLabels: {}
 
-# Adds prometheus.io annotations for scraping /metrics.
+# Adds prometheus.io annotations for scraping /metrics. When a server token is
+# set, the scrape job must send it (authorization.credentials in Prometheus).
 metrics:
   annotations: true
 

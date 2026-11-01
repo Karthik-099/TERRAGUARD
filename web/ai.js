@@ -1,5 +1,4 @@
-// Optional AI assistant. Routes across providers and models with fallback.
-// The engine never depends on this: scans, fixes and gates run without it.
+// Optional AI assistant with provider fallback. Nothing else depends on it.
 const AI = (() => {
   const openaiCompat = (urlFn, extraHeaders = () => ({})) => async (key, model, messages, s) => {
     const headers = { "Content-Type": "application/json", ...extraHeaders(s) };
@@ -116,8 +115,7 @@ const AI = (() => {
     return { ready: true, private: s.private || !PROVIDERS[p].hosted, label: `${PROVIDERS[p].label} · ${model}` };
   }
 
-  // Provider order: chosen first, then every other usable provider (if fallback).
-  // Within a provider: chosen model first, then that provider's defaults.
+  // Chosen provider and model first, then the rest when fallback is on.
   async function chat(messages) {
     const s = load();
     const first = chosen(s);

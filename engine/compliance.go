@@ -5,8 +5,7 @@ import (
 	"strings"
 )
 
-// Compliance mapping is indicative: it shows which controls a finding is
-// evidence against, it is not an audit or certification.
+// Compliance mapping is indicative, not an audit.
 
 type Framework struct {
 	Name     string    `json:"name"`
@@ -63,6 +62,28 @@ var ruleThemes = map[string][]string{
 	"TG-TF-001": {"change"}, "TG-TF-002": {"change"}, "TG-STATE-001": {"encryption-at-rest", "backup"}, "TG-STATE-002": {"secrets"},
 	"TG-DNS-001": {"change"}, "TG-DNS-002": {"network"}, "TG-DNS-003": {"network"}, "TG-CDN-001": {"encryption-in-transit"},
 	"TG-PATH-001": {"network"}, "TG-PATH-002": {"access"}, "TG-PATH-003": {"access", "network"},
+	"TG-AWS-EFS-001": {"encryption-at-rest"}, "TG-AWS-REDSHIFT-001": {"network", "encryption-at-rest"}, "TG-AWS-APIGW-001": {"access"},
+	"TG-AWS-LB-002": {"network"}, "TG-AWS-ECS-001": {"access", "secrets"}, "TG-AWS-CW-001": {"logging"}, "TG-AWS-SUBNET-001": {"network"},
+	"TG-AWS-EKS-002": {"encryption-at-rest", "logging"}, "TG-AWS-IAM-004": {"access", "secrets"}, "TG-AZ-VM-001": {"access"},
+	"TG-AZ-APP-001": {"encryption-in-transit"}, "TG-AZ-DB-001": {"encryption-in-transit"}, "TG-AZ-ACR-001": {"access", "secrets"},
+	"TG-GCP-BQ-001": {"access"}, "TG-GCP-KMS-001": {"encryption-at-rest"}, "TG-GCP-NET-001": {"logging"}, "TG-GCP-VM-002": {"access"},
+	"TG-GH-001": {"change", "access"}, "TG-GH-002": {"secrets"}, "TG-DO-K8S-001": {"change"},
+	"TG-AWS-RDS-004": {"logging", "access"}, "TG-AWS-RDS-005": {"access"}, "TG-AWS-DOCDB-001": {"encryption-at-rest", "encryption-in-transit"},
+	"TG-AWS-NEPTUNE-001": {"encryption-at-rest"}, "TG-AWS-MQ-001": {"network"}, "TG-AWS-DMS-001": {"network"}, "TG-AWS-SAGEMAKER-001": {"network", "access"},
+	"TG-AWS-KINESIS-001": {"encryption-at-rest"}, "TG-AWS-MSK-001": {"encryption-in-transit", "access", "network"}, "TG-AWS-OS-001": {"access", "encryption-in-transit"},
+	"TG-AWS-IAM-006": {"access"}, "TG-AWS-IAM-007": {"access"}, "TG-AWS-IAM-008": {"access", "secrets"}, "TG-AWS-LAMBDA-003": {"access"},
+	"TG-AWS-CT-002": {"logging", "encryption-at-rest"}, "TG-AWS-GD-001": {"logging"}, "TG-AWS-EC2-002": {"access"}, "TG-AWS-EC2-003": {"network"},
+	"TG-AWS-SG-002": {"network"}, "TG-AWS-NACL-001": {"network"}, "TG-AWS-APIGW-002": {"logging"}, "TG-AWS-LB-003": {"logging"},
+	"TG-AWS-CODEBUILD-001": {"encryption-at-rest", "change"}, "TG-AWS-SSM-001": {"secrets"}, "TG-AWS-CDN-002": {"encryption-in-transit"},
+	"TG-AZ-ST-003": {"access", "secrets"}, "TG-AZ-ST-004": {"access"}, "TG-AZ-ST-005": {"network"}, "TG-AZ-KV-002": {"network"},
+	"TG-AZ-SQL-002": {"network", "access"}, "TG-AZ-DB-002": {"network"}, "TG-AZ-COSMOS-001": {"network", "access"}, "TG-AZ-REDIS-001": {"encryption-in-transit"},
+	"TG-AZ-ACR-002": {"access"}, "TG-AZ-AKS-002": {"access", "network"}, "TG-AZ-IAM-001": {"access"}, "TG-AZ-MSG-001": {"access", "secrets"},
+	"TG-GCP-GKE-002": {"access", "secrets"}, "TG-GCP-GKE-003": {"access", "logging"}, "TG-GCP-GKE-004": {"network"}, "TG-GCP-SQL-002": {"backup"},
+	"TG-GCP-SQL-003": {"access"}, "TG-GCP-GCS-002": {"access"}, "TG-GCP-VM-003": {"access"}, "TG-GCP-VM-004": {"network"},
+	"TG-GCP-IAM-002": {"access"}, "TG-GCP-IAM-003": {"access"}, "TG-GCP-IAM-004": {"access"}, "TG-GCP-IAM-005": {"access"},
+	"TG-GCP-LB-001": {"encryption-in-transit"}, "TG-GCP-REDIS-001": {"access", "encryption-in-transit"},
+	"TG-K8S-004": {"access"}, "TG-K8S-005": {"access"}, "TG-K8S-006": {"access"}, "TG-K8S-007": {"access"}, "TG-K8S-008": {"access"},
+	"TG-SCHEMA-001": {"change"}, "TG-SCHEMA-002": {"change"}, "TG-SCHEMA-003": {"change"},
 	"TG-PLAN-001": {"backup", "change"}, "TG-PLAN-002": {"backup", "change"}, "TG-POL-001": {"change"},
 }
 
@@ -73,7 +94,7 @@ func complianceReport(fs []Finding) []Framework {
 		if f.Waived {
 			continue
 		}
-		for _, t := range ruleThemes[f.RuleID] {
+		for _, t := range themesOf(f.RuleID) {
 			themeFindings[t]++
 			if themeRules[t] == nil {
 				themeRules[t] = map[string]bool{}
@@ -110,7 +131,7 @@ func complianceReport(fs []Finding) []Framework {
 // ThemesFor exposes the mapping for the rule catalog.
 func ThemesFor(id string) []string {
 	var out []string
-	for _, t := range ruleThemes[id] {
+	for _, t := range themesOf(id) {
 		out = append(out, themeTitles[t])
 	}
 	return out
@@ -124,4 +145,24 @@ func providerOf(addr string) string {
 		return ""
 	}
 	return p
+}
+
+// Rules without an explicit entry are mapped by their CWE.
+var cweThemes = map[string][]string{
+	"CWE-311": {"encryption-at-rest"}, "CWE-312": {"encryption-at-rest", "secrets"},
+	"CWE-319": {"encryption-in-transit"}, "CWE-326": {"encryption-in-transit"}, "CWE-327": {"encryption-in-transit"}, "CWE-298": {"encryption-in-transit"},
+	"CWE-284": {"network", "access"}, "CWE-306": {"access"}, "CWE-287": {"access"}, "CWE-308": {"access"}, "CWE-250": {"access"},
+	"CWE-269": {"access"}, "CWE-732": {"access"}, "CWE-918": {"access"}, "CWE-200": {"access"}, "CWE-668": {"access"},
+	"CWE-778": {"logging"}, "CWE-779": {"logging"}, "CWE-693": {"change"}, "CWE-1104": {"change"}, "CWE-489": {"change"},
+	"CWE-798": {"secrets"}, "CWE-526": {"secrets"}, "CWE-324": {"encryption-at-rest"},
+}
+
+func themesOf(id string) []string {
+	if t, ok := ruleThemes[id]; ok {
+		return t
+	}
+	if r := ruleIndex[id]; r != nil {
+		return cweThemes[r.CWE]
+	}
+	return nil
 }

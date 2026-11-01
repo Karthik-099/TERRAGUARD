@@ -1,0 +1,12 @@
+# TerraGuard in Atlantis: check the plan before anyone can apply it.
+# Server-side repos.yaml (the terraguard binary must be on the Atlantis image).
+repos:
+  - id: /.*/
+    workflow: terraguard
+workflows:
+  terraguard:
+    plan:
+      steps:
+        - init
+        - plan
+        - run: terraform show -json $PLANFILE > plan.json && terraguard scan . --plan plan.json --fail-on HIGH

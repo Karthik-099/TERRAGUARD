@@ -38,3 +38,22 @@ cosign verify ghcr.io/karthik-099/terraguard:latest \
 Server hardening: security headers on every response, per-client rate
 limiting, request size limits and timeouts, an optional bearer token, an audit
 log with metadata only, and a non-root, read-only distroless container.
+
+## Threat model
+
+| Threat | Mitigation |
+|---|---|
+| Malicious Terraform or policy input crashes or hangs the engine | The engine does no file or network I/O; the parser and policy loader are fuzzed in CI; the server caps request size (5 MB) and sets timeouts |
+| A crafted share link exhausts browser memory | Expansion is capped at 5 MB and the payload's shape is validated before anything is loaded |
+| Script injection through file names, findings or AI output | All dynamic text is escaped; AI Markdown is sanitized with DOMPurify; a Content-Security-Policy restricts scripts to this origin and pinned CDN files with integrity hashes |
+| API keys leak through logs, errors or responses | Keys are redacted from every error and never returned by `/api/config`; the audit log stores metadata only |
+| AI proposes a change that weakens security | `engine.Verify` rejects any AI change that adds findings at medium or above, adds an apply-blocking issue, or does not lower risk |
+| A dependency has a known vulnerability | `govulncheck` runs in CI on every change to Go code |
+| Abuse of a self-hosted server | Optional bearer token (required when not bound to localhost), per-client rate limits, non-root read-only container, internal-only deployment templates |
+| A remote AI agent abuses the MCP endpoint | `/mcp` needs the server token, is rate limited, accepts inline files only and refuses `path` and `write`, so it cannot read or change the server's disk |
+| A forged run-task request makes the server fetch internal URLs | Run tasks are HMAC-verified; plan downloads and callbacks go only to the configured Terraform host over HTTPS, redirects included |
+| A compromised GitHub Action or dependency | Every action is pinned to a commit SHA; CodeQL, dependency review, govulncheck and staticcheck run on every change |
+| Committed state files expose secrets | Detected without being read; the web app never loads their contents |
+
+Not covered yet: an independent security audit. If you can help with one,
+please open a discussion.

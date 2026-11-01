@@ -13,9 +13,7 @@ import (
 	"github.com/Karthik-099/TERRAGUARD/internal/ai"
 )
 
-// runReview reviews a change the way a code reviewer would: it scans the base
-// revision and the working tree, reports only what the change introduces or
-// resolves, assigns a risk tier, and gates only on new findings.
+// runReview gates on what a change introduces, not on existing debt.
 func runReview(args []string) (int, error) {
 	fset := flag.NewFlagSet("review", flag.ContinueOnError)
 	base := fset.String("base", "origin/main", "git revision to compare against (e.g. the PR base SHA)")
@@ -23,14 +21,18 @@ func runReview(args []string) (int, error) {
 	mdOut := fset.String("markdown", "", "also write Markdown to this file")
 	jsonOut := fset.String("json", "", "also write JSON to this file")
 	failOn := fset.String("fail-on", "", "override the policy threshold")
-	config := fset.String("config", "", "")
+	config := fset.String("config", "", "policy file (default: .terraguard.yml, found automatically)")
 	useAI := fset.Bool("ai", false, "add an advisory AI summary for full-tier reviews")
+	schema := fset.String("schema", "", "check every argument against terraform providers schema -json output")
 	paths, err := parseInterspersed(fset, args)
 	if err != nil {
 		return 2, err
 	}
 	head, err := buildInput(paths, "", *config, *failOn)
 	if err != nil {
+		return 2, err
+	}
+	if head.Schema, err = readOptional(*schema); err != nil {
 		return 2, err
 	}
 	baseFiles, err := gitFilesAt(*base, paths)
@@ -41,7 +43,7 @@ func runReview(args []string) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	baseRep := engine.Scan(engine.Input{Files: baseFiles, Config: head.Config, FailOn: head.FailOn})
+	baseRep := engine.Scan(engine.Input{Files: baseFiles, Config: head.Config, FailOn: head.FailOn, Schema: head.Schema})
 	headRep := engine.Scan(head)
 	rev := engine.NewReview(baseRep, headRep, engine.ChangedTerraform(strings.Fields(diff)))
 
@@ -90,8 +92,7 @@ func git(args ...string) (string, error) {
 	return string(out), nil
 }
 
-// gitFilesAt reads .tf/.tfvars files under paths at a revision, keyed the
-// same way loadFiles keys the working tree (relative to the current dir).
+// gitFilesAt reads files at a revision, keyed like loadFiles.
 func gitFilesAt(rev string, paths []string) (map[string]string, error) {
 	list, err := git(append([]string{"ls-tree", "-r", "--name-only", rev, "--"}, paths...)...)
 	if err != nil {

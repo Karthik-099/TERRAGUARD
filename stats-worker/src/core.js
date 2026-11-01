@@ -1,5 +1,4 @@
-// Pure counter logic shared by the Durable Object and the tests.
-// Stores numbers only: never code, file names, IP addresses or keys.
+// Counter logic shared by the Durable Object and tests. Numbers only.
 
 const SURFACES = new Set(["web", "cli", "action", "api", "mcp"]);
 const clamp = (n, max) => Math.max(0, Math.min(max, Number.isFinite(+n) ? Math.floor(+n) : 0));

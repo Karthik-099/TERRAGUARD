@@ -68,7 +68,7 @@ flowchart TB
     direction LR
     P[HCL parser<br/>hashicorp/hcl] --> N[Normalized<br/>Resource model]
     PL[Plan JSON] --> N
-    N --> R[89 rules<br/>14 providers]
+    N --> R[271 rules<br/>14 providers]
     N --> M[Module checks<br/>validate · secrets · state · pinning]
     N --> G[Graph checks<br/>attack paths]
     R & M & G --> POL[Policy<br/>waivers · overrides · custom rules]
@@ -257,7 +257,7 @@ sequenceDiagram
   participant S as Scan()
   participant P as Parse()
   participant MC as moduleChecks()
-  participant RR as Rules (89)
+  participant RR as Rules (271)
   participant PL as parsePlan()
   participant PO as applyPolicy()
   C->>S: Input{files, plan, config, fail_on}
@@ -318,7 +318,7 @@ comments. Fixes that force replacement say so.
 | **Kubernetes / Helm** | Privileged / host-namespace pods, mutable images, open LoadBalancers, plain-text secrets, unpinned charts |
 | **Any provider** | Syntax/references/duplicates, CIDRs, hardcoded secrets & key patterns, provider/module pinning, `required_version`, state backend, committed state, subdomain-takeover CNAMEs, cost |
 
-Run `terraguard rules` for the full catalog of 89 rules.
+Run `terraguard rules` for the full catalog of 271 rules.
 
 ---
 

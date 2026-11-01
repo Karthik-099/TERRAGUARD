@@ -1,6 +1,6 @@
-// TerraGuard public usage counters: Cloudflare Worker + one Durable Object.
-//   POST /hit    {session, surface, scans, files, resources, fixes, ai, findings, ms, rules}
-//   GET  /stats  public dashboard JSON (same shape as `terraguard serve` /api/stats)
+// Public usage counters (Cloudflare Worker + Durable Object).
+//   POST /hit    counts from the web app
+//   GET  /stats  same shape as terraguard serve /api/stats
 import { newState, record, snapshot } from "./core.js";
 
 export class Stats {

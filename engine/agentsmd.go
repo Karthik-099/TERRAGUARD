@@ -6,10 +6,7 @@ import (
 	"strings"
 )
 
-// AgentsMD writes an AGENTS.md for a Terraform repository from the code and
-// policy alone, so AI coding agents learn the repo's providers, commands,
-// guardrails and boundaries without guessing. It is deterministic: re-run it
-// in CI and diff the output to keep it current.
+// AgentsMD is deterministic, so CI can regenerate it and diff.
 func AgentsMD(files map[string]string, policy string) string {
 	m := Parse(files)
 	cfg, err := ParseConfig(policy)

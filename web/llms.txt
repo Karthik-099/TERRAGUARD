@@ -1,0 +1,21 @@
+# TerraGuard
+
+> Open-source Terraform checker. A deterministic Go engine finds misconfigurations, apply-time failures and destructive plan changes, fixes many of them, and runs in the browser (WebAssembly), CLI, GitHub Action, VS Code, an MCP server and a self-hosted server. AI is optional and only proposes; the engine verifies. Free, MIT licensed, a learning project.
+
+## Key ideas
+
+- Will-it-apply verdict: predicts terraform validate and apply failures without init or credentials.
+- Verified AI fixes: an AI-proposed change is kept only if the engine confirms risk went down and nothing new appeared.
+- Diff-aware review: gates only on findings a pull request introduces.
+- Policy-as-code: .terraguard.yml with extends, custom rules, expiring waivers, budgets and baselines.
+- Pulse: control adoption and waiver inventory across many modules.
+- Privacy: code stays on the device in the browser; air-gapped installs make no outside requests.
+
+## Links
+
+- [Workspace](https://karthik-099.github.io/TERRAGUARD/#/app): scan Terraform in the browser
+- [Source and README](https://github.com/Karthik-099/TERRAGUARD)
+- [AGENTS.md](https://github.com/Karthik-099/TERRAGUARD/blob/main/AGENTS.md): layout, commands, boundaries
+- [Academy](https://github.com/Karthik-099/TERRAGUARD/blob/main/docs/ACADEMY.md): how Terraform works and where it breaks
+- [Architecture](https://github.com/Karthik-099/TERRAGUARD/blob/main/docs/ARCHITECTURE.md)
+- [MCP server](https://github.com/Karthik-099/TERRAGUARD#readme): `terraguard mcp` exposes scan_terraform, fix_terraform, generate_docs, generate_agents_md, validate_rule, list_rules

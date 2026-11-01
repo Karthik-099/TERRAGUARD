@@ -9,8 +9,7 @@ import (
 	"strings"
 )
 
-// Rule is a resource-level check. Rules see normalized Resources, so the same
-// rule fires on raw .tf source and on `terraform show -json` plan output.
+// Rule is a resource-level check; it runs on source and plan alike.
 type Rule struct {
 	ID          string                  `json:"id"`
 	Title       string                  `json:"title"`
@@ -87,8 +86,7 @@ func exposure(protocol, from, to any) (Severity, string, bool) {
 	return High, strings.Join(names, ", "), true
 }
 
-// ── IAM policy helpers ──────────────────────────────────────────────────────
-
+// IAM policy helpers
 type stmt struct {
 	Effect     string
 	Actions    []string
@@ -97,8 +95,7 @@ type stmt struct {
 	HasCond    bool
 }
 
-// statements normalizes a JSON policy string, a decoded jsonencode() object, or
-// an aws_iam_policy_document data source into flat statements.
+// statements flattens a policy from JSON, jsonencode() or a policy document.
 func statements(v any) []stmt {
 	if s, ok := v.(string); ok {
 		var doc any
@@ -206,9 +203,9 @@ func IsAdminPolicy(r *Resource) bool {
 
 var bucketNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
 
-// coreRules covers AWS, GCP, Azure, Cloudflare and Terraform semantics; see rules_clouds.go for the rest.
+// coreRules: the original AWS, GCP, Azure and Cloudflare checks.
 var coreRules = []Rule{
-	// ── AWS S3 ──
+	// AWS S3
 	{ID: "TG-AWS-S3-001", Title: "S3 bucket ACL grants public access", Severity: High, Category: CatSecurity, CWE: "CWE-732",
 		Types: []string{"aws_s3_bucket", "aws_s3_bucket_acl"}, Remediation: `Set acl = "private" and serve public content through CloudFront with Origin Access Control.`,
 		Check: func(r *Resource) []Hit {
@@ -269,7 +266,7 @@ var coreRules = []Rule{
 			return hits
 		}},
 
-	// ── Network ──
+	// Network
 	{ID: "TG-AWS-SG-001", Title: "Security group open to the internet", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types:       []string{"aws_security_group", "aws_security_group_rule", "aws_vpc_security_group_ingress_rule"},
 		Remediation: "Restrict ingress to known CIDRs, a bastion/VPN security group, or use SSM Session Manager instead of public SSH/RDP.",
@@ -371,7 +368,7 @@ var coreRules = []Rule{
 			return nil
 		}},
 
-	// ── Databases & storage ──
+	// Databases & storage
 	{ID: "TG-AWS-RDS-001", Title: "Database is publicly accessible", Severity: High, Category: CatSecurity, CWE: "CWE-284",
 		Types: []string{"aws_db_instance", "aws_rds_cluster_instance"}, Remediation: "Set publicly_accessible = false and place the database in private subnets.",
 		Check: func(r *Resource) []Hit {
@@ -432,7 +429,7 @@ var coreRules = []Rule{
 			return nil
 		}},
 
-	// ── Compute ──
+	// Compute
 	{ID: "TG-AWS-EC2-001", Title: "Instance metadata service allows IMDSv1", Severity: Medium, Category: CatSecurity, CWE: "CWE-918",
 		Types: []string{"aws_instance", "aws_launch_template"}, Remediation: `Add metadata_options { http_tokens = "required" } to block SSRF credential theft.`,
 		Check: func(r *Resource) []Hit {
@@ -461,7 +458,7 @@ var coreRules = []Rule{
 			return nil
 		}},
 
-	// ── IAM ──
+	// IAM
 	{ID: "TG-AWS-IAM-001", Title: "IAM policy grants wildcard permissions", Severity: High, Category: CatSecurity, CWE: "CWE-269",
 		Types:       []string{"aws_iam_policy", "aws_iam_role_policy", "aws_iam_user_policy", "aws_iam_group_policy", "aws_iam_policy_document"},
 		Remediation: "Apply least privilege: list the exact actions and resource ARNs. Use IAM Access Analyzer policy generation from CloudTrail.",
@@ -472,7 +469,8 @@ var coreRules = []Rule{
 			return wildcardHits(statements(r.get("policy")), "policy")
 		}},
 	{ID: "TG-AWS-IAM-002", Title: "Policy allows any principal", Severity: Critical, Category: CatSecurity, CWE: "CWE-284",
-		Types:       []string{"aws_iam_role", "aws_s3_bucket_policy", "aws_sqs_queue_policy", "aws_sns_topic_policy", "aws_kms_key", "aws_iam_policy_document"},
+		Types: []string{"aws_iam_role", "aws_s3_bucket_policy", "aws_sqs_queue_policy", "aws_sns_topic_policy", "aws_kms_key", "aws_iam_policy_document",
+			"aws_ecr_repository_policy", "aws_secretsmanager_secret_policy", "aws_opensearch_domain_policy", "aws_opensearch_domain", "aws_elasticsearch_domain_policy", "aws_elasticsearch_domain"},
 		Remediation: "Name specific account/role ARNs as principals, or add a Condition (aws:PrincipalOrgID, aws:SourceArn).",
 		Check: func(r *Resource) []Hit {
 			var sts []stmt
@@ -484,6 +482,9 @@ var coreRules = []Rule{
 			case "aws_iam_policy_document":
 				path = "statement"
 				sts = policyDocStatements(r)
+			case "aws_opensearch_domain_policy", "aws_opensearch_domain", "aws_elasticsearch_domain_policy", "aws_elasticsearch_domain":
+				path = "access_policies"
+				sts = statements(r.get(path))
 			default:
 				sts = statements(r.get("policy"))
 			}
@@ -527,7 +528,7 @@ var coreRules = []Rule{
 			return hits
 		}},
 
-	// ── Google Cloud ──
+	// Google Cloud
 	{ID: "TG-GCP-GCS-001", Title: "GCS bucket is public or lacks uniform access", Severity: Medium, Category: CatSecurity, CWE: "CWE-732",
 		Types: []string{"google_storage_bucket", "google_storage_bucket_iam_member", "google_storage_bucket_iam_binding"}, Remediation: "Enable uniform_bucket_level_access and never grant allUsers/allAuthenticatedUsers.",
 		Check: func(r *Resource) []Hit {
@@ -570,7 +571,7 @@ var coreRules = []Rule{
 			return hits
 		}},
 
-	// ── Azure ──
+	// Azure
 	{ID: "TG-AZ-ST-001", Title: "Azure storage account is weakly configured", Severity: Medium, Category: CatSecurity, CWE: "CWE-319",
 		Types: []string{"azurerm_storage_account"}, Remediation: `Set min_tls_version = "TLS1_2", https_traffic_only_enabled = true, allow_nested_items_to_be_public = false.`,
 		Check: func(r *Resource) []Hit {
@@ -609,7 +610,7 @@ var coreRules = []Rule{
 			return nil
 		}},
 
-	// ── Cloudflare ──
+	// Cloudflare
 	{ID: "TG-CF-001", Title: "Cloudflare zone has weak TLS/security settings", Severity: High, Category: CatSecurity, CWE: "CWE-319",
 		Types: []string{"cloudflare_zone_settings_override", "cloudflare_zone_setting"}, Remediation: `Use ssl = "strict" (Full strict), min_tls_version = "1.2" and always_use_https = "on".`,
 		Check: func(r *Resource) []Hit {
@@ -653,7 +654,7 @@ var coreRules = []Rule{
 			return nil
 		}},
 
-	// ── Terraform semantics ──
+	// Terraform semantics
 	{ID: "TG-VAL-007", Title: "count and for_each used together (validate will fail)", Severity: High, Category: CatValidate, Blocking: true,
 		Remediation: "Use either count or for_each on a resource, never both.",
 		Check: func(r *Resource) []Hit {

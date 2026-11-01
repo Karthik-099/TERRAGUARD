@@ -17,7 +17,7 @@ Registry) for fully private pulls.
 # AWS
 cd deploy/aws && terraform init && terraform apply \
   -var vpc_id=vpc-123 -var 'private_subnet_ids=["subnet-a","subnet-b"]' \
-  -var 'allowed_cidrs=["10.0.0.0/8"]' -var certificate_arn=arn:aws:acm:...
+  -var 'allowed_cidrs=["10.0.0.0/8"]' -var certificate_arn=arn:aws:acm:... -var access_logs_bucket=my-alb-logs
 
 # Kubernetes
 helm install terraguard deploy/helm/terraguard -n platform --create-namespace \

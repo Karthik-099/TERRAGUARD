@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/Karthik-099/TERRAGUARD/internal/ai"
 	"io"
 	"net/http"
 	"os"
@@ -16,9 +18,7 @@ import (
 	"github.com/Karthik-099/TERRAGUARD/engine"
 )
 
-// resolvePolicy expands `extends` references: local paths are relative to the
-// policy file's directory; https URLs let an organization publish one baseline
-// that every repository inherits.
+// resolvePolicy expands extends: local paths are relative to the policy file, or https URLs.
 func resolvePolicy(text, dir string) (string, error) {
 	if !strings.Contains(text, "extends") {
 		return text, nil
@@ -60,8 +60,7 @@ func readBaseline(path string) ([]string, error) {
 	return keys, nil
 }
 
-// writeBaselineFile records every current finding (active or waived) so later
-// scans gate only on findings introduced after today.
+// writeBaselineFile saves today's findings so later scans gate on new ones only.
 func writeBaselineFile(path string, rep *engine.Report) error {
 	keys := []string{}
 	seen := map[string]bool{}
@@ -78,11 +77,13 @@ func writeBaselineFile(path string, rep *engine.Report) error {
 
 var fixtureHeader = regexp.MustCompile(`(?m)^#\s*(expect|forbid):\s*(.+)$`)
 
-// runPolicy validates a policy or runs fixture tests against it, so teams can
-// unit-test their own standards the same way TerraGuard tests its rules.
+// runPolicy validates a policy or runs its fixture tests.
 func runPolicy(args []string) (int, error) {
+	if len(args) > 0 && args[0] == "suggest" {
+		return runPolicySuggest(args[1:])
+	}
 	if len(args) == 0 || (args[0] != "validate" && args[0] != "test") {
-		return 2, fmt.Errorf("usage: terraguard policy validate [--config FILE] | terraguard policy test DIR [--config FILE]")
+		return 2, fmt.Errorf(`usage: terraguard policy validate [--config FILE] | terraguard policy test DIR [--config FILE] | terraguard policy suggest "standard" [paths]`)
 	}
 	fset := flag.NewFlagSet("policy", flag.ContinueOnError)
 	config := fset.String("config", "", "policy file (default: .terraguard.yml in the current or given directory)")
@@ -146,6 +147,46 @@ func runPolicy(args []string) (int, error) {
 	fmt.Printf("\n%d fixture(s), %d failed\n", len(cases), failed)
 	if failed > 0 {
 		return 1, nil
+	}
+	return 0, nil
+}
+
+// runPolicySuggest: AI drafts a rule, DraftRule checks it, one retry with the error.
+// Only resource types are sent, never code.
+func runPolicySuggest(args []string) (int, error) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return 2, fmt.Errorf(`usage: terraguard policy suggest "production databases keep 14 days of backups" [paths]`)
+	}
+	standard, paths := args[0], args[1:]
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+	files, err := loadFiles(paths)
+	if err != nil {
+		return 2, err
+	}
+	msgs := []ai.Message{
+		{Role: "system", Content: engine.RuleDraftPrompt},
+		{Role: "user", Content: fmt.Sprintf("Resource types in this repository: %s\nStandard: %s", strings.Join(engine.ResourceTypes(files), ", "), standard)},
+	}
+	var d engine.RuleDraft
+	for round := 0; round < 2; round++ {
+		res, err := ai.Chat(context.Background(), msgs)
+		if err != nil {
+			return 2, err
+		}
+		if d = engine.DraftRule(res.Text, engine.Input{Files: files}); d.Error == "" {
+			break
+		}
+		msgs = append(msgs, ai.Message{Role: "assistant", Content: res.Text}, ai.Message{Role: "user", Content: "That rule was rejected: " + d.Error + ". Answer with the corrected YAML only."})
+	}
+	if d.Error != "" {
+		return 1, fmt.Errorf("the model did not produce a valid rule: %s", d.Error)
+	}
+	fmt.Printf("# Add under custom_rules: in .terraguard.yml\n%s\n\n", d.YAML)
+	fmt.Printf("# Dry run: %d resource(s) would fail this rule\n", len(d.Hits))
+	for _, h := range d.Hits {
+		fmt.Printf("#   %s  %s:%d\n", h.Resource, h.File, h.Line)
 	}
 	return 0, nil
 }

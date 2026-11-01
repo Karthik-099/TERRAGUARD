@@ -1,6 +1,4 @@
-// Package engine is TerraGuard's analysis core. It is pure Go with no I/O so
-// the same code runs in the CLI, the GitHub Action, the MCP server and the
-// browser (WebAssembly).
+// Package engine is the analysis core. No I/O, so it also runs as WebAssembly.
 package engine
 
 import (
@@ -73,8 +71,7 @@ type Fix struct {
 // Unknown marks an attribute whose value is not a literal (references, function calls).
 type Unknown struct{ Expr string }
 
-// Resource is the normalized form shared by HCL sources and plan JSON, so every
-// rule runs unchanged against both.
+// Resource is shared by HCL and plan JSON, so rules run on both.
 type Resource struct {
 	Address  string
 	Mode     string // "managed" or "data"
@@ -95,8 +92,7 @@ func (r *Resource) line(path string) int {
 	return r.Line
 }
 
-// get walks a dotted path. Nested blocks are lists; a numeric segment indexes
-// them, otherwise the first element is used.
+// get walks a dotted path; blocks are lists, a number picks one, otherwise the first.
 func get(v any, path string) any {
 	if path == "" {
 		return v

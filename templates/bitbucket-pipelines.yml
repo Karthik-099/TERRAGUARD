@@ -1,0 +1,15 @@
+# TerraGuard for Bitbucket Pipelines. Copy into bitbucket-pipelines.yml.
+# JUnit results appear in the pipeline's Tests tab.
+image: ghcr.io/karthik-099/terraguard:latest
+
+pipelines:
+  pull-requests:
+    "**":
+      - step:
+          name: TerraGuard
+          condition:
+            changesets:
+              includePaths: ["**/*.tf", "**/*.tfvars", ".terraguard.yml"]
+          script:
+            - mkdir -p test-results
+            - terraguard scan . --junit test-results/terraguard.xml --markdown terraguard.md

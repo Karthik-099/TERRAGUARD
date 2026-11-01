@@ -56,6 +56,41 @@ func TestServerTokenRequired(t *testing.T) {
 	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != 200 {
 		t.Fatalf("with token status = %d", resp.StatusCode)
 	}
+	if resp, _ := http.Get(srv.URL + "/metrics"); resp.StatusCode != 401 {
+		t.Fatalf("metrics without token: status = %d", resp.StatusCode)
+	}
+	// No directory listings and no Go source from the embedded site.
+	for _, path := range []string{"/assets/", "/embed.go"} {
+		if resp, _ := http.Get(srv.URL + path); resp.StatusCode != 404 {
+			t.Errorf("GET %s: status = %d, want 404", path, resp.StatusCode)
+		}
+	}
+}
+
+func TestHSTSOnlyOverHTTPS(t *testing.T) {
+	h := newServer("")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/healthz", nil))
+	if w.Header().Get("Strict-Transport-Security") != "" {
+		t.Fatal("HSTS sent over plain HTTP")
+	}
+	t.Setenv("TERRAGUARD_TRUST_PROXY", "true")
+	r := httptest.NewRequest("GET", "/healthz", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Header().Get("Strict-Transport-Security") == "" {
+		t.Fatal("no HSTS behind a TLS-terminating proxy")
+	}
+}
+
+func TestClientIPUsesProxyAppendedAddress(t *testing.T) {
+	t.Setenv("TERRAGUARD_TRUST_PROXY", "true")
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-Forwarded-For", "6.6.6.6, 10.0.0.7")
+	if got := clientIP(r); got != "10.0.0.7" {
+		t.Fatalf("clientIP = %q, want the proxy-appended 10.0.0.7", got)
+	}
 }
 
 // syncBuffer is safe to read while the server writes to it.
@@ -107,7 +142,8 @@ func TestServerHardening(t *testing.T) {
 func TestRateLimiter(t *testing.T) {
 	l := newLimiter(2)
 	now := time.Now()
-	if !l.allow("a", now) || !l.allow("a", now) || l.allow("a", now) {
+	first, second, third := l.allow("a", now), l.allow("a", now), l.allow("a", now)
+	if !first || !second || third {
 		t.Fatal("third request inside the burst must be refused")
 	}
 	if !l.allow("b", now) {

@@ -17,15 +17,13 @@ import (
 
 var codeBlock = regexp.MustCompile("(?s)```(?:hcl|terraform)?\\s*\\n(.*?)```")
 
-// runAgent is a propose-and-verify loop: deterministic fixes first, then the
-// LLM proposes a rewrite per file and the engine keeps it only if Verify
-// accepts it. The model never decides what is "fixed".
+// runAgent: deterministic fixes first, then AI rewrites that Verify must accept.
 func runAgent(args []string) error {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	write := fs.Bool("write", false, "write accepted changes to disk (default: dry run)")
 	rounds := fs.Int("rounds", 2, "maximum AI rounds")
 	minSev := fs.String("min-severity", "MEDIUM", "only ask the AI about findings at or above this severity")
-	config := fs.String("config", "", "")
+	config := fs.String("config", "", "policy file (default: .terraguard.yml, found automatically)")
 	paths, err := parseInterspersed(fs, args)
 	if err != nil {
 		return err

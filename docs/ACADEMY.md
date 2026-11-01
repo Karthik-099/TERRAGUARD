@@ -106,7 +106,7 @@ flowchart LR
 |---|---|---|
 | Parse | `engine/parse.go` | HashiCorp's HCL parser reads each file. Literal values are evaluated; anything computed becomes `Unknown`. Syntax errors become findings. |
 | Normalize | `engine/model.go` | Source resources and plan resources share one shape, so every rule checks both. |
-| Resource rules | `engine/rules.go`, `rules_clouds.go` | 89 rules, each a small Go function returning hits with a line and an optional fix. |
+| Resource rules | `engine/rules.go`, `rules_clouds.go` | 271 rules, each a small Go function returning hits with a line and an optional fix. |
 | Module checks | `engine/checks.go` | Duplicates, undeclared references, tfvars, secrets, pinning, state, and the cross-resource graph (attack paths). |
 | Plan | `engine/plan.go` | `terraform show -json` becomes a change summary plus destroy and replace risks. |
 | Policy | `engine/policy.go` | `extends`, custom rules, overrides, disables, waivers with expiry, inline ignores, baselines. |

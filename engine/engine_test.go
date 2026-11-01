@@ -436,3 +436,47 @@ func TestBaselineBudgetAndOwner(t *testing.T) {
 		}
 	}
 }
+
+func TestLocalModulesAreScopedAndCallsChecked(t *testing.T) {
+	r := Scan(Input{Files: map[string]string{
+		"main.tf": `variable "name" {
+  description = "n"
+}
+module "vpc" {
+  source = "./modules/vpc"
+  name   = var.name
+  cidr   = "10.0.0.0/16"
+}
+module "ok" {
+  source = "./modules/vpc"
+  name   = "x"
+  region = "eu-west-1"
+}`,
+		"modules/vpc/main.tf": `variable "name" {
+  description = "n"
+}
+variable "region" {
+  description = "r"
+}
+variable "tags" {
+  description = "t"
+  default     = {}
+}
+output "name" {
+  description = "n"
+  value       = "${var.name}-${var.region}-${length(var.tags)}"
+}`,
+	}})
+	got := ids(r)
+	if got["TG-VAL-002"] != 0 {
+		t.Errorf("same variable name in two modules reported as duplicate: %v", got)
+	}
+	if got["TG-VAL-011"] != 1 || got["TG-VAL-012"] != 1 {
+		t.Errorf("want one unknown input (cidr) and one missing input (region), got %v", got)
+	}
+	for _, f := range r.Findings {
+		if (f.RuleID == "TG-VAL-011" || f.RuleID == "TG-VAL-012") && f.Resource != "module.vpc" {
+			t.Errorf("%s reported on %s, want module.vpc", f.RuleID, f.Resource)
+		}
+	}
+}

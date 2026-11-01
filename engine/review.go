@@ -6,8 +6,7 @@ import (
 	"strings"
 )
 
-// Review compares the scan of a change's base and head so a pull request is
-// judged on what it introduces, not on pre-existing debt.
+// Review judges a change by what it introduces.
 type Review struct {
 	Tier         string    `json:"tier"` // trivial | lite | full
 	ChangedFiles []string  `json:"changed_files"`
@@ -18,8 +17,7 @@ type Review struct {
 	FailOn       Severity  `json:"fail_on"`
 }
 
-// FindingKey identifies a finding across revisions without line numbers,
-// which shift whenever unrelated code above it changes.
+// FindingKey ignores line numbers, which shift with unrelated edits.
 func FindingKey(f Finding) string {
 	k := f.RuleID + "|" + f.File + "|" + f.Resource
 	if f.Resource == "" {

@@ -15,8 +15,7 @@ import (
 	"github.com/Karthik-099/TERRAGUARD/internal/pulse"
 )
 
-// runPulse scans every Terraform module under the given roots and reports
-// control adoption, waivers and trend for platform teams.
+// runPulse reports control adoption, waivers and trend across modules.
 func runPulse(args []string) (int, error) {
 	fset := flag.NewFlagSet("pulse", flag.ContinueOnError)
 	format := fset.String("format", "markdown", "stdout format: markdown or json")
@@ -106,8 +105,7 @@ func moduleDirs(root string) ([]string, error) {
 	return dirs, err
 }
 
-// scanModule scans one directory (not its children) with the nearest policy
-// file between the directory and the root.
+// scanModule scans one directory with the nearest policy file above it.
 func scanModule(root, dir string) (pulse.Module, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

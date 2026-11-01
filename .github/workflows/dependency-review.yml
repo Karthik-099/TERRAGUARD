@@ -1,0 +1,18 @@
+# Blocks pull requests that add dependencies with known vulnerabilities.
+name: dependency-review
+
+on:
+  pull_request:
+    paths: ["go.mod", "go.sum", "**/package.json", "**/package-lock.json", ".github/workflows/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: moderate

@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -30,6 +31,7 @@ Usage:
   terraguard ai                        Show the AI fallback route built from .env
   terraguard serve [--addr host:port]  Self-host the web app + API (keys stay server-side)
   terraguard policy validate|test      Validate a policy (with extends) or run policy test fixtures
+  terraguard policy suggest "standard" Draft a custom rule from plain English (AI drafts, engine validates)
   terraguard rules [--format json|markdown]
   terraguard mcp                       Run as an MCP server over stdio
   terraguard version
@@ -37,6 +39,7 @@ Usage:
 Scan flags:
   --format text|json|sarif|junit|codequality|markdown   stdout format (default text)
   --plan plan.json                    also analyze 'terraform show -json' output
+  --schema schema.json                check arguments against 'terraform providers schema -json' 
   --config .terraguard.yml            policy file (auto-detected)
   --fail-on CRITICAL|HIGH|MEDIUM|LOW|NONE  override the policy threshold
   --sarif FILE / --junit FILE / --codequality FILE / --markdown FILE / --json FILE   extra outputs
@@ -104,7 +107,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", os.Args[1], usage)
 		code = 2
 	}
-	if err != nil {
+	switch {
+	case errors.Is(err, flag.ErrHelp): // -h already printed the command's flags
+		code = 0
+	case err != nil:
 		fmt.Fprintln(os.Stderr, "error:", err)
 		code = 2
 	}
@@ -203,6 +209,15 @@ func findConfig(explicit string, paths []string) (string, error) {
 	return "", nil
 }
 
+// readOptional returns the file's contents, or "" when no path is given.
+func readOptional(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	b, err := os.ReadFile(path)
+	return string(b), err
+}
+
 func buildInput(paths []string, planPath, configPath, failOn string) (engine.Input, error) {
 	files, err := loadFiles(paths)
 	if err != nil {
@@ -229,18 +244,19 @@ func buildInput(paths []string, planPath, configPath, failOn string) (engine.Inp
 
 func runScan(args []string) (int, error) {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
-	format := fs.String("format", "text", "")
-	plan := fs.String("plan", "", "")
-	config := fs.String("config", "", "")
-	failOn := fs.String("fail-on", "", "")
-	sarifOut := fs.String("sarif", "", "")
-	mdOut := fs.String("markdown", "", "")
-	jsonOut := fs.String("json", "", "")
-	junitOut := fs.String("junit", "", "")
-	useAI := fs.Bool("ai", false, "")
-	baseline := fs.String("baseline", "", "")
-	writeBaseline := fs.String("write-baseline", "", "")
-	cqOut := fs.String("codequality", "", "")
+	format := fs.String("format", "text", "stdout format: text, json, sarif, junit, codequality or markdown")
+	plan := fs.String("plan", "", "also analyze a plan: the output of terraform show -json")
+	config := fs.String("config", "", "policy file (default: .terraguard.yml, found automatically)")
+	failOn := fs.String("fail-on", "", "override the policy threshold: CRITICAL, HIGH, MEDIUM, LOW or NONE")
+	sarifOut := fs.String("sarif", "", "also write SARIF (GitHub code scanning) to this file")
+	mdOut := fs.String("markdown", "", "also write a Markdown report (pull request comment) to this file")
+	jsonOut := fs.String("json", "", "also write the JSON report to this file")
+	junitOut := fs.String("junit", "", "also write JUnit XML (CI test reports) to this file")
+	useAI := fs.Bool("ai", false, "add an advisory AI remediation plan to the Markdown report")
+	baseline := fs.String("baseline", "", "treat findings in this baseline file as accepted debt; gate only on new ones")
+	writeBaseline := fs.String("write-baseline", "", "write today's findings to this file as the baseline")
+	cqOut := fs.String("codequality", "", "also write a GitLab Code Quality report to this file")
+	schema := fs.String("schema", "", "check every argument against terraform providers schema -json output")
 	paths, err := parseInterspersed(fs, args)
 	if err != nil {
 		return 2, err
@@ -256,6 +272,9 @@ func runScan(args []string) (int, error) {
 		if in.Baseline, err = readBaseline(*baseline); err != nil {
 			return 2, err
 		}
+	}
+	if in.Schema, err = readOptional(*schema); err != nil {
+		return 2, err
 	}
 	t0 := time.Now()
 	rep := engine.Scan(in)
@@ -320,7 +339,7 @@ func runScan(args []string) (int, error) {
 
 func runFix(args []string) error {
 	fs := flag.NewFlagSet("fix", flag.ContinueOnError)
-	config := fs.String("config", "", "")
+	config := fs.String("config", "", "policy file (default: .terraguard.yml, found automatically)")
 	paths, err := parseInterspersed(fs, args)
 	if err != nil {
 		return err
@@ -347,7 +366,7 @@ func runFix(args []string) error {
 
 func runRules(args []string) error {
 	fs := flag.NewFlagSet("rules", flag.ContinueOnError)
-	format := fs.String("format", "text", "")
+	format := fs.String("format", "text", "output format: text, json or markdown")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -375,9 +394,9 @@ func runRules(args []string) error {
 }
 
 func runDocs(args []string) error {
-	paths := args
-	if len(paths) == 0 {
-		paths = []string{"."}
+	paths, err := parseInterspersed(flag.NewFlagSet("docs", flag.ContinueOnError), args)
+	if err != nil {
+		return err
 	}
 	files, err := loadFiles(paths)
 	if err != nil {
@@ -388,9 +407,9 @@ func runDocs(args []string) error {
 }
 
 func runAgentsMD(args []string) error {
-	paths := args
-	if len(paths) == 0 {
-		paths = []string{"."}
+	paths, err := parseInterspersed(flag.NewFlagSet("agents-md", flag.ContinueOnError), args)
+	if err != nil {
+		return err
 	}
 	in, err := buildInput(paths, "", "", "")
 	if err != nil {

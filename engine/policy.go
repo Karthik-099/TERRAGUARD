@@ -47,8 +47,7 @@ type Condition struct {
 	re, notRe  *regexp.Regexp
 }
 
-// CustomRule is an organization standard: for resources of ResourceTypes that
-// satisfy every Where condition, the inline condition and every Assert must hold.
+// CustomRule: for matching resources that pass every Where, every Assert must hold.
 type CustomRule struct {
 	ID            string      `yaml:"id" json:"id"`
 	Title         string      `yaml:"title,omitempty" json:"title"`
@@ -139,9 +138,7 @@ func ParseConfig(src string) (*Config, error) {
 	return c, nil
 }
 
-// ResolveExtends merges policy packs listed in `extends` (depth-first, base
-// first) into one config document. load fetches a reference relative to the
-// document that names it; the engine itself never does I/O.
+// ResolveExtends merges extends packs, base first. load does the I/O.
 func ResolveExtends(src string, load func(ref string) (string, error)) (string, error) {
 	merged, err := resolve(src, load, map[string]bool{}, 0)
 	if err != nil {
@@ -180,8 +177,7 @@ func resolve(src string, load func(string) (string, error), seen map[string]bool
 	return out, nil
 }
 
-// mergeInto layers child over base: scalars and same-ID rules are replaced,
-// lists are appended.
+// mergeInto: child wins for scalars and same-ID rules; lists append.
 func mergeInto(base, child *Config) {
 	if child.FailOn != "" {
 		base.FailOn = child.FailOn
@@ -224,8 +220,7 @@ func globAny(globs []string, s string) bool {
 
 func same(a, b any) bool { return fmt.Sprint(a) == fmt.Sprint(b) }
 
-// eval returns ok=false with a reason when the condition does not hold.
-// known=false means the value is computed at plan time and cannot be judged.
+// eval: known=false means the value is only known at plan time.
 func (c *Condition) eval(r *Resource) (ok, known bool, why string) {
 	v := r.get(c.Attribute)
 	if isUnknown(v) {

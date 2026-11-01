@@ -62,9 +62,9 @@ func TestFallbackAcrossModelsAndProviders(t *testing.T) {
 		_ = jsonDecode(r, &body)
 		switch body.Model {
 		case "bad-key":
-			http.Error(w, `{"error":"invalid key"}`, 401)
+			http.Error(w, `{"error":"invalid key"}`, http.StatusUnauthorized)
 		case "rate":
-			http.Error(w, `{"error":"slow down"}`, 429)
+			http.Error(w, `{"error":"slow down"}`, http.StatusTooManyRequests)
 		default:
 			w.Write([]byte(`{"choices":[{"message":{"content":"ok from ` + body.Model + `"}}]}`))
 		}

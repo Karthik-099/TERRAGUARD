@@ -105,8 +105,10 @@ scrape_configs:
 | `GET /api/stats` | Anonymous usage counters for the dashboard |
 | `GET /healthz` | Liveness |
 | `GET /metrics` | Prometheus metrics |
+| `POST /mcp` | Remote MCP server for AI agents (inline files only) |
+| `POST /api/run-task` | HCP Terraform / Terraform Enterprise run task (HMAC-verified; see the reference) |
 
-`/api/scan`, `/api/fix` and `/api/ai/chat` require `Authorization: Bearer $TERRAGUARD_SERVER_TOKEN` when the token is set.
+`/api/scan`, `/api/fix`, `/api/ai/chat`, `/mcp` and `/metrics` require `Authorization: Bearer $TERRAGUARD_SERVER_TOKEN` when the token is set. For Prometheus, set `authorization: { credentials: <token> }` on the scrape job. `/healthz`, `/api/config`, `/api/stats` and the anonymous `POST /api/stats/hit` stay public; they carry no code and no keys.
 
 ---
 

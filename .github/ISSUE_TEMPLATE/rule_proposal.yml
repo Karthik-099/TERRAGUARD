@@ -1,0 +1,39 @@
+name: Rule proposal
+description: Propose a custom rule you wrote (in the workspace or .terraguard.yml) as a built-in rule
+labels: [rule-proposal]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a rule. A maintainer reviews every proposal; accepted rules are added
+        as Go code with two test cases (one that must fire, one that must stay quiet) so they run
+        the same way in every surface. Your YAML is the specification.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What should be caught, and why?
+      description: The standard in plain English and the risk or failure it prevents.
+    validations:
+      required: true
+  - type: textarea
+    id: rule
+    attributes:
+      label: The custom rule
+      description: YAML for one custom_rules item.
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: bad
+    attributes:
+      label: Terraform that should be flagged
+      render: hcl
+  - type: textarea
+    id: good
+    attributes:
+      label: Terraform that must NOT be flagged
+      render: hcl
+  - type: input
+    id: refs
+    attributes:
+      label: References (provider docs, CIS control, incident write-up)
