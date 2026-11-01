@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Karthik-099/TERRAGUARD/main/schema/terraguard.schema.json
+# A team policy: inherits the org baseline, then tightens or relaxes it.
+extends: [org-baseline.yml]
+
+fail_on: MEDIUM                     # payments is stricter than the org default
+severity_overrides:
+  "TG-AWS-RDS-*": CRITICAL          # globs work in overrides, disable and waivers
+disable: ["TG-CF-*"]                # no Cloudflare in this team's stack
+
+waivers:
+  - rule: ORG-EC2-001
+    resource: aws_instance.legacy_batch
+    reason: Batch job pinned to m5 until the Q1 migration (PAY-412)
+    approved_by: payments-lead
+    expires: "2027-03-31"

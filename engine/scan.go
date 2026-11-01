@@ -12,6 +12,9 @@ type Input struct {
 	Plan   string            `json:"plan,omitempty"`    // terraform show -json output
 	Config string            `json:"config,omitempty"`  // .terraguard.yml contents
 	FailOn string            `json:"fail_on,omitempty"` // overrides config fail_on
+	// Baseline lists FindingKey values accepted as existing debt: they are
+	// reported as waived so the gate fails only on new findings.
+	Baseline []string `json:"baseline,omitempty"`
 }
 
 type Report struct {
@@ -34,6 +37,8 @@ type Report struct {
 	Providers  map[string]int `json:"providers"` // resources per provider
 	Compliance []Framework    `json:"compliance"`
 	Errors     []string       `json:"errors,omitempty"`
+	// GateFailures explains every reason Passed is false.
+	GateFailures []string `json:"gate_failures,omitempty"`
 }
 
 // Verdict answers "will terraform apply succeed?" from static evidence.
@@ -120,7 +125,8 @@ func Scan(in Input) *Report {
 			cr := &cfg.CustomRules[i]
 			if msg, bad := cr.check(r); bad {
 				findings = append(findings, Finding{RuleID: cr.ID, Severity: cr.Severity, Category: CatPolicy, Title: cr.Title,
-					Message: r.Address + ": " + msg, Resource: r.Address, File: r.File, Line: r.line(cr.Attribute), Remediation: cr.Remediation})
+					Message: r.Address + ": " + msg, Resource: r.Address, File: r.File, Line: r.line(cr.Attribute), Remediation: cr.Remediation,
+					Owner: cr.Owner, Docs: cr.DocsURL})
 			}
 		}
 	}
@@ -130,6 +136,17 @@ func Scan(in Input) *Report {
 		blockLine[b.Address()] = b.Line
 	}
 	findings = applyPolicy(findings, cfg, inlineIgnores(m.Files), blockLine, time.Now())
+	if len(in.Baseline) > 0 {
+		accepted := map[string]bool{}
+		for _, k := range in.Baseline {
+			accepted[k] = true
+		}
+		for i := range findings {
+			if !findings[i].Waived && accepted[FindingKey(findings[i])] {
+				findings[i].Waived, findings[i].WaiverReason = true, "accepted in baseline"
+			}
+		}
+	}
 	sortFindings(findings)
 	rep.Findings = findings
 	if rep.Findings == nil {
@@ -143,7 +160,12 @@ func Scan(in Input) *Report {
 			rep.Providers[p]++
 		}
 	}
+	activeBlocking := 0
 	for _, f := range findings {
+		// A waiver accepts a risk; it does not make terraform apply succeed.
+		if f.Blocking {
+			rep.Verdict.Blocking++
+		}
 		if f.Waived {
 			rep.Waived++
 			continue
@@ -155,7 +177,7 @@ func Scan(in Input) *Report {
 		}
 		score -= weights[f.Severity]
 		if f.Blocking {
-			rep.Verdict.Blocking++
+			activeBlocking++
 		}
 		if f.Fix != nil {
 			rep.Fixable++
@@ -163,14 +185,26 @@ func Scan(in Input) *Report {
 	}
 	rep.Score = max(score, 0)
 	rep.Grade = grade(rep.Score)
-	rep.Passed = rep.Verdict.Blocking == 0
+	if activeBlocking > 0 {
+		rep.GateFailures = append(rep.GateFailures, fmt.Sprintf("%d finding(s) would make terraform apply fail", activeBlocking))
+	}
 	if cfg.FailOn != "NONE" {
+		n := 0
 		for _, f := range findings {
 			if !f.Waived && f.Severity.Rank() >= cfg.FailOn.Rank() {
-				rep.Passed = false
+				n++
 			}
 		}
+		if n > 0 {
+			rep.GateFailures = append(rep.GateFailures, fmt.Sprintf("%d active finding(s) at or above fail_on %s", n, cfg.FailOn))
+		}
 	}
+	for _, sev := range []Severity{Critical, High, Medium, Low, Info} {
+		if limit, ok := cfg.MaxFindings[sev]; ok && rep.Summary[sev] > limit {
+			rep.GateFailures = append(rep.GateFailures, fmt.Sprintf("%d %s finding(s) exceed the budget of %d", rep.Summary[sev], sev, limit))
+		}
+	}
+	rep.Passed = len(rep.GateFailures) == 0
 	rep.Verdict.WillApply = rep.Verdict.Blocking == 0 && len(in.Files) > 0
 	switch {
 	case len(in.Files) == 0:

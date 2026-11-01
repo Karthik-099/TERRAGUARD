@@ -1,172 +1,286 @@
-# 🛡️ TerraGuard
+# TerraGuard
 
-**Catch Terraform problems before `apply` does, on every cloud.** TerraGuard
-finds security misconfigurations, apply-time failures, attack paths, risky
-plans, cost traps and compliance gaps. It runs in your browser, your terminal,
-your CI, your AI agent or your own server, all from one Go engine. It's open
-source and costs **$0**.
+**Catch Terraform failures and security risks before `apply`.**
+
+TerraGuard checks Terraform code and plans for misconfigurations, apply-time
+errors and destructive changes. It explains every finding, fixes many of them
+automatically, and enforces your organization's standards as code. One Go
+engine runs in the browser, the editor, the terminal, CI, AI agents and your
+own server. It is open source and costs nothing to run.
 
 [![ci](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/ci.yml/badge.svg)](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/ci.yml)
 [![pages](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/pages.yml/badge.svg)](https://karthik-099.github.io/TERRAGUARD/)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-334155)](LICENSE)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-f6821f)](CONTRIBUTING.md)
 
-### ▶ [Open the web app](https://karthik-099.github.io/TERRAGUARD/): no install, no signup, your code never leaves the browser
+**[Open the web app](https://karthik-099.github.io/TERRAGUARD/)**: no install, no signup, your code stays in the browser.
 
-![TerraGuard web app](docs/screenshot.png)
+![TerraGuard workspace](docs/screenshot.png)
 
 ---
 
-## Why
+## Contents
 
-- `plan` was green, then `apply` failed on a bucket name with an underscore, or on a deprecated Lambda runtime.
-- A PR quietly replaced the production database because `identifier` changed.
-- Each resource looked fine, but together they made a public Lambda running as admin.
-- SSH was open to `0.0.0.0/0` on a DigitalOcean droplet, a Hetzner server and an OVH instance, because every cloud spells "firewall" differently.
-- The state file was committed to git. The S3 backend had no locking, and two applies corrupted it.
-- A CNAME still pointed at a deleted Heroku app (subdomain takeover).
-- The security exception was approved in Slack 8 months ago, and nobody remembers why.
+- [The problem](#the-problem)
+- [What TerraGuard does](#what-terraguard-does)
+- [Quick start](#quick-start)
+- [Architecture: phase 1, phase 2, phase 3](#architecture-phase-1-phase-2-phase-3)
+- [Policy-as-code](#policy-as-code)
+- [How AI is used](#how-ai-is-used)
+- [Integrations](#integrations)
+- [Comparison with existing tools](#comparison-with-existing-tools)
+- [Performance](#performance)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
 
-TerraGuard finds these in milliseconds, explains them, and fixes many automatically.
+---
 
-## Features
+## The problem
 
-| | |
+Terraform runs in stages, and every stage has a failure mode that is usually
+discovered too late:
+
+| Stage | What goes wrong | How TerraGuard helps |
+|---|---|---|
+| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 89 rules with exact lines and fixes, verified AI fixes |
+| **Init** | Unpinned providers; local, unencrypted or unlocked state; committed `*.tfstate` | Pinning, backend and state-file checks |
+| **Validate** | `terraform validate` needs init and credentials, and misses provider-side errors | Syntax, reference and apply-time checks with no init |
+| **Plan** | A destroy or replace of a database hides in a long plan | Plan risk with the attribute that forced replacement; rules on resolved values |
+| **Review** | Legacy findings drown new ones; standards differ per reviewer; exceptions live in chat | Diff-aware review, policy-as-code, waivers with approver and expiry |
+| **Apply** | Partial failures, data loss, no gate | Will-it-apply verdict, policy gate, GitOps pipeline with approval |
+| **Operate** | Drift, audits, no view of who follows the standards | Pulse adoption reports, compliance mapping, opt-in drift detection |
+
+## What TerraGuard does
+
+| Capability | Details |
 |---|---|
-| **Will it apply?** | Syntax, duplicates, undeclared references, `count`+`for_each`, invalid CIDRs, S3 bucket names, port ranges, deprecated runtimes, missing tfvars. No `terraform init` needed |
-| **88 rules · 14 providers** | AWS · Google Cloud · Azure · Cloudflare · DigitalOcean · Hetzner · Akamai/Linode · OVHcloud/OpenStack · Oracle Cloud · Alibaba · Vultr · Kubernetes · Helm, plus provider-agnostic checks |
-| **Attack paths** | Graph analysis: internet → open SG → public DB; public Lambda → admin role; exposed VM → admin profile |
-| **Plan risk** | `terraform show -json`: destroys/replaces of stateful resources, *with the attribute that forced it* |
-| **State & supply chain** | Unencrypted or unlocked backends, committed `*.tfstate`, unpinned providers, modules and Helm charts, mutable images |
-| **DNS / CDN** | Subdomain-takeover CNAMEs, DNSSEC, CloudFront / Azure CDN / Cloudflare TLS |
-| **Cost** | gp2 → gp3 (auto-fix), previous-gen instances, infinite log retention |
-| **Auto-fix** | One click or `terraguard fix`. Edits the syntax tree, keeps comments, warns on forced replacement |
-| **Policy-as-code** | `.terraguard.yml`: thresholds, overrides, custom rules, **expiring waivers with an approver** |
+| **Will it apply?** | Syntax, duplicates, undeclared references, `count` + `for_each`, invalid CIDRs, S3 bucket names, port ranges, deprecated Lambda runtimes, missing tfvars. No `terraform init`. |
+| **Security and correctness rules** | 89 rules across AWS, Google Cloud, Azure, Cloudflare, DigitalOcean, Hetzner, Akamai/Linode, OVHcloud/OpenStack, Oracle Cloud, Alibaba Cloud, Vultr, Kubernetes and Helm |
+| **Attack paths** | Cross-resource graph checks, e.g. a public Lambda running as an admin role |
+| **Plan risk** | Destroys and replaces of stateful resources, with the forcing attribute |
+| **Auto-fix** | Syntax-tree edits that keep comments; `terraguard fix` |
+| **Verified AI fixes** | `terraguard agent`: the AI proposes, the engine re-scans, and a change is kept only if it measurably reduces risk |
+| **Diff-aware review** | `terraguard review`: only what a PR introduces or resolves, with a risk tier |
+| **Policy-as-code** | Custom rules with `where` / `assert`, `extends` packs, risk budgets, baselines, expiring waivers, owners, policy tests, JSON Schema |
+| **Pulse** | Control adoption, waiver inventory and trend across many modules |
 | **Compliance** | Indicative mapping to CIS v8, SOC 2, PCI DSS 4.0, ISO 27001:2022, HIPAA |
-| **Docs** | terraform-docs style README (inputs, outputs, providers, resources) |
-| **CI/CD & GitOps** | GitHub Action (SARIF annotations, sticky PR comment, gate) and a pipeline generator (OIDC plan → gate → approved apply) |
-| **MCP server** | `terraguard mcp`: Claude Code / Cursor scan, fix and document Terraform |
-| **Self-hosting** | `terraguard serve` or Docker: one binary, keys stay server-side, optional bundled local LLM |
-| **Live stats** | Public dashboard: Terraform files checked today, resources analyzed, issues, fixes, active users (anonymous counts only) |
-| **AI (optional)** | Explain, remediate, rewrite, generate tests and modules, cost review, plan explanation. Free models with automatic fallback, or fully local |
+| **Docs for humans and agents** | `terraguard docs` (README) and `terraguard agents-md` (AGENTS.md) |
+| **Outputs** | Text, JSON, SARIF, JUnit, GitLab Code Quality, Markdown |
 
 ## Quick start
 
-**Web app:** open **https://karthik-099.github.io/TERRAGUARD/**, paste Terraform or drop a folder.
-
-**CLI**
-
 ```bash
+# Install (or use Docker below)
 go install github.com/Karthik-099/TERRAGUARD/cmd/terraguard@latest
-terraguard scan .                       # report; exit 1 if the policy fails
-terraguard scan . --plan plan.json      # + plan risk analysis
-terraguard fix .                        # safe auto-fixes
-terraguard docs . > README.md           # module docs
-terraguard ask "what's the riskiest thing here?"   # optional AI
+
+terraguard scan .                         # report; exit code 1 when the policy fails
+terraguard scan . --plan plan.json        # add plan risk analysis
+terraguard fix .                          # deterministic auto-fixes
+terraguard agent . --write                # plus AI fixes, each verified by the engine
+terraguard review --base origin/main .    # judge only what this branch introduces
+terraguard pulse ./infra                  # adoption and waivers across many modules
+terraguard docs . > README.md             # module documentation
+terraguard agents-md . > AGENTS.md        # instructions for AI coding agents
+terraguard policy test policies/tests     # unit-test your own policy
+
+# Docker, no Go required
+docker run --rm -v "$PWD:/src" -w /src ghcr.io/karthik-099/terraguard scan .
 ```
 
-**GitHub Action**
+Exit codes: `0` passed, `1` the policy gate failed, `2` usage or runtime error.
 
-```yaml
-on:
-  pull_request:
-    paths: ["**/*.tf", "**/*.tfvars", ".terraguard.yml"]   # only when Terraform changes
-permissions: { contents: read, pull-requests: write, security-events: write }
-jobs:
-  terraguard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Karthik-099/TERRAGUARD@main
-        with: { path: infra, fail-on: HIGH }
-```
+## Architecture: phase 1, phase 2, phase 3
 
-The web app's **CI/CD** tab generates a full pipeline: fmt → validate → OIDC plan → TerraGuard gate → approved apply.
-
-**Self-host (private)**
-
-```bash
-git clone https://github.com/Karthik-099/TERRAGUARD && cd TERRAGUARD
-cp .env.example .env     # free keys, a local model, or nothing
-make serve               # http://127.0.0.1:8080
-# or: docker compose --profile local-llm up -d   (bundled Ollama, nothing leaves your network)
-```
-
-**MCP:** `claude mcp add terraguard -- terraguard mcp`
-
-## Is AI required? No.
-
-Scanning, validation, plan analysis, auto-fix, policy, compliance, docs and the
-CI gate are deterministic, so they're free, offline and reproducible. The AI
-only gives **responses and suggestions** and never decides pass/fail.
-
-When you do use it, TerraGuard routes across **free** models and falls back
-automatically if one is rate-limited or down:
-
-```
-groq: gpt-oss-120b → llama-3.3-70b → gpt-oss-20b
-  → openrouter: nemotron :free → gemma :free → openrouter/free (any live free model)
-  → gemini: 2.5-flash → 2.5-flash-lite
-  → your local Ollama / LM Studio
-```
-
-| Provider | Free key | Cost |
-|---|---|---|
-| Groq | https://console.groq.com/keys | $0 free tier |
-| OpenRouter | https://openrouter.ai/keys | $0 (`:free` models only) |
-| Google Gemini | https://aistudio.google.com/apikey | $0 free tier |
-| Ollama (local) | https://ollama.com/download | $0, runs on your machine |
-
-For **full privacy**, set `TERRAGUARD_AI_LOCAL_ONLY=true` (or tick **Private
-mode** in the web app). Hosted providers are then never called, and your code
-never leaves your machine. See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
-
-## Cost: $0
-
-| Piece | Runs on | Cost |
-|---|---|---|
-| Web app | GitHub Pages | $0 |
-| CI gate, SARIF, PR comments | GitHub Actions (public repo) | $0 |
-| AI | Groq / OpenRouter free / Gemini free / local Ollama | $0 |
-| Self-hosted server | Your machine | $0 |
-| Live stats counters (optional) | Cloudflare Workers free plan | $0, and skippable |
-
-## Architecture
+### Phase 1: AI-only MVP (April 2026)
 
 ```mermaid
 flowchart LR
-  E["engine/ (Go)<br/>parser · 88 rules · graph · plan · policy · compliance · docs · autofix"]
-  E -- WASM --> W[Web app<br/>GitHub Pages]
-  E --> C[CLI] --> A[GitHub Action]
-  C --> M[MCP server]
-  C --> S[Self-hosted server]
-  W -. optional .-> L[(free AI models<br/>or local Ollama)]
-  S -. optional .-> L
+  U[Browser page] -->|whole file| F[Flask API] -->|prompt| G[(GPT-4o)]
+  G -->|unstructured JSON| F --> U
 ```
 
-The full HLD/LLD, every application and pipeline, the AI routing, the stats
-dashboard, and the security and privacy model are in
-**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+It proved that developers want structured, severity-ranked findings with
+fixes. But it could not be trusted as a gate:
+
+- Each scan cost money and sent the code to a third party.
+- Findings and line numbers changed between runs.
+- It needed a server and an API key, and handled one file at a time.
+- There were no plans, policies or fixes.
+
+### Phase 2: deterministic engine (now)
+
+```mermaid
+flowchart TB
+  subgraph Engine["engine/ (Go, no I/O)"]
+    P[HCL parser] --> N[Normalized resource model]
+    PL[Plan JSON] --> N
+    N --> R[89 rules] & M[Module and graph checks]
+    R & M --> POL[Policy: packs, budgets, baselines, waivers]
+    POL --> REP[Report, verdict, compliance]
+    REP --> OUT[SARIF / JUnit / Code Quality / JSON / Markdown]
+    V[Verify] -.-> REP
+  end
+  Engine -->|WebAssembly| WEB[Web app]
+  Engine --> CLI[CLI: scan fix review agent pulse docs agents-md policy]
+  CLI --> ACT[GitHub Action] & MCP[MCP server] & SRV[Self-hosted server] & VSC[VS Code]
+  AI[(Optional AI: free or local models)] -. proposes .-> V
+```
+
+- **One engine, many surfaces.** The browser, editor, CLI, CI, agents and server all produce the same result for the same input.
+- **The engine decides.** The AI explains and proposes. `engine.Verify` accepts a change only if apply still works, no new medium-or-higher issue appears, and the risk weight goes down.
+- **No backend to run.** The public site is static and the engine runs in the browser as WebAssembly.
+
+### Phase 3: next
+
+- Validate arguments against provider schemas (`terraform providers schema -json`).
+- Module-aware analysis that follows local modules with their inputs.
+- A language server so every editor gets diagnostics.
+- SARIF inline fix suggestions.
+- OPA/Rego import.
+- Cost estimates for plan changes.
+
+The full HLD and LLD are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). For a guided tour, read [docs/ACADEMY.md](docs/ACADEMY.md).
+
+## Policy-as-code
+
+```yaml
+# .terraguard.yml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Karthik-099/TERRAGUARD/main/schema/terraguard.schema.json
+extends: [https://example.com/org-baseline.yml]   # inherit an organization baseline
+fail_on: MEDIUM
+max_findings: { HIGH: 0, MEDIUM: 10 }             # risk budget
+severity_overrides: { "TG-AWS-RDS-*": CRITICAL }  # globs everywhere
+disable: ["TG-CF-*"]
+
+custom_rules:
+  - id: ORG-PROD-001
+    title: Production databases are multi-AZ with 14+ days of backups
+    owner: data-platform
+    docs_url: https://wiki.example.com/standards/databases
+    resource_types: [aws_db_instance, aws_rds_cluster]
+    where:  [{ attribute: tags.env, equals: prod }]
+    assert:
+      - { attribute: multi_az, equals: true }
+      - { attribute: backup_retention_period, min: 14 }
+
+waivers:
+  - rule: ORG-EC2-001
+    resource: aws_instance.legacy_batch
+    reason: Pinned to m5 until the Q1 migration
+    approved_by: payments-lead
+    expires: "2027-03-31"        # expired waivers re-activate the finding
+```
+
+| Feature | Use it to |
+|---|---|
+| `extends` | Layer organization, platform and team policies (local paths or https) |
+| `where` / `assert` | Scope a rule (e.g. production only) and require several conditions |
+| Operators | `exists`, `equals`, `not_equals`, `in`, `not_in`, `matches`, `not_matches`, `contains`, `min`, `max` |
+| `max_findings` | Gate on counts and tighten gradually |
+| `scan --write-baseline` / `--baseline` | Adopt on an existing codebase: only new findings fail |
+| `review --base` | Gate pull requests on what they introduce |
+| Waivers | Exceptions with a reason, an approver and an expiry; inline `# terraguard:ignore` too |
+| `owner`, `docs_url` | Route every finding to the team that owns the standard |
+| `policy validate`, `policy test` | Check the policy and unit-test it with fixtures |
+| JSON Schema | Autocomplete and validation in any editor |
+
+A complete example lives in [examples/policies](examples/policies).
+
+## How AI is used
+
+AI is **optional**, and it never decides pass or fail.
+
+| Used for | Not used for |
+|---|---|
+| Explaining a finding and its impact | Gating CI |
+| Proposing fixes the rules cannot make (verified by the engine) | Judging its own fixes |
+| Generating `terraform test` files and modules | Any change without your review |
+| Summarizing a plan or a full-tier review | |
+
+Measured on the demo project with a free Groq model: deterministic fixes took
+the risk weight from **224 to 123**, and one verified AI fix took it to **24**.
+A second AI proposal was **rejected** by the engine because it introduced a
+new issue.
+
+| Provider | Free key | Cost |
+|---|---|---|
+| Groq | https://console.groq.com/keys | Free tier |
+| OpenRouter | https://openrouter.ai/keys | `:free` models |
+| Google Gemini | https://aistudio.google.com/apikey | Free tier |
+| Ollama, LM Studio, vLLM | https://ollama.com/download | Local; nothing leaves your machine |
+
+TerraGuard falls back across models and providers automatically. Set
+`TERRAGUARD_AI_LOCAL_ONLY=true`, or turn on Private mode in the web app, to
+never call a hosted model.
+
+## Integrations
+
+| Where | How |
+|---|---|
+| Browser | [Web app](https://karthik-099.github.io/TERRAGUARD/) (WebAssembly, offline after load) |
+| VS Code | `editors/vscode`: diagnostics on save, quick fixes. `.vsix` attached to each release |
+| pre-commit | `.pre-commit-hooks.yaml`: hooks `terraguard` and `terraguard-fix` |
+| GitHub Actions | `uses: Karthik-099/TERRAGUARD@main` with `command: scan`, `review` or `pulse` |
+| GitLab CI | [templates/gitlab-ci.yml](templates/gitlab-ci.yml): Code Quality and JUnit in the merge request |
+| Jenkins | [templates/Jenkinsfile](templates/Jenkinsfile) |
+| Any CI | JSON, SARIF, JUnit or Markdown output; exit codes |
+| AI agents | `terraguard mcp`: tools `scan_terraform`, `fix_terraform`, `generate_docs`, `generate_agents_md`, `list_rules` |
+| Platform | `terraguard serve`: web app plus HTTP API (`/api/scan`, `/api/fix`, `/api/ai/chat`, `/api/stats`), Docker image on GHCR |
+
+The pipeline generator in the web app creates a full GitHub Actions workflow:
+fmt, validate, OIDC plan, TerraGuard gate, approval and apply.
+
+## Comparison with existing tools
+
+| | TerraGuard | Checkov | Trivy (tfsec) | TFLint | `terraform validate` |
+|---|---|---|---|---|---|
+| Runs in the browser, no install | Yes | No | No | No | No |
+| Security policy breadth | 89 rules | 1,000+ policies | Hundreds | Correctness focus | None |
+| Apply-time validation | Common failures | No | No | Deep, provider rulesets | Syntax and references |
+| Plan destroy and replace risk | Yes, with cause | Security only | Security only | No | No |
+| Diff-aware PR gating | Yes | Baseline file | No | No | No |
+| Auto-fix | Yes, plus verified AI fixes | Not in open source | No | Some rules | No |
+| Waivers with approver and expiry | Yes | Skip comments | Expiry in comments | Ignore comments | No |
+| Org adoption reporting | Pulse | Paid platform | No | No | No |
+
+Mature scanners have broader libraries. TerraGuard focuses on the developer
+workflow and works well alongside them. This comparison is based on public
+documentation as of November 2026; corrections are welcome as an issue.
+
+## Performance
+
+| Measurement | Result |
+|---|---|
+| Full scan of a 12-resource module (native) | 1.3 ms |
+| 200 files, 2,400 resources, 6,800 findings | 0.25 s, about 55 MB of memory |
+| Network calls during a scan | 0 |
+| Rule evals (45 labelled cases) | 100% recall, 100% precision |
+
+Reproduce these with `go test -bench Scan ./engine` and `make evals`.
+
+## Documentation
+
+- [docs/ACADEMY.md](docs/ACADEMY.md): how Terraform works, where it breaks, and how every TerraGuard feature works
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): HLD, LLD, pipelines and design decisions
+- [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md): Docker, private AI and secrets
+- [CONTRIBUTING.md](CONTRIBUTING.md): add a rule in about 20 lines plus two test cases
 
 ## Develop
 
 ```bash
-make test        # Go vet + unit tests (engine, AI router, server, stats)
-make evals       # 43 labelled cases: 100% recall/precision gate
-make serve       # full app locally
-make secrets     # fail if any credential is tracked
+make test         # vet and unit tests
+make evals        # rule recall and precision gate
+make policy-test  # example policy pack fixtures
+make serve        # the full app at http://127.0.0.1:8080
+make secrets      # fail if a credential is tracked
 ```
 
 ## Contributing
 
-Rules, false-positive reports, new providers and ideas are all welcome. See
-**[CONTRIBUTING.md](CONTRIBUTING.md)**. A new rule is about 20 lines of Go plus
-two eval cases, and it shows up everywhere automatically.
-
-- 💬 [Discussions](https://github.com/Karthik-099/TERRAGUARD/discussions)
-- 💡 [Suggest a rule](https://github.com/Karthik-099/TERRAGUARD/issues/new?template=rule_request.yml)
-- 🐞 [Report a false positive](https://github.com/Karthik-099/TERRAGUARD/issues/new?template=false_positive.yml)
+New rules, providers, policy packs and integrations are welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md), open a
+[rule request](https://github.com/Karthik-099/TERRAGUARD/issues/new?template=rule_request.yml),
+or join the [discussions](https://github.com/Karthik-099/TERRAGUARD/discussions).
 
 ## License
 

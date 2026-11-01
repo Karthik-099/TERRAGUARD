@@ -1,4 +1,4 @@
-name: 💡 Rule request
+name: Rule request
 description: A misconfiguration or apply failure TerraGuard should catch
 labels: [rule-request]
 body:

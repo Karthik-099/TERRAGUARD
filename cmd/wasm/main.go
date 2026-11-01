@@ -68,6 +68,12 @@ func main() {
 			case "sarif":
 				b, _ := engine.SARIF(rep)
 				return string(b)
+			case "junit":
+				b, _ := engine.JUnit(rep)
+				return string(b)
+			case "codequality":
+				b, _ := engine.CodeQuality(rep)
+				return string(b)
 			}
 			b, _ := json.MarshalIndent(rep, "", "  ")
 			return string(b)
@@ -82,6 +88,37 @@ func main() {
 				return ""
 			}
 			return engine.Docs(in.Files)
+		}),
+		// verifyChange({files, plan, config, changed}) scans before and after a
+		// proposed edit and returns the engine's accept/reject decision.
+		"verifyChange": js.FuncOf(func(_ js.Value, args []js.Value) any {
+			var in struct {
+				engine.Input
+				Changed map[string]string `json:"changed"`
+			}
+			if len(args) == 0 || json.Unmarshal([]byte(args[0].String()), &in) != nil {
+				return `{"error":"invalid input JSON"}`
+			}
+			before := engine.Scan(in.Input)
+			after := in.Input
+			after.Files = map[string]string{}
+			for k, v := range in.Files {
+				after.Files[k] = v
+			}
+			for k, v := range in.Changed {
+				after.Files[k] = v
+			}
+			rep := engine.Scan(after)
+			ok, reason := engine.Verify(before, rep)
+			b, _ := json.Marshal(map[string]any{"ok": ok, "reason": reason, "before": engine.RiskWeight(before), "after": engine.RiskWeight(rep)})
+			return string(b)
+		}),
+		"agentsMD": js.FuncOf(func(_ js.Value, args []js.Value) any {
+			var in engine.Input
+			if len(args) == 0 || json.Unmarshal([]byte(args[0].String()), &in) != nil {
+				return ""
+			}
+			return engine.AgentsMD(in.Files, in.Config)
 		}),
 		"rules": jsonFn(func(engine.Input) any { return engine.Catalog() }),
 	}))

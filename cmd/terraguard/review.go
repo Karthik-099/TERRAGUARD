@@ -1,0 +1,112 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+
+	"github.com/Karthik-099/TERRAGUARD/engine"
+	"github.com/Karthik-099/TERRAGUARD/internal/ai"
+)
+
+// runReview reviews a change the way a code reviewer would: it scans the base
+// revision and the working tree, reports only what the change introduces or
+// resolves, assigns a risk tier, and gates only on new findings.
+func runReview(args []string) (int, error) {
+	fset := flag.NewFlagSet("review", flag.ContinueOnError)
+	base := fset.String("base", "origin/main", "git revision to compare against (e.g. the PR base SHA)")
+	format := fset.String("format", "markdown", "stdout format: markdown or json")
+	mdOut := fset.String("markdown", "", "also write Markdown to this file")
+	jsonOut := fset.String("json", "", "also write JSON to this file")
+	failOn := fset.String("fail-on", "", "override the policy threshold")
+	config := fset.String("config", "", "")
+	useAI := fset.Bool("ai", false, "add an advisory AI summary for full-tier reviews")
+	paths, err := parseInterspersed(fset, args)
+	if err != nil {
+		return 2, err
+	}
+	head, err := buildInput(paths, "", *config, *failOn)
+	if err != nil {
+		return 2, err
+	}
+	baseFiles, err := gitFilesAt(*base, paths)
+	if err != nil {
+		return 2, err
+	}
+	diff, err := git("diff", "--name-only", "--relative", *base, "--")
+	if err != nil {
+		return 2, err
+	}
+	baseRep := engine.Scan(engine.Input{Files: baseFiles, Config: head.Config, FailOn: head.FailOn})
+	headRep := engine.Scan(head)
+	rev := engine.NewReview(baseRep, headRep, engine.ChangedTerraform(strings.Fields(diff)))
+
+	md := rev.Markdown()
+	// Like model routing by risk tier: only full reviews are worth an AI call.
+	if *useAI && rev.Tier == "full" && len(rev.New) > 0 {
+		var list strings.Builder
+		for _, f := range rev.New {
+			fmt.Fprintf(&list, "- [%s] %s %s:%d %s: %s\n", f.Severity, f.RuleID, f.File, f.Line, f.Title, f.Message)
+		}
+		res, err := ai.Chat(context.Background(), []ai.Message{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: "A pull request introduces these Terraform findings:\n" + list.String() + "\nIn at most 5 bullets, explain the combined risk to a reviewer and the order to fix them. No preamble."},
+		})
+		if err == nil {
+			md += fmt.Sprintf("### AI summary (advisory)\n\n%s\n\n<sub>%s %s. The findings above decide the review.</sub>\n", res.Text, res.Provider, res.Model)
+		}
+	}
+	js, _ := json.MarshalIndent(rev, "", "  ")
+	for path, content := range map[string]string{*mdOut: md, *jsonOut: string(js) + "\n"} {
+		if path != "" {
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				return 2, err
+			}
+		}
+	}
+	if *format == "json" {
+		fmt.Println(string(js))
+	} else {
+		fmt.Print(md)
+	}
+	if !rev.Passed {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+func git(args ...string) (string, error) {
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(ee.Stderr)))
+		}
+		return "", err
+	}
+	return string(out), nil
+}
+
+// gitFilesAt reads .tf/.tfvars files under paths at a revision, keyed the
+// same way loadFiles keys the working tree (relative to the current dir).
+func gitFilesAt(rev string, paths []string) (map[string]string, error) {
+	list, err := git(append([]string{"ls-tree", "-r", "--name-only", rev, "--"}, paths...)...)
+	if err != nil {
+		return nil, err
+	}
+	files := map[string]string{}
+	for _, p := range strings.Fields(list) {
+		if !strings.HasSuffix(p, ".tf") && !strings.HasSuffix(p, ".tfvars") {
+			continue
+		}
+		src, err := git("show", rev+":./"+p)
+		if err != nil {
+			return nil, err
+		}
+		files[p] = src
+	}
+	return files, nil
+}

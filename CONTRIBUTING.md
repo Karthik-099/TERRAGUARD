@@ -30,6 +30,11 @@ bin/terraguard scan examples/insecure --plan examples/plan.json
 | `engine/` | Pure-Go analysis core: parser, rules (`rules.go`, `rules_clouds.go`), graph checks, plan, policy, compliance, docs, autofix, report formats |
 | `internal/ai/` | Free-model router with fallback, `.env` loader, key redaction |
 | `internal/stats/` | Anonymous counters for the self-hosted dashboard |
+| `internal/pulse/` | Adoption, waiver and trend aggregation for `terraguard pulse` |
+| `editors/vscode/` | VS Code extension (diagnostics and quick fixes via the CLI) |
+| `templates/` | GitLab CI and Jenkins templates |
+| `schema/` | JSON Schema for `.terraguard.yml` |
+| `examples/policies/` | Example policy pack (org baseline, team policy, fixtures) |
 | `cmd/terraguard/` | CLI (`scan`, `fix`, `docs`, `ask`, `rules`), MCP server (`mcp`), self-hosted server (`serve`) |
 | `cmd/wasm/` | WebAssembly bridge used by the web app |
 | `web/` | Static site (GitHub Pages), also embedded in `terraguard serve` |
@@ -72,6 +77,16 @@ bin/terraguard scan examples/insecure --plan examples/plan.json
 3. Run `make test evals`, then open a PR. The rule appears automatically in the
    CLI, the Action, the MCP server and the web app's Rules tab.
 
+## Contributing a policy pack
+
+Policy packs are plain `.terraguard.yml` files that others `extends`. To
+share one, add it under `examples/policies/` with fixtures in a `tests/`
+folder, and make sure `terraguard policy test` passes:
+
+```bash
+bin/terraguard policy test examples/policies/tests --config examples/policies/team-payments.yml
+```
+
 ## Guidelines
 
 * **Precision over recall.** A noisy rule gets disabled by users, so only flag what you can prove from the code.
@@ -79,6 +94,7 @@ bin/terraguard scan examples/insecure --plan examples/plan.json
 * The LLM never gates anything. AI features must stay optional, and only free or local models may be defaults.
 * Never log, return or commit keys. Use `ai.Redact` for any provider error you surface.
 * Commit messages: `feat(rules): ...`, `fix(engine): ...`, `docs: ...`.
+* No emojis in code, UI text, reports or docs.
 
 ## Reporting security issues
 

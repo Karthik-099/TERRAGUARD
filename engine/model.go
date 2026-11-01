@@ -50,6 +50,8 @@ type Finding struct {
 	File        string   `json:"file,omitempty"`
 	Line        int      `json:"line,omitempty"`
 	Remediation string   `json:"remediation,omitempty"`
+	Owner       string   `json:"owner,omitempty"` // team that owns the standard (custom rules)
+	Docs        string   `json:"docs,omitempty"`  // link to the standard
 	CWE         string   `json:"cwe,omitempty"`
 	Related     []string `json:"related,omitempty"`
 	Fix         *Fix     `json:"fix,omitempty"`

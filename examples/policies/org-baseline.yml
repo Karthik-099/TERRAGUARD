@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Karthik-099/TERRAGUARD/main/schema/terraguard.schema.json
+# Organization-wide baseline. Publish it once (a repo path or an https URL)
+# and let every team inherit it with `extends`.
+fail_on: HIGH
+
+# Gradual rollout: allow a few medium findings while teams catch up.
+max_findings:
+  MEDIUM: 10
+
+custom_rules:
+  - id: ORG-TAG-001
+    title: Every resource declares an owner and a cost center
+    severity: MEDIUM
+    owner: platform-team
+    docs_url: https://github.com/Karthik-099/TERRAGUARD/blob/main/docs/ACADEMY.md#custom-policies
+    resource_types: ["aws_*", "google_*", "azurerm_*"]
+    assert:
+      - { attribute: tags.owner, exists: true }
+      - { attribute: tags.cost_center, matches: "^CC-[0-9]{4}$" }
+    remediation: Add tags = { owner = "<team>", cost_center = "CC-1234" }.
+
+  - id: ORG-PROD-001
+    title: Production databases are multi-AZ with at least 14 days of backups
+    severity: HIGH
+    owner: data-platform
+    resource_types: [aws_db_instance, aws_rds_cluster]
+    where:
+      - { attribute: tags.env, equals: prod }
+    assert:
+      - { attribute: multi_az, equals: true }
+      - { attribute: backup_retention_period, min: 14 }
+
+  - id: ORG-EC2-001
+    title: Only approved instance families
+    severity: MEDIUM
+    owner: finops
+    resource_types: [aws_instance, aws_launch_template]
+    attribute: instance_type
+    matches: "^(t3|t4g|m7g|m7i|c7g|r7g)\\."

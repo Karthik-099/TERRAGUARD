@@ -1,7 +1,7 @@
 # TerraGuard developer commands. Requires Go (see go.mod); Python 3 for evals.
 BIN := bin/terraguard
 
-.PHONY: all build test web serve evals worker-test secrets clean
+.PHONY: all build test web serve evals policy-test worker-test secrets clean
 
 all: test build web
 
@@ -22,6 +22,9 @@ serve: build          ## self-hosted app on http://127.0.0.1:8080 (reads .env)
 
 evals: build          ## rule precision/recall regression gate
 	python3 evals/run_evals.py --binary $(BIN)
+
+policy-test: build    ## run the example policy pack's fixtures
+	$(BIN) policy test examples/policies/tests --config examples/policies/team-payments.yml
 
 worker-test:          ## Cloudflare stats worker unit tests
 	cd stats-worker && npm test

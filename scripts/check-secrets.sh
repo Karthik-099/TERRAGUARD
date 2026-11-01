@@ -23,7 +23,7 @@ fi
 
 fail=0
 # .env must never be tracked.
-if echo "$files" | grep -qE '(^|/)\.env$'; then echo "✗ .env is tracked by git"; fail=1; fi
+if echo "$files" | grep -qE '(^|/)\.env$'; then echo "error: .env is tracked by git"; fail=1; fi
 for f in $files; do
   [ -f "$f" ] || continue
   [ "$f" = scripts/check-secrets.sh ] && continue
@@ -33,10 +33,10 @@ for f in $files; do
   esac
   for p in "${patterns[@]}"; do
     if grep -nE -- "$p" "$f" 2>/dev/null | grep -vE -- "$allow" | grep -q .; then
-      echo "✗ possible secret in $f (pattern: $p)"
+      echo "error: possible secret in $f (pattern: $p)"
       fail=1
     fi
   done
 done
-[ $fail -eq 0 ] && echo "✓ no secrets found in $(echo "$files" | wc -l) files"
+[ $fail -eq 0 ] && echo "ok: no secrets found in $(echo "$files" | wc -l) files"
 exit $fail

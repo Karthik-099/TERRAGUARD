@@ -56,9 +56,9 @@ func aiSection(rep *engine.Report, in engine.Input) string {
 		{Role: "user", Content: aiContext(rep, in.Files, 12000) + "\nWrite a short markdown section: 1) the single most important risk in one sentence, 2) a prioritized fix plan (max 5 bullets) with exact Terraform snippets where useful. No preamble."},
 	})
 	if err != nil {
-		return "\n<details><summary>🤖 AI review unavailable</summary>\n\n```\n" + err.Error() + "\n```\n</details>\n"
+		return "\n<details><summary>AI review unavailable</summary>\n\n```\n" + err.Error() + "\n```\n</details>\n"
 	}
-	return fmt.Sprintf("\n### 🤖 AI remediation plan\n\n%s\n\n<sub>%s · %s — AI suggestions are advisory; the deterministic findings above decide the gate.</sub>\n", res.Text, res.Provider, res.Model)
+	return fmt.Sprintf("\n### AI remediation plan (advisory)\n\n%s\n\n<sub>%s · %s — AI suggestions are advisory; the deterministic findings above decide the gate.</sub>\n", res.Text, res.Provider, res.Model)
 }
 
 func runAsk(args []string) error {

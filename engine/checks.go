@@ -15,6 +15,7 @@ var ModuleRules = []Rule{
 	{ID: "TG-VAL-003", Title: "Reference to undeclared object (validate will fail)", Severity: High, Category: CatValidate, Blocking: true, Remediation: "Declare the referenced object, fix the typo, or include the file that declares it in the scan."},
 	{ID: "TG-VAL-008", Title: "Required variable has no value", Severity: Medium, Category: CatValidate, Remediation: "Add it to a .tfvars file, give it a default, or export TF_VAR_<name>; CI runs with -input=false fail otherwise."},
 	{ID: "TG-VAL-009", Title: "tfvars sets an undeclared variable", Severity: Low, Category: CatValidate, Remediation: "Remove the value or declare the variable; terraform warns and the value is silently ignored."},
+	{ID: "TG-TF-004", Title: "Variable or output has no description", Severity: Info, Category: CatBestPrac, Remediation: "Add description = \"...\" so module users (and generated docs) know what it is for."},
 	{ID: "TG-VAL-010", Title: "Unused variable", Severity: Info, Category: CatBestPrac, Remediation: "Delete it to keep the module interface honest."},
 	{ID: "TG-SEC-001", Title: "Hardcoded secret in configuration", Severity: High, Category: CatSecurity, CWE: "CWE-798", Remediation: "Read it from a sensitive variable, AWS Secrets Manager / SSM data source, or use manage_master_user_password for RDS. Rotate the leaked value — it is in git history."},
 	{ID: "TG-SEC-002", Title: "Credential pattern found in file", Severity: Critical, Category: CatSecurity, CWE: "CWE-798", Remediation: "Revoke the credential immediately, remove it from git history, and use OIDC / a secrets manager instead."},
@@ -175,6 +176,12 @@ func declarationChecks(m *Module) []Finding {
 		}
 	}
 
+	for _, b := range m.Blocks {
+		if b.Kind == "output" && len(b.Labels) == 1 && b.Attrs["description"] == nil {
+			out = append(out, newFinding("TG-TF-004", "", fmt.Sprintf("Output %q has no description.", b.Labels[0]), "output."+b.Labels[0], b.File, b.Line))
+		}
+	}
+
 	tfvarsSet := map[string]bool{}
 	for file, vars := range m.Tfvars {
 		for name, line := range vars {
@@ -192,6 +199,9 @@ func declarationChecks(m *Module) []Finding {
 		_, hasDefault := b.Attrs["default"]
 		if len(m.Tfvars) > 0 && !hasDefault && !tfvarsSet[name] {
 			out = append(out, newFinding("TG-VAL-008", "", fmt.Sprintf("Variable %q has no default and is not set in any .tfvars file.", name), b.Address(), b.File, b.Line))
+		}
+		if b.Attrs["description"] == nil {
+			out = append(out, newFinding("TG-TF-004", "", fmt.Sprintf("Variable %q has no description.", name), b.Address(), b.File, b.Line))
 		}
 		if !used["var."+name] {
 			out = append(out, newFinding("TG-VAL-010", "", fmt.Sprintf("Variable %q is declared but never referenced.", name), b.Address(), b.File, b.Line))

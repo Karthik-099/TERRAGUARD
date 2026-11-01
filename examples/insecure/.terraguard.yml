@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Karthik-099/TERRAGUARD/main/schema/terraguard.schema.json
 # Engineering standards as code. Commit this next to your Terraform.
 fail_on: HIGH
 

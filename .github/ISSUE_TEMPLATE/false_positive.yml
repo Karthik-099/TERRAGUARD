@@ -1,4 +1,4 @@
-name: 🐞 False positive or bug
+name: False positive or bug
 description: TerraGuard flagged something that is fine, missed something, or crashed
 labels: [bug]
 body:

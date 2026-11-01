@@ -68,7 +68,7 @@ flowchart TB
     direction LR
     P[HCL parser<br/>hashicorp/hcl] --> N[Normalized<br/>Resource model]
     PL[Plan JSON] --> N
-    N --> R[88 rules<br/>14 providers]
+    N --> R[89 rules<br/>14 providers]
     N --> M[Module checks<br/>validate · secrets · state · pinning]
     N --> G[Graph checks<br/>attack paths]
     R & M & G --> POL[Policy<br/>waivers · overrides · custom rules]
@@ -78,11 +78,11 @@ flowchart TB
     DOC[Docs generator]
   end
 
-  Engine -- GOOS=js GOARCH=wasm --> WEB[① Web app<br/>GitHub Pages]
-  Engine --> CLI[② CLI]
-  CLI --> ACT[③ GitHub Action]
-  CLI --> MCP[④ MCP server]
-  CLI --> SRV[⑤ Self-hosted server<br/>web + API + AI proxy]
+  Engine -- GOOS=js GOARCH=wasm --> WEB[Web app<br/>GitHub Pages]
+  Engine --> CLI[CLI]
+  CLI --> ACT[GitHub Action]
+  CLI --> MCP[MCP server]
+  CLI --> SRV[Self-hosted server<br/>web + API + AI proxy]
 
   AIR[internal/ai<br/>fallback router] --- CLI
   AIR --- SRV
@@ -98,14 +98,16 @@ flowchart TB
 
 | # | Application | Who uses it | Entry point | Runs on |
 |---|---|---|---|---|
-| ① | **Web app** | Anyone: paste, drop a folder, edit, fix, share | `web/` + `cmd/wasm` | Visitor's browser (GitHub Pages / Cloudflare Pages / any static host) |
-| ② | **CLI** | Engineers, pre-commit hooks | `cmd/terraguard` | Laptop, any CI |
-| ③ | **GitHub Action** | Teams: PR gate, GitOps | `action.yml` | User's GitHub runner |
-| ④ | **MCP server** | AI coding agents (Claude Code, Cursor, …) | `terraguard mcp` | Developer machine (stdio) |
-| ⑤ | **Self-hosted server** | Teams wanting one private URL and shared keys | `terraguard serve` / Docker | User's server or laptop |
-| — | **Stats worker** | Public dashboard counters | `stats-worker/` | Cloudflare (free plan) |
+| 1 | **Web app** | Anyone: paste, drop a folder, edit, fix, share | `web/` + `cmd/wasm` | Visitor's browser (GitHub Pages / Cloudflare Pages / any static host) |
+| 2 | **CLI** | Engineers, pre-commit hooks | `cmd/terraguard` | Laptop, any CI |
+| 3 | **GitHub Action** | Teams: PR gate, GitOps | `action.yml` | User's GitHub runner |
+| 4 | **MCP server** | AI coding agents (Claude Code, Cursor, …) | `terraguard mcp` | Developer machine (stdio) |
+| 5 | **Self-hosted server** | Teams wanting one private URL and shared keys | `terraguard serve` / Docker | User's server or laptop |
+| 6 | **VS Code extension** | Engineers while typing | `editors/vscode` | Developer machine (calls the CLI) |
+| 7 | **CI templates** | GitLab CI, Jenkins | `templates/` | User's runners (Docker image) |
+| - | **Stats worker** | Public dashboard counters (optional) | `stats-worker/` | Cloudflare (free plan) |
 
-### ① Web app
+### 3.1 Web app
 
 ```mermaid
 flowchart LR
@@ -116,23 +118,50 @@ flowchart LR
   TABS -- Apply fix / Fix all --> AF[terraguard.applyFixes] --> ED
   TABS -- Ignore inline / Add waiver --> POLICY[Policy tab] --> SC
   TABS -- Ask AI / Deep review --> AI[ai.js router] --> CHAT[Chat · Apply code] --> ED
-  OV --> LIVE[Live stats]
-  ED --> SH[Share link<br/>deflate → URL fragment]
+  TABS -- AI fix --> VF[terraguard.verifyChange] --> ED
+  ED --> SH[Share link<br/>deflate into URL fragment]
 ```
 
-Tabs: Overview (score ring, severity, categories, clouds, top risks, compliance), Findings (severity and cloud filters, fix / ignore / waive / false-positive), Will it apply?, Plan, Graph (attack paths in red), Compliance, AI assistant, Policy, Docs, CI/CD generator, Live stats, Rules, Community (GitHub stats and giscus comments). Light and dark themes are available.
+The site has two views. The **product page** explains the Terraform lifecycle, the architecture, AI usage, policy, comparisons, integrations and open-source contribution. The **workspace** (`#/app`) loads the engine and editor lazily and has these tabs: Overview (score, will-it-apply checks, gate reasons, top risks, compliance), Findings, Plan, Graph, Compliance, Policy, Docs (README or AGENTS.md), Assistant, Pipeline generator and Rules.
 
-### ② CLI
+### 3.2 CLI
 
-```text
-terraguard scan [paths] [--plan plan.json] [--format text|json|sarif|markdown] [--fail-on SEV] [--ai]
-terraguard fix  [paths]          terraguard docs [path]        terraguard rules
-terraguard ask "question" [paths]   terraguard ai (show route)   terraguard serve   terraguard mcp
-```
+| Command | Purpose |
+|---|---|
+| `scan [paths] [--plan] [--format text,json,sarif,junit,codequality,markdown] [--baseline] [--write-baseline]` | Full analysis and policy gate |
+| `review --base REV [paths]` | Diff-aware review: new and resolved findings, risk tier, gate on new only |
+| `fix [paths]` | Deterministic auto-fixes |
+| `agent [paths] [--write]` | Deterministic fixes, then AI proposals verified by `engine.Verify` |
+| `pulse [roots] [--baseline] [--json]` | Control adoption, waivers and trend across modules |
+| `policy validate`, `policy test DIR` | Check a policy (with `extends`) and run fixture tests |
+| `docs`, `agents-md` | README and AGENTS.md generation |
+| `ask`, `ai` | Advisory AI questions; show the fallback route |
+| `serve`, `mcp`, `rules` | Self-hosted server, MCP server, rule catalog |
 
 It reads `.env` automatically (keys are case-insensitive) and exits 0 when the policy passes, 1 when it fails, and 2 on error.
 
-### ⑤ Self-hosted server
+### 3.3 Review, agent and pulse
+
+```mermaid
+flowchart LR
+  subgraph review[terraguard review]
+    B[git show base:file] --> SB[Scan base]
+    H[working tree] --> SH[Scan head]
+    SB & SH --> D[Diff by finding key<br/>rule + file + resource]
+    D --> T[Tier: trivial, lite, full<br/>gate on new only]
+  end
+  subgraph agent[terraguard agent]
+    F1[FixAll] --> L[per file: AI proposal] --> VV[Verify before vs after] --> K{keep?}
+  end
+  subgraph pulse[terraguard pulse]
+    MD[discover module dirs] --> SM[scan each with nearest policy] --> AG[adoption, waivers, top rules, trend]
+  end
+```
+
+Finding keys deliberately exclude line numbers, so unrelated edits above a
+finding don't make it look new.
+
+### 3.4 Self-hosted server
 
 ```mermaid
 sequenceDiagram
@@ -228,7 +257,7 @@ sequenceDiagram
   participant S as Scan()
   participant P as Parse()
   participant MC as moduleChecks()
-  participant RR as Rules (88)
+  participant RR as Rules (89)
   participant PL as parsePlan()
   participant PO as applyPolicy()
   C->>S: Input{files, plan, config, fail_on}
@@ -289,7 +318,7 @@ comments. Fixes that force replacement say so.
 | **Kubernetes / Helm** | Privileged / host-namespace pods, mutable images, open LoadBalancers, plain-text secrets, unpinned charts |
 | **Any provider** | Syntax/references/duplicates, CIDRs, hardcoded secrets & key patterns, provider/module pinning, `required_version`, state backend, committed state, subdomain-takeover CNAMEs, cost |
 
-Run `terraguard rules` for the full catalog of 88 rules.
+Run `terraguard rules` for the full catalog of 89 rules.
 
 ---
 
@@ -334,7 +363,19 @@ as the engine, which is the evidence for keeping the LLM out of the gate.
 
 ## 7. Pipelines
 
-### 7.1 Pipelines in *your* Terraform repo (generated by the CI/CD tab)
+### 7.1 Pipelines in *your* Terraform repo (generated by the Pipeline tab)
+
+The GitHub Action has three modes:
+
+| `command` | Use it for | Gate |
+|---|---|---|
+| `scan` (default) | Main branch, scheduled audits, plan analysis | All active findings |
+| `review` | Pull requests on repositories with existing debt (needs `fetch-depth: 0`) | Only findings the PR introduces |
+| `pulse` | Platform repositories with many modules | No gate; report in the job summary, JSON as the next baseline |
+
+GitLab CI and Jenkins use the Docker image through `templates/`. GitLab shows
+findings in the merge request widget through the Code Quality report.
+
 
 ```mermaid
 flowchart LR
@@ -344,7 +385,7 @@ flowchart LR
   TG --> SARIF[SARIF → code scanning]
   TG --> CMT[Sticky PR comment<br/>+ optional AI plan]
   TG --> GATE{policy passed?}
-  GATE -- no --> BLOCK[❌ blocked]
+  GATE -- no --> BLOCK[PR blocked]
   GATE -- yes --> MERGE[merge to main] --> APPROVE[environment approval] --> APPLY[terraform apply]
 ```
 
@@ -411,32 +452,36 @@ Not counted when: Do-Not-Track or Global Privacy Control is on, Private mode is 
 
 ## 9. Policy-as-code, waivers and compliance
 
-```yaml
-# .terraguard.yml
-fail_on: HIGH
-disable: [TG-CF-002]
-severity_overrides:
-  TG-AWS-EC2-001: HIGH
-waivers:
-  - rule: TG-AWS-S3-001
-    resource: "aws_s3_bucket.public_site"
-    reason: "Static website, intentionally public"
-    expires: "2026-12-31"          # expired → finding returns + TG-POL-001
-    approved_by: platform-team
-custom_rules:
-  - id: ORG-TAG-001
-    title: Resources must declare an owner tag
-    resource_types: ["aws_*"]
-    attribute: tags.owner
-    exists: true                   # also: equals, not_equals, in, not_in, matches
+```mermaid
+flowchart LR
+  ORG[org-baseline.yml<br/>https or path] --> PLAT[platform.yml] --> TEAM[team .terraguard.yml]
+  TEAM -->|ResolveExtends in the CLI| M[merged policy]
+  M --> E[engine.Scan]
+  B[(.terraguard-baseline.json)] --> E
+  E --> G{gate}
+  G -->|reasons| R[GateFailures:<br/>blocking, fail_on, budgets]
 ```
+
+| Layer | Behaviour |
+|---|---|
+| `extends` | Base packs are merged first; scalars and same-ID rules are replaced; lists are appended; cycles and depth over 8 are rejected. The engine stays I/O-free: the CLI loads files or https and hands over one merged document. |
+| Custom rules | `resource_types` globs, then every `where` condition must hold, then the inline condition and every `assert` must hold. Values computed at plan time are skipped. |
+| Operators | `exists`, `equals`, `not_equals`, `in`, `not_in`, `matches`, `not_matches`, `contains`, `min`, `max` |
+| Overrides and disables | Rule IDs or globs (`TG-CF-*`) |
+| Waivers | Rule glob, resource glob, reason, approver, expiry. Expired waivers re-activate the finding and raise TG-POL-001 |
+| Baselines | `scan --write-baseline` stores finding keys; `--baseline` reports them as waived |
+| Budgets | `max_findings` fails the gate when a severity exceeds its count |
+| Verdict vs gate | A waiver or baseline accepts a risk but does not make apply succeed: blocking findings always count toward "will it apply" |
+| Ownership | `owner` and `docs_url` are copied onto every finding |
+| Testing | `terraguard policy test DIR` runs `# expect:` / `# forbid:` fixtures; `schema/terraguard.schema.json` validates the file in editors |
 
 ```mermaid
 stateDiagram-v2
   [*] --> Active: rule fires
-  Active --> Fixed: autofix / manual change
+  Active --> Fixed: autofix, verified AI fix or manual change
   Active --> Waived: waiver (reason, approver, expiry)
-  Waived --> Active: expiry passes → TG-POL-001
+  Active --> Baselined: accepted as existing debt
+  Waived --> Active: expiry passes, TG-POL-001
   Fixed --> [*]
 ```
 
@@ -483,13 +528,17 @@ Full self-hosting and privacy guide: [SELF_HOSTING.md](SELF_HOSTING.md).
 
 | Layer | Command | What it proves |
 |---|---|---|
-| Engine unit tests | `make test` | Examples, the clean secure project, autofix round-trip, plan, ignores, scoping, custom rules, SARIF, fail-on override |
+| Engine unit tests | `make test` | Examples, the clean secure project, autofix round-trip, plan, ignores, scoping, custom rules (where, assert, operators, globs), extends merging and cycles, baselines, budgets, Verify, review diffing, AGENTS.md, SARIF, JUnit, Code Quality |
+| CLI tests | `make test` | Agent keeps a verified fix and rejects a worse one (fake model server); review against a real git repository |
+| Pulse tests | `make test` | Adoption counts, waiver states (expired, expiring, no expiry, active), trend deltas |
+| Policy fixtures | `make policy-test` | The example policy pack behaves as documented |
+| VS Code tests | `cd editors/vscode && npm test` | Report-to-diagnostic mapping against real CLI output |
 | AI router tests | `make test` | `.env` parsing, route order and overrides, fallback on 429, skip on 401, local-only, key redaction |
 | Server tests | `make test` | `/api/config` never exposes keys, stats never contain code, token auth |
-| Rule evals | `make evals` | 43 labelled cases (`# expect:` / `# forbid:`). CI fails on any miss or false positive |
+| Rule evals | `make evals` | 45 labelled cases (`# expect:` / `# forbid:`). CI fails on any miss or false positive |
 | Worker tests | `make worker-test` | Clamping, history pruning, never storing code |
 | LLM benchmark | `python3 evals/llm_eval.py --provider groq` | Recall and precision of an LLM-only reviewer on the same cases |
-| Dogfood | `ci.yml` | The action passes the secure example and fails the insecure one; the Docker image serves the app |
+| Dogfood | `ci.yml` | The action passes the secure example, fails the insecure one, and runs pulse; the Docker image scans and serves the app |
 
 ---
 

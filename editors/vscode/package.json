@@ -1,0 +1,29 @@
+{
+  "name": "terraguard",
+  "displayName": "TerraGuard",
+  "description": "Terraform security, apply-time validation and auto-fix, inline in the editor.",
+  "version": "0.1.0",
+  "publisher": "karthik-099",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/Karthik-099/TERRAGUARD" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters"],
+  "keywords": ["terraform", "security", "iac", "devsecops", "opentofu"],
+  "activationEvents": ["workspaceContains:**/*.tf"],
+  "main": "./extension.js",
+  "scripts": { "test": "node --test test/*.test.js" },
+  "contributes": {
+    "commands": [
+      { "command": "terraguard.scan", "title": "TerraGuard: Scan workspace" },
+      { "command": "terraguard.fixFile", "title": "TerraGuard: Apply auto-fixes to this file" }
+    ],
+    "configuration": {
+      "title": "TerraGuard",
+      "properties": {
+        "terraguard.path": { "type": "string", "default": "terraguard", "description": "Path to the terraguard binary (go install github.com/Karthik-099/TERRAGUARD/cmd/terraguard@latest)." },
+        "terraguard.scanOnSave": { "type": "boolean", "default": true, "description": "Re-scan when a .tf or .tfvars file is saved." },
+        "terraguard.minSeverity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"], "default": "LOW", "description": "Hide findings below this severity." }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+# TerraGuard for GitLab CI. Copy into .gitlab-ci.yml (or `include:` it).
+# Findings appear in the merge request widget (Code Quality) and test report (JUnit).
+terraguard:
+  stage: test
+  image:
+    name: ghcr.io/karthik-099/terraguard:latest
+    entrypoint: [""]
+  script:
+    - terraguard scan . --junit terraguard-junit.xml --codequality gl-code-quality.json --markdown terraguard.md
+  artifacts:
+    when: always
+    reports:
+      junit: terraguard-junit.xml
+      codequality: gl-code-quality.json
+    paths: [terraguard.md]
+  rules:
+    - changes: ["**/*.tf", "**/*.tfvars", ".terraguard.yml"]
+
+# Optional: adopt on an existing codebase without fixing everything first.
+# 1. Run once locally: terraguard scan . --write-baseline .terraguard-baseline.json and commit it.
+# 2. Add --baseline .terraguard-baseline.json to the script above; only new findings fail the job.

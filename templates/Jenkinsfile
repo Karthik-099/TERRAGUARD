@@ -1,0 +1,23 @@
+// TerraGuard for Jenkins (Docker Pipeline plugin).
+pipeline {
+  agent {
+    docker {
+      image 'ghcr.io/karthik-099/terraguard:latest'
+      args '--entrypoint='
+    }
+  }
+  stages {
+    stage('TerraGuard') {
+      when { changeset pattern: '**/*.tf', comparator: 'GLOB' }
+      steps {
+        sh 'terraguard scan . --junit terraguard-junit.xml --sarif terraguard.sarif --markdown terraguard.md'
+      }
+      post {
+        always {
+          junit 'terraguard-junit.xml'
+          archiveArtifacts artifacts: 'terraguard.sarif, terraguard.md', allowEmptyArchive: true
+        }
+      }
+    }
+  }
+}

@@ -19,21 +19,29 @@ const usage = `TerraGuard — Terraform security, validation and plan-risk analy
 
 Usage:
   terraguard scan [paths...] [flags]   Scan .tf/.tfvars files (default: .)
+  terraguard review --base REV [paths] Review a change: new findings only, risk tier, resolved issues
   terraguard fix  [paths...]           Apply safe auto-fixes in place
   terraguard docs [path]               Generate module README (inputs, outputs, resources)
+  terraguard agents-md [path]          Generate AGENTS.md so AI coding agents follow your guardrails
   terraguard ask "question" [paths]    Ask the AI assistant about your Terraform (optional)
+  terraguard agent [paths] [--write]   Fix findings: deterministic fixes, then AI proposals the engine verifies
+  terraguard pulse [roots] [--baseline prev.json --json out.json]
+                                       Control adoption, waivers and trend across many modules
   terraguard ai                        Show the AI fallback route built from .env
   terraguard serve [--addr host:port]  Self-host the web app + API (keys stay server-side)
+  terraguard policy validate|test      Validate a policy (with extends) or run policy test fixtures
   terraguard rules [--format json|markdown]
   terraguard mcp                       Run as an MCP server over stdio
   terraguard version
 
 Scan flags:
-  --format text|json|sarif|markdown   stdout format (default text)
+  --format text|json|sarif|junit|codequality|markdown   stdout format (default text)
   --plan plan.json                    also analyze 'terraform show -json' output
   --config .terraguard.yml            policy file (auto-detected)
   --fail-on CRITICAL|HIGH|MEDIUM|LOW|NONE  override the policy threshold
-  --sarif FILE / --markdown FILE / --json FILE   extra outputs (for CI)
+  --sarif FILE / --junit FILE / --codequality FILE / --markdown FILE / --json FILE   extra outputs
+  --write-baseline FILE               accept today's findings as existing debt
+  --baseline FILE                     report baselined findings as waived; gate only on new ones
   --ai                                add an advisory LLM remediation plan to markdown
 
 AI is optional. Keys are read from the environment or ./.env:
@@ -70,8 +78,18 @@ func main() {
 		err = runRules(os.Args[2:])
 	case "docs":
 		err = runDocs(os.Args[2:])
+	case "agents-md":
+		err = runAgentsMD(os.Args[2:])
 	case "ask":
 		err = runAsk(os.Args[2:])
+	case "agent":
+		err = runAgent(os.Args[2:])
+	case "pulse":
+		code, err = runPulse(os.Args[2:])
+	case "policy":
+		code, err = runPolicy(os.Args[2:])
+	case "review":
+		code, err = runReview(os.Args[2:])
 	case "ai":
 		runAIStatus()
 	case "serve":
@@ -162,10 +180,14 @@ func loadFiles(paths []string) (map[string]string, error) {
 	return files, nil
 }
 
+// findConfig returns the policy text with `extends` already resolved.
 func findConfig(explicit string, paths []string) (string, error) {
 	if explicit != "" {
 		b, err := os.ReadFile(explicit)
-		return string(b), err
+		if err != nil {
+			return "", err
+		}
+		return resolvePolicy(string(b), filepath.Dir(explicit))
 	}
 	cands := []string{".terraguard.yml", ".terraguard.yaml"}
 	for _, p := range paths {
@@ -175,7 +197,7 @@ func findConfig(explicit string, paths []string) (string, error) {
 	}
 	for _, c := range cands {
 		if b, err := os.ReadFile(c); err == nil {
-			return string(b), nil
+			return resolvePolicy(string(b), filepath.Dir(c))
 		}
 	}
 	return "", nil
@@ -214,7 +236,11 @@ func runScan(args []string) (int, error) {
 	sarifOut := fs.String("sarif", "", "")
 	mdOut := fs.String("markdown", "", "")
 	jsonOut := fs.String("json", "", "")
+	junitOut := fs.String("junit", "", "")
 	useAI := fs.Bool("ai", false, "")
+	baseline := fs.String("baseline", "", "")
+	writeBaseline := fs.String("write-baseline", "", "")
+	cqOut := fs.String("codequality", "", "")
 	paths, err := parseInterspersed(fs, args)
 	if err != nil {
 		return 2, err
@@ -226,8 +252,19 @@ func runScan(args []string) (int, error) {
 	if len(in.Files) == 0 && in.Plan == "" {
 		return 2, fmt.Errorf("no .tf or .tfvars files found in %v", paths)
 	}
+	if *baseline != "" {
+		if in.Baseline, err = readBaseline(*baseline); err != nil {
+			return 2, err
+		}
+	}
 	t0 := time.Now()
 	rep := engine.Scan(in)
+	if *writeBaseline != "" {
+		if err := writeBaselineFile(*writeBaseline, rep); err != nil {
+			return 2, err
+		}
+		fmt.Fprintf(os.Stderr, "wrote baseline with %d accepted finding(s) to %s\n", rep.Waived+active(rep), *writeBaseline)
+	}
 	reportUsage(rep, int(time.Since(t0).Milliseconds()))
 
 	md := ""
@@ -247,12 +284,18 @@ func runScan(args []string) (int, error) {
 				}
 			}
 			return md, nil
+		case "junit":
+			b, err := engine.JUnit(rep)
+			return string(b) + "\n", err
+		case "codequality":
+			b, err := engine.CodeQuality(rep)
+			return string(b) + "\n", err
 		case "text":
 			return engine.Text(rep), nil
 		}
 		return "", fmt.Errorf("unknown format %q", f)
 	}
-	for path, f := range map[string]string{*sarifOut: "sarif", *mdOut: "markdown", *jsonOut: "json"} {
+	for path, f := range map[string]string{*sarifOut: "sarif", *mdOut: "markdown", *jsonOut: "json", *junitOut: "junit", *cqOut: "codequality"} {
 		if path == "" {
 			continue
 		}
@@ -341,5 +384,18 @@ func runDocs(args []string) error {
 		return err
 	}
 	fmt.Print(engine.Docs(files))
+	return nil
+}
+
+func runAgentsMD(args []string) error {
+	paths := args
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+	in, err := buildInput(paths, "", "", "")
+	if err != nil {
+		return err
+	}
+	fmt.Print(engine.AgentsMD(in.Files, in.Config))
 	return nil
 }

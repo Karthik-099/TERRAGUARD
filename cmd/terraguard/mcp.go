@@ -94,6 +94,15 @@ func runMCP() error {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: engine.Docs(in.Files)}}}, nil, nil
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "generate_agents_md", Description: "Generate an AGENTS.md describing the repository's providers, commands, guardrails, waivers and boundaries for coding agents."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, a scanArgs) (*mcp.CallToolResult, any, error) {
+			in, err := a.input()
+			if err != nil {
+				return nil, nil, err
+			}
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: engine.AgentsMD(in.Files, in.Config)}}}, nil, nil
+		})
+
 	mcp.AddTool(s, &mcp.Tool{Name: "list_rules", Description: "List every TerraGuard rule with severity, category and remediation."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 			return jsonResult(engine.Catalog())

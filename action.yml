@@ -6,6 +6,15 @@ branding:
   color: orange
 
 inputs:
+  command:
+    description: "scan (gate on all findings, default), review (gate only on findings a PR introduces; needs actions/checkout with fetch-depth 0) or pulse (control adoption, waivers and trend across many modules)."
+    default: scan
+  base:
+    description: "review only: git revision to compare against. Defaults to the pull request's base commit."
+    default: ""
+  baseline:
+    description: "pulse only: path to the previous pulse JSON, to report the trend."
+    default: ""
   path:
     description: Directory (or file) with Terraform to scan.
     default: "."
@@ -52,8 +61,22 @@ runs:
       working-directory: ${{ github.action_path }}
       run: go build -o "$RUNNER_TEMP/terraguard" ./cmd/terraguard
 
+    - name: Pulse
+      if: inputs.command == 'pulse'
+      shell: bash
+      env:
+        TG_PATH: ${{ inputs.path }}
+        TG_BASELINE: ${{ inputs.baseline }}
+      run: |
+        args=(pulse "$TG_PATH" --json "$RUNNER_TEMP/pulse.json" --markdown "$RUNNER_TEMP/pulse.md")
+        [ -n "$TG_BASELINE" ] && args+=(--baseline "$TG_BASELINE")
+        "$RUNNER_TEMP/terraguard" "${args[@]}" > /dev/null
+        cat "$RUNNER_TEMP/pulse.md" >> "$GITHUB_STEP_SUMMARY"
+        echo "Pulse JSON: $RUNNER_TEMP/pulse.json (upload it as an artifact and pass it as baseline next run)"
+
     - name: Scan
       id: scan
+      if: inputs.command != 'pulse'
       shell: bash
       env:
         TG_PATH: ${{ inputs.path }}
@@ -61,9 +84,15 @@ runs:
         TG_CONFIG: ${{ inputs.config }}
         TG_FAIL_ON: ${{ inputs.fail-on }}
         TG_AI: ${{ inputs.ai }}
+        TG_COMMAND: ${{ inputs.command }}
+        TG_BASE: ${{ inputs.base || github.event.pull_request.base.sha }}
       run: |
-        args=(scan "$TG_PATH" --format text --sarif "$RUNNER_TEMP/terraguard.sarif" --markdown "$RUNNER_TEMP/terraguard.md" --json "$RUNNER_TEMP/terraguard.json")
-        [ -n "$TG_PLAN" ] && args+=(--plan "$TG_PLAN")
+        if [ "$TG_COMMAND" = "review" ]; then
+          args=(review "$TG_PATH" --base "${TG_BASE:-origin/main}" --markdown "$RUNNER_TEMP/terraguard.md" --json "$RUNNER_TEMP/terraguard.json")
+        else
+          args=(scan "$TG_PATH" --format text --sarif "$RUNNER_TEMP/terraguard.sarif" --markdown "$RUNNER_TEMP/terraguard.md" --json "$RUNNER_TEMP/terraguard.json")
+          [ -n "$TG_PLAN" ] && args+=(--plan "$TG_PLAN")
+        fi
         [ -n "$TG_CONFIG" ] && args+=(--config "$TG_CONFIG")
         [ -n "$TG_FAIL_ON" ] && args+=(--fail-on "$TG_FAIL_ON")
         [ "$TG_AI" = "true" ] && args+=(--ai)
@@ -73,12 +102,12 @@ runs:
         set -e
         [ $code -ge 2 ] && exit $code
         echo "passed=$([ $code -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-        echo "score=$(jq -r .score "$RUNNER_TEMP/terraguard.json")" >> "$GITHUB_OUTPUT"
-        echo "grade=$(jq -r .grade "$RUNNER_TEMP/terraguard.json")" >> "$GITHUB_OUTPUT"
+        echo "score=$(jq -r '.score // empty' "$RUNNER_TEMP/terraguard.json")" >> "$GITHUB_OUTPUT"
+        echo "grade=$(jq -r '.grade // .tier' "$RUNNER_TEMP/terraguard.json")" >> "$GITHUB_OUTPUT"
         cat "$RUNNER_TEMP/terraguard.md" >> "$GITHUB_STEP_SUMMARY"
 
     - name: Upload SARIF
-      if: inputs.sarif == 'true'
+      if: inputs.command == 'scan' && inputs.sarif == 'true'
       # Code scanning needs GitHub Advanced Security on private repos; never fail the gate on it.
       continue-on-error: true
       uses: github/codeql-action/upload-sarif@v3
@@ -87,7 +116,7 @@ runs:
         category: terraguard
 
     - name: Sticky PR comment
-      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      if: inputs.command != 'pulse' && inputs.comment == 'true' && github.event_name == 'pull_request'
       continue-on-error: true
       shell: bash
       env:
@@ -105,7 +134,7 @@ runs:
         fi
 
     - name: Policy gate
-      if: steps.scan.outputs.passed != 'true'
+      if: inputs.command != 'pulse' && steps.scan.outputs.passed != 'true'
       shell: bash
       run: |
         echo "::error title=TerraGuard::Policy failed (grade ${{ steps.scan.outputs.grade }}, score ${{ steps.scan.outputs.score }}). See the job summary."
