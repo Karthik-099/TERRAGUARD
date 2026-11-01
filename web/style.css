@@ -682,3 +682,10 @@ kbd { font: 600 12px var(--mono); padding: 2px 6px; border: 1px solid var(--line
 .card.tilt:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .section-head h2 { text-wrap: balance; }
 @media (prefers-reduced-motion: reduce) { .hero-shot img { transform: none; } .scroll-progress { display: none; } }
+
+/* Rule catalog table: keep IDs on one line and wrap long text inside the panel */
+#rules-list table { width: 100%; table-layout: fixed; }
+#rules-list th:nth-child(1), #rules-list td:nth-child(1) { width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rules-list th:nth-child(2), #rules-list td:nth-child(2) { width: 96px; }
+#rules-list td:nth-child(3) { overflow-wrap: anywhere; }
+@media (max-width: 680px) { #rules-list th:nth-child(1), #rules-list td:nth-child(1) { width: 120px; } }
