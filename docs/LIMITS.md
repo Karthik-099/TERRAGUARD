@@ -1,8 +1,7 @@
 # Guarantees and limits
 
-What TerraGuard promises, what it cannot know, and what covers each gap. If a
-question is not answered here, please open a discussion; it probably belongs
-on this page.
+What TerraGuard guarantees, what it cannot know before apply, and what covers
+each gap.
 
 ## Two kinds of checks
 
@@ -16,91 +15,89 @@ on this page.
 The merge gate stays deterministic on purpose. Live checks are opt-in and
 reported separately, so a flaky API never blocks a pull request.
 
-## Questions people ask
+## Coverage by area
 
-### The plan was clean, but apply failed halfway on a quota. What does TerraGuard do?
+### Capacity and quotas
 
-Quotas are not in the code or the plan, and `terraform plan` does not check
-them even with credentials. `terraguard preflight --plan plan.json --live`
-does: it counts what the plan creates per quota (vCPUs, VPCs, Elastic IPs,
-internet gateways, load balancers, databases and buckets on AWS; regional vCPUs
-and public IPs on Azure; CPU families and addresses on Google Cloud) and
-compares that with the account's limit and current usage before apply starts.
-In GitHub Actions use `command: preflight`.
+Quotas are enforced by the cloud when resources are created; they appear in
+neither the code nor the plan. `preflight --live` counts what a plan creates
+against each common quota and compares it with the account's limit and current
+usage:
 
-If an apply still fails partway, for a reason no tool can predict, Terraform
-records what it created in state. The next plan contains only what is left, and
-it goes through the same checks before the retry.
+| Cloud | Quotas checked |
+|---|---|
+| AWS | Standard on-demand vCPUs, VPCs, Elastic IPs, internet gateways, Application Load Balancers, RDS instances, S3 buckets |
+| Azure | Regional vCPUs, public IP addresses |
+| Google Cloud | Regional CPUs per machine family, static and in-use external addresses |
 
-### The plan is checked without credentials. Can it drift from live state?
+vCPUs are estimated from instance type names. In GitHub Actions the same check
+runs with `command: preflight`.
 
-`scan` without a plan checks code only, so it cannot see live state. A plan JSON
-is different: `terraform plan` refreshes state from the real cloud, so findings
-on a plan reflect what exists. Two practices close the remaining gap:
+### Live state and drift
 
-- Apply the saved plan you checked (`terraform plan -out tfplan`, then
-  `terraform apply tfplan`). If state changed in between, Terraform refuses
-  with "Saved plan is stale" instead of applying something unreviewed.
-- Turn on drift detection in the generated workflow (opt-in) to find manual
-  changes between deployments.
+A scan of code alone does not see live state. A plan does: `terraform plan`
+refreshes state from the cloud, so findings on plan JSON reflect what exists.
+Applying the saved plan that was checked (`terraform apply tfplan`) keeps review
+and apply in step; Terraform refuses a saved plan whose state has changed
+("Saved plan is stale"). Drift detection in the generated workflow is opt-in.
 
-### What about names that are already taken?
+### Interrupted applies
 
-S3 bucket names are global across every AWS account. `preflight --live` asks S3
-whether each new bucket name is free, owned by another account, or already in
-yours. Names that must be unique only inside your own account are caught by the
+When an apply stops partway, Terraform records what it created in state. The
+next plan contains only the remaining changes and passes through the same
+checks before it is applied.
+
+### Global names
+
+S3 bucket names are unique across all AWS accounts. `preflight --live` reports
+each new name as free, owned by another account, or already in yours. Names
+that only need to be unique within your configuration are covered by the
 duplicate and reference checks in `scan`.
 
-### Will it catch permission errors?
+### Permissions
 
-Not before apply. Whether a role may create a resource depends on IAM policies,
-permission boundaries and organisation policies that live outside the code.
-Run `terraform plan` with the same role that applies, so read permissions fail
-early, and use `scan` to keep the policies you write in Terraform tight.
+Whether a role may create a resource depends on IAM, permission boundaries and
+organisation policies outside the code, so it is only known at apply. Planning
+with the same role that applies surfaces read permissions early; `scan` keeps
+the policies defined in Terraform tight.
 
-### What if a value is only known after apply?
+### Computed values
 
-Static checks skip values that are computed at plan time instead of guessing.
-Scan the plan JSON as well: it contains the resolved values, and every rule
+Values that are only known at plan or apply time are skipped by static checks
+rather than guessed. Plan JSON contains the resolved values, and every rule
 runs on it.
 
-### Does it follow modules from the registry?
+### Modules
 
-Local modules (`./modules/...`) are checked, including their inputs. Registry
-and git modules are not downloaded, but their resources appear in the plan JSON,
-which is checked like any other plan.
+Local modules are analysed, including the inputs passed to them. Registry and
+git modules are not downloaded; their resources are checked through plan JSON.
 
-### Are the checks right for my provider version?
+### Provider versions
 
-Built-in rules follow current provider documentation. For exact argument
-checks, pass the schema of the providers you actually use: `terraform providers
-schema -json > schema.json`, then `scan --schema schema.json`.
+Built-in rules follow current provider documentation. `scan --schema` checks
+arguments against the exact provider versions in use
+(`terraform providers schema -json`).
 
-### What about false positives?
+### Accuracy
 
-Every rule has two tests: one configuration it must flag and one it must leave
-alone. When a finding is intended, add a waiver with a reason, an approver and
-an expiry, or an inline `terraguard:ignore` comment. Report a wrong finding with
-the "Report false positive" button; it opens an issue with the details.
+Each rule has a configuration it must flag and one it must leave alone.
+Intended exceptions are recorded as waivers with a reason, an approver and an
+expiry, or as inline `terraguard:ignore` comments. Wrong findings can be
+reported from the workspace. The [rule catalog](RULES.md) lists all 271 rules;
+TerraGuard does not replace runtime monitoring of deployed infrastructure and
+does not see resources created outside Terraform.
 
-### And false negatives?
+### AI
 
-TerraGuard checks 271 rules, listed in the [rule catalog](RULES.md). It does
-not replace runtime security monitoring of what is already deployed, and it does
-not see infrastructure created outside Terraform.
+AI never gates anything. Proposed fixes are kept only when the engine confirms
+risk goes down, nothing new at medium or above appears, and apply still works.
+Drafted rules are validated and dry-run before they are added.
 
-### Can AI change my infrastructure?
+### Data
 
-No. AI never gates anything. AI-proposed fixes are kept only if the engine
-confirms that risk goes down, nothing new at medium or above appears, and apply
-still works. AI-drafted rules are validated and dry-run before you add them.
-
-### Where does my code go?
-
-In the browser, nowhere: the engine runs locally. The CLI, Action and server
-run on your machines. `preflight --live` calls only your own cloud's read-only
-APIs. AI is optional and goes only to the provider you configure. See
-[Security](../SECURITY.md).
+The browser engine runs locally. The CLI, Action and server run on your own
+machines. `preflight --live` calls only your cloud's read-only APIs, and AI
+requests go only to the provider you configure. See [Security](../SECURITY.md).
 
 ## Summary
 
