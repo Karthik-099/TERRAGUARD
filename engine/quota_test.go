@@ -47,7 +47,7 @@ func TestQuotaDemands(t *testing.T) {
 		t.Errorf("unexpected demands: %v", got)
 	}
 
-	res := CheckQuotas(ds, map[string]QuotaUsage{"aws/ec2/L-1216C47A@eu-west-1": {Limit: 32, Used: 24}, "aws/vpc/L-F678F1CE@eu-west-1": {Limit: 5, Used: 2}})
+	res := CheckQuotas(ds, map[string]QuotaUsage{"aws/ec2/L-1216C47A@eu-west-1": {Limit: 32, Used: 24}, "aws/vpc/L-F678F1CE@eu-west-1": {Limit: 5, Used: 2}}, 0)
 	status := map[string]string{}
 	for _, r := range res {
 		status[r.Key] = r.Status
@@ -73,5 +73,58 @@ func TestInstanceSizes(t *testing.T) {
 	}
 	if azureVCPUs("Standard_B2ms") != 2 || azureVCPUs("Standard_E64ds_v5") != 64 {
 		t.Error("azure sizes")
+	}
+}
+
+func TestQuotaDemandsUseEachProvidersRegion(t *testing.T) {
+	plan := `{"format_version":"1.2",
+ "configuration":{
+  "provider_config":{
+   "aws":{"name":"aws","expressions":{"region":{"constant_value":"eu-west-1"}}},
+   "aws.us":{"name":"aws","alias":"us","expressions":{"region":{"constant_value":"us-east-1"}}}},
+  "root_module":{
+   "resources":[
+    {"address":"aws_instance.eu","provider_config_key":"aws"},
+    {"address":"aws_instance.us","provider_config_key":"aws.us"},
+    {"address":"aws_instance.swap","provider_config_key":"aws"}],
+   "module_calls":{"edge":{"module":{"resources":[{"address":"aws_vpc.v","provider_config_key":"aws.us"}]}}}}},
+ "resource_changes":[
+  {"address":"aws_instance.eu","mode":"managed","type":"aws_instance","change":{"actions":["create"],"after":{"instance_type":"m5.xlarge"}}},
+  {"address":"aws_instance.us[0]","mode":"managed","type":"aws_instance","change":{"actions":["create"],"after":{"instance_type":"m5.2xlarge"}}},
+  {"address":"aws_instance.swap","mode":"managed","type":"aws_instance","change":{"actions":["create","delete"],"before":{"instance_type":"m5.large"},"after":{"instance_type":"m5.large"}}},
+  {"address":"module.edge.aws_vpc.v","mode":"managed","type":"aws_vpc","change":{"actions":["create"],"after":{}}}]}`
+	ds, err := QuotaDemands(plan, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]float64{}
+	for _, d := range ds {
+		got[d.Key] = d.Need
+	}
+	want := map[string]float64{
+		"aws/ec2/L-1216C47A@eu-west-1": 4 + 2, // m5.xlarge plus the create-before-destroy replacement
+		"aws/ec2/L-1216C47A@us-east-1": 8,     // aliased provider
+		"aws/vpc/L-F678F1CE@us-east-1": 1,     // module resource on the aliased provider
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: need %v, want %v (all: %v)", k, got[k], v, got)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("unexpected demands: %v", got)
+	}
+}
+
+func TestQuotaHeadroom(t *testing.T) {
+	d := []QuotaDemand{{Key: "k", Need: 10}}
+	u := map[string]QuotaUsage{"k": {Limit: 100, Used: 85}} // 15 free
+	for headroom, want := range map[float64]string{0: "ok", 5: "ok", 10: "tight", 20: "tight"} {
+		if got := CheckQuotas(d, u, headroom)[0].Status; got != want {
+			t.Errorf("headroom %v%%: %s, want %s", headroom, got, want)
+		}
+	}
+	if got := CheckQuotas([]QuotaDemand{{Key: "k", Need: 16}}, u, 0)[0].Status; got != "exceeds" {
+		t.Errorf("over the limit: %s", got)
 	}
 }

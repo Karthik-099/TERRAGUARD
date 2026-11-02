@@ -15,6 +15,10 @@ type Review struct {
 	Existing     int       `json:"existing"`
 	Passed       bool      `json:"passed"`
 	FailOn       Severity  `json:"fail_on"`
+	// PolicyChanges lists how the change loosens the policy; they apply after merge.
+	PolicyChanges []string `json:"policy_changes,omitempty"`
+	// Silenced lists findings this change hides with new inline ignores.
+	Silenced []Finding `json:"silenced,omitempty"`
 }
 
 // FindingKey ignores line numbers, which shift with unrelated edits.
@@ -111,6 +115,20 @@ func (r *Review) Markdown() string {
 		b.WriteString("No Terraform changes to review.\n")
 		return b.String()
 	}
+	if len(r.PolicyChanges) > 0 {
+		b.WriteString("### Policy loosened (needs an owner's approval)\n\nThis change is judged by the base branch's policy; these take effect only after merge:\n\n")
+		for _, c := range r.PolicyChanges {
+			fmt.Fprintf(&b, "- %s\n", c)
+		}
+		b.WriteString("\n")
+	}
+	if len(r.Silenced) > 0 {
+		b.WriteString("### Silenced by new inline ignores\n\n")
+		for _, f := range r.Silenced {
+			fmt.Fprintf(&b, "- **%s** `%s` %s on `%s` (%s:%d)\n", f.Severity, f.RuleID, f.Title, f.Resource, f.File, f.Line)
+		}
+		b.WriteString("\n")
+	}
 	if len(r.New) == 0 {
 		b.WriteString("This change introduces no new findings.\n")
 	}
@@ -159,5 +177,22 @@ func ChangedTerraform(paths []string) []string {
 		}
 	}
 	sort.Strings(out)
+	return out
+}
+
+// SilencedBy lists findings inline-ignored in head that were not ignored in base.
+func SilencedBy(base, head *Report) []Finding {
+	was := map[string]bool{}
+	for _, f := range base.Findings {
+		if f.Waived && f.WaiverReason == inlineIgnoreReason {
+			was[FindingKey(f)] = true
+		}
+	}
+	var out []Finding
+	for _, f := range head.Findings {
+		if f.Waived && f.WaiverReason == inlineIgnoreReason && !was[FindingKey(f)] {
+			out = append(out, f)
+		}
+	}
 	return out
 }

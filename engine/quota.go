@@ -49,6 +49,7 @@ type quotaPlan struct {
 				ConstantValue any `json:"constant_value"`
 			} `json:"expressions"`
 		} `json:"provider_config"`
+		RootModule configModule `json:"root_module"`
 	} `json:"configuration"`
 	ResourceChanges []struct {
 		Address string `json:"address"`
@@ -61,6 +62,29 @@ type quotaPlan struct {
 		} `json:"change"`
 	} `json:"resource_changes"`
 }
+
+type configModule struct {
+	Resources []struct {
+		Address           string `json:"address"`
+		ProviderConfigKey string `json:"provider_config_key"`
+	} `json:"resources"`
+	ModuleCalls map[string]struct {
+		Module configModule `json:"module"`
+	} `json:"module_calls"`
+}
+
+// providerKeys maps configuration addresses (module.x.aws_vpc.v) to the
+// provider configuration they use, so aliased providers keep their region.
+func (m configModule) providerKeys(prefix string, out map[string]string) {
+	for _, r := range m.Resources {
+		out[prefix+r.Address] = r.ProviderConfigKey
+	}
+	for name, mc := range m.ModuleCalls {
+		mc.Module.providerKeys(prefix+"module."+name+".", out)
+	}
+}
+
+var instanceKeyRE = regexp.MustCompile(`\[[^\]]*\]`)
 
 // awsCounted maps resource types to the quota each one uses, one per resource.
 var awsCounted = map[string][3]string{ // type -> service, quota code, title
@@ -84,11 +108,31 @@ func QuotaDemands(planJSON, defaultRegion string) ([]QuotaDemand, error) {
 	if p.FormatVersion == "" {
 		return nil, fmt.Errorf("not a Terraform JSON plan; produce one with: terraform show -json tfplan > plan.json")
 	}
-	awsRegion := defaultRegion
-	if pc, ok := p.Configuration.ProviderConfig["aws"]; ok {
-		if r, ok := pc.Expressions["region"].ConstantValue.(string); ok && r != "" {
-			awsRegion = r
+	regionOf := func(key string) string {
+		if pc, ok := p.Configuration.ProviderConfig[key]; ok {
+			if r, ok := pc.Expressions["region"].ConstantValue.(string); ok && r != "" {
+				return r
+			}
 		}
+		return ""
+	}
+	keys := map[string]string{}
+	p.Configuration.RootModule.providerKeys("", keys)
+	awsRegionFor := func(addr string) string {
+		key := keys[instanceKeyRE.ReplaceAllString(addr, "")]
+		if key == "" {
+			key = "aws"
+		}
+		if r := regionOf(key); r != "" {
+			return r
+		}
+		if r := regionOf(key[strings.LastIndex(key, ":")+1:]); r != "" { // module-scoped keys like "edge:aws"
+			return r
+		}
+		if r := regionOf("aws"); r != "" {
+			return r
+		}
+		return defaultRegion
 	}
 	demands := map[string]*QuotaDemand{}
 	add := func(cloud, region, quota, title, addr string, n float64, estimated bool) {
@@ -112,12 +156,14 @@ func QuotaDemands(planJSON, defaultRegion string) ([]QuotaDemand, error) {
 		if rc.Mode == "data" {
 			continue
 		}
-		create := len(rc.Change.Actions) == 1 && rc.Change.Actions[0] == "create"
+		// create_before_destroy replacements briefly need room for both copies.
+		create := len(rc.Change.Actions) >= 1 && rc.Change.Actions[0] == "create"
 		update := len(rc.Change.Actions) == 1 && rc.Change.Actions[0] == "update"
 		after, before := rc.Change.After, rc.Change.Before
 		str := func(m map[string]any, k string) string { s, _ := m[k].(string); return s }
 		switch {
 		case strings.HasPrefix(rc.Type, "aws_"):
+			awsRegion := awsRegionFor(rc.Address)
 			if q, ok := awsCounted[rc.Type]; ok && create {
 				add("aws", awsRegion, q[0]+"/"+q[1], q[2], rc.Address, 1, false)
 			}
@@ -191,16 +237,23 @@ func QuotaDemands(planJSON, defaultRegion string) ([]QuotaDemand, error) {
 	return out, nil
 }
 
-// CheckQuotas compares demands with usage keyed by QuotaDemand.Key.
-func CheckQuotas(demands []QuotaDemand, usage map[string]QuotaUsage) []QuotaResult {
+// CheckQuotas compares demands with usage keyed by QuotaDemand.Key. headroom
+// is the percentage of each limit to keep spare, because another pipeline can
+// use quota between preflight and apply; a plan that only fits by eating into
+// it is reported as "tight".
+func CheckQuotas(demands []QuotaDemand, usage map[string]QuotaUsage, headroom float64) []QuotaResult {
 	out := make([]QuotaResult, 0, len(demands))
 	for _, d := range demands {
 		r := QuotaResult{QuotaDemand: d, Status: "unknown"}
 		if u, ok := usage[d.Key]; ok {
 			r.Limit, r.Used, r.Free = u.Limit, u.Used, u.Limit-u.Used
-			r.Status = "ok"
-			if d.Need > r.Free {
+			switch {
+			case d.Need > r.Free:
 				r.Status = "exceeds"
+			case d.Need > r.Free-u.Limit*headroom/100:
+				r.Status = "tight"
+			default:
+				r.Status = "ok"
 			}
 		}
 		out = append(out, r)

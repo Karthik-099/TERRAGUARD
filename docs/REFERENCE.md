@@ -76,6 +76,8 @@ A JSON Schema for editors is at [`schema/terraguard.schema.json`](https://github
 | `severity_overrides` | map | Rule ID or glob to a new severity |
 | `waivers` | list | `rule`, `resource`, `reason`, `approved_by`, `expires` (YYYY-MM-DD) |
 | `custom_rules` | list | Your own rules; see below |
+| `inline_ignores` | bool | `false` makes `terraguard:ignore` comments have no effect, so every exception is a reviewed waiver |
+| `max_waiver_days` | number | Waivers with no expiry, or one further out than this, are not applied (reported as TG-POL-002) |
 
 ### Custom rules
 
@@ -122,6 +124,14 @@ then the engine:
 A rejected draft gets one repair round with the exact validation error. Only
 resource type names are sent to the model, never code. The result runs without
 AI from then on.
+
+### Reviews use the base branch's policy
+
+`terraguard review` judges a change by the `.terraguard.yml` on the base
+branch, so a pull request cannot loosen its own gate. The review lists any way
+the change loosens the policy (fail_on, disables, waivers, budgets, removed
+rules) and any finding newly hidden by an inline ignore; those take effect
+after merge. An explicit `--config` path is used as is.
 
 ### Inline ignores
 
@@ -222,7 +232,8 @@ terraguard preflight --plan plan.json --live
 | `--plan FILE` | `terraform show -json` output (required) |
 | `--live` | Read limits and usage with the `aws`, `az` and `gcloud` CLIs; read-only calls only |
 | `--quotas FILE` | JSON of known limits and usage, keyed like the output (`aws/ec2/L-1216C47A@eu-west-1`), instead of `--live` |
-| `--region` | AWS region when the provider's region is not a literal (defaults to `AWS_REGION`) |
+| `--region` | AWS region when the provider's region is not a literal (defaults to `AWS_REGION`); aliased providers use their own region |
+| `--headroom N` | Percent of each limit to keep spare; a plan that only fits by using it fails as `TIGHT` |
 | `--format`, `--markdown`, `--json` | Outputs |
 
 Checked: AWS standard on-demand vCPUs, VPCs, Elastic IPs, internet gateways,

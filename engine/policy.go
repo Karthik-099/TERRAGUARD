@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,6 +21,11 @@ type Config struct {
 	CustomRules       []CustomRule        `yaml:"custom_rules,omitempty" json:"custom_rules"`
 	// MaxFindings is a risk budget: the gate fails when a severity exceeds its count.
 	MaxFindings map[Severity]int `yaml:"max_findings,omitempty" json:"max_findings,omitempty"`
+	// InlineIgnores set to false makes `terraguard:ignore` comments have no effect,
+	// so every exception goes through a reviewed waiver.
+	InlineIgnores *bool `yaml:"inline_ignores,omitempty" json:"inline_ignores,omitempty"`
+	// MaxWaiverDays rejects waivers with no expiry or one further out than this.
+	MaxWaiverDays int `yaml:"max_waiver_days,omitempty" json:"max_waiver_days,omitempty"`
 }
 
 // Waiver is an auditable exception: who accepted which risk, why, until when.
@@ -351,6 +357,9 @@ func applyPolicy(fs []Finding, cfg *Config, ign map[string]map[int][]string, blo
 		return "", false
 	}
 	ignored := func(f Finding) bool {
+		if cfg.InlineIgnores != nil && !*cfg.InlineIgnores {
+			return false
+		}
 		lines := ign[f.File]
 		for _, l := range []int{f.Line, f.Line - 1, blockLine[f.Resource] - 1} {
 			for _, id := range lines[l] {
@@ -371,7 +380,7 @@ func applyPolicy(fs []Finding, cfg *Config, ign map[string]map[int][]string, blo
 			f.Severity = ParseSeverity(string(s))
 		}
 		if ignored(f) {
-			f.Waived, f.WaiverReason = true, "inline terraguard:ignore comment"
+			f.Waived, f.WaiverReason = true, inlineIgnoreReason
 		}
 		for i, w := range cfg.Waivers {
 			if ruleMatch, _ := path.Match(w.Rule, f.RuleID); f.Waived || !ruleMatch {
@@ -379,6 +388,16 @@ func applyPolicy(fs []Finding, cfg *Config, ign map[string]map[int][]string, blo
 			}
 			if w.Resource != "" {
 				if ok, _ := path.Match(w.Resource, f.Resource); !ok {
+					continue
+				}
+			}
+			if cfg.MaxWaiverDays > 0 {
+				exp, err := time.Parse("2006-01-02", w.Expires)
+				if w.Expires == "" || err != nil || exp.After(now.AddDate(0, 0, cfg.MaxWaiverDays)) {
+					if !expiredSeen[i] {
+						expiredSeen[i] = true
+						out = append(out, newFinding("TG-POL-002", "", fmt.Sprintf("Waiver for %s on %s %s, beyond the %d-day limit in max_waiver_days, so it is not applied.", w.Rule, orDash(w.Resource), map[bool]string{true: "has no expiry", false: "expires on " + w.Expires}[w.Expires == ""], cfg.MaxWaiverDays), f.Resource, ".terraguard.yml", 0))
+					}
 					continue
 				}
 			}
@@ -408,4 +427,84 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+const inlineIgnoreReason = "inline terraguard:ignore comment"
+
+// PolicyWeakening lists how head is less strict than base. Review judges a
+// change by the base policy, so these take effect only once merged.
+func PolicyWeakening(base, head string) []string {
+	b, errB := ParseConfig(base)
+	h, errH := ParseConfig(head)
+	if errB != nil || errH != nil {
+		return nil
+	}
+	threshold := func(s Severity) int { // higher fails on fewer findings
+		if s == "NONE" {
+			return 99
+		}
+		return s.Rank()
+	}
+	var out []string
+	if threshold(h.FailOn) > threshold(b.FailOn) {
+		out = append(out, fmt.Sprintf("fail_on loosened from %s to %s", b.FailOn, h.FailOn))
+	}
+	in := func(list []string, v string) bool {
+		for _, x := range list {
+			if x == v {
+				return true
+			}
+		}
+		return false
+	}
+	for _, d := range h.Disable {
+		if !in(b.Disable, d) {
+			out = append(out, "disables "+d)
+		}
+	}
+	for k, v := range h.SeverityOverrides {
+		if bv, ok := b.SeverityOverrides[k]; !ok || ParseSeverity(string(v)).Rank() < ParseSeverity(string(bv)).Rank() {
+			out = append(out, fmt.Sprintf("lowers %s to %s", k, ParseSeverity(string(v))))
+		}
+	}
+	waived := map[string]string{}
+	for _, w := range b.Waivers {
+		waived[w.Rule+"|"+w.Resource] = w.Expires
+	}
+	for _, w := range h.Waivers {
+		exp, ok := waived[w.Rule+"|"+w.Resource]
+		switch {
+		case !ok:
+			out = append(out, fmt.Sprintf("adds a waiver for %s on %s", w.Rule, orDash(w.Resource)))
+		case w.Expires == "" && exp != "" || w.Expires > exp && exp != "":
+			out = append(out, fmt.Sprintf("extends the waiver for %s on %s to %s", w.Rule, orDash(w.Resource), orDash(w.Expires)))
+		}
+	}
+	for sev, n := range b.MaxFindings {
+		if hn, ok := h.MaxFindings[sev]; !ok || hn > n {
+			out = append(out, fmt.Sprintf("raises or removes the %s budget (was %d)", sev, n))
+		}
+	}
+	rules := map[string]bool{}
+	for _, r := range h.CustomRules {
+		rules[r.ID] = true
+	}
+	for _, r := range b.CustomRules {
+		if !rules[r.ID] {
+			out = append(out, "removes custom rule "+r.ID)
+		}
+	}
+	for _, e := range b.Extends {
+		if !in(h.Extends, e) {
+			out = append(out, "stops extending "+e)
+		}
+	}
+	if (b.InlineIgnores != nil && !*b.InlineIgnores) && (h.InlineIgnores == nil || *h.InlineIgnores) {
+		out = append(out, "allows inline ignores again")
+	}
+	if b.MaxWaiverDays > 0 && (h.MaxWaiverDays == 0 || h.MaxWaiverDays > b.MaxWaiverDays) {
+		out = append(out, fmt.Sprintf("relaxes max_waiver_days (was %d)", b.MaxWaiverDays))
+	}
+	sort.Strings(out)
+	return out
 }

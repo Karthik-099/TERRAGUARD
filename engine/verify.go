@@ -1,6 +1,9 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // RiskWeight is Score without the floor, so progress shows even at 0.
 func RiskWeight(r *Report) int {
@@ -15,6 +18,20 @@ func RiskWeight(r *Report) int {
 
 // Verify keeps an AI change only if apply still works, nothing new at MEDIUM+ appears and risk drops.
 func Verify(before, after *Report) (bool, string) {
+	// Deleting a resource removes its findings too; that is not a fix.
+	kept := map[string]bool{}
+	for _, n := range after.Graph.Nodes {
+		kept[n.ID] = true
+	}
+	var gone []string
+	for _, n := range before.Graph.Nodes {
+		if n.Type != "module" && !strings.HasPrefix(n.ID, "data.") && !kept[n.ID] {
+			gone = append(gone, n.ID)
+		}
+	}
+	if len(gone) > 0 {
+		return false, "rejected: the change removes " + strings.Join(gone, ", ") + "; fixes must change settings, not delete infrastructure"
+	}
 	if after.Verdict.Blocking > before.Verdict.Blocking {
 		return false, "rejected: the change would make terraform apply fail"
 	}

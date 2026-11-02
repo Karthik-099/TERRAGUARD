@@ -21,6 +21,9 @@ inputs:
   plan:
     description: Optional path to `terraform show -json tfplan` output.
     default: ""
+  headroom:
+    description: "preflight only: percent of each quota to keep spare for other pipelines (for example 20)."
+    default: "0"
   schema:
     description: Optional path to `terraform providers schema -json` output; checks every argument against the provider.
     default: ""
@@ -82,10 +85,11 @@ runs:
       shell: bash
       env:
         TG_PLAN: ${{ inputs.plan }}
+        TG_HEADROOM: ${{ inputs.headroom }}
       run: |
         [ -n "$TG_PLAN" ] || { echo "preflight needs the plan input (terraform show -json output)"; exit 2; }
         set +e
-        "$RUNNER_TEMP/terraguard" preflight --plan "$TG_PLAN" --live --markdown "$RUNNER_TEMP/preflight.md"
+        "$RUNNER_TEMP/terraguard" preflight --plan "$TG_PLAN" --live --headroom "${TG_HEADROOM:-0}" --markdown "$RUNNER_TEMP/preflight.md"
         code=$?
         cat "$RUNNER_TEMP/preflight.md" >> "$GITHUB_STEP_SUMMARY"
         exit $code

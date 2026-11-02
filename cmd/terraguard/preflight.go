@@ -24,6 +24,7 @@ func runPreflight(args []string) (int, error) {
 	live := fs.Bool("live", false, "read limits and usage with the aws, az and gcloud CLIs (read-only calls)")
 	quotas := fs.String("quotas", "", "JSON file of known limits and usage, keyed like the output, instead of --live")
 	region := fs.String("region", firstEnv("AWS_REGION", "AWS_DEFAULT_REGION"), "AWS region when the provider's region is not a literal")
+	headroom := fs.Float64("headroom", 0, "percent of each limit to keep spare for other pipelines; a plan that only fits by using it fails")
 	format := fs.String("format", "text", "stdout format: text, json or markdown")
 	mdOut := fs.String("markdown", "", "also write a Markdown report to this file")
 	jsonOut := fs.String("json", "", "also write the JSON report to this file")
@@ -65,7 +66,7 @@ func runPreflight(args []string) (int, error) {
 			usage[d.Key] = u
 		}
 	}
-	results := engine.CheckQuotas(demands, usage)
+	results := engine.CheckQuotas(demands, usage, *headroom)
 	buckets := engine.NewBucketNames(string(raw))
 	if *live {
 		for i := range buckets {
@@ -89,7 +90,7 @@ func runPreflight(args []string) (int, error) {
 		fmt.Print(preflightText(results, notes) + bucketsText(buckets))
 	}
 	for _, r := range results {
-		if r.Status == "exceeds" {
+		if r.Status == "exceeds" || r.Status == "tight" {
 			return 1, nil
 		}
 	}
@@ -151,6 +152,9 @@ func preflightText(rs []engine.QuotaResult, notes []string) string {
 	exceeds := 0
 	for _, r := range rs {
 		switch r.Status {
+		case "tight":
+			exceeds++
+			fmt.Fprintf(&b, "TIGHT    %-46s needs %s, %s free: fits, but not with the headroom you asked to keep\n", r.Key, num(r.Need), num(r.Free))
 		case "exceeds":
 			exceeds++
 			fmt.Fprintf(&b, "EXCEEDS  %-46s needs %s, %s free (limit %s, used %s)\n", r.Key, num(r.Need), num(r.Free), num(r.Limit), num(r.Used))
@@ -170,7 +174,7 @@ func preflightText(rs []engine.QuotaResult, notes []string) string {
 		}
 	}
 	if exceeds > 0 {
-		fmt.Fprintf(&b, "\n%d quota(s) would be exceeded: apply would fail partway through. Request an increase or reduce the plan.\n", exceeds)
+		fmt.Fprintf(&b, "\n%d quota(s) would be exceeded or left without the headroom you asked for. Request an increase or reduce the plan.\n", exceeds)
 	}
 	return b.String()
 }

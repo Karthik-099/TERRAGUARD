@@ -7,6 +7,10 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Values set through variables, tfvars and locals are now resolved before rules run, so moving an insecure value into a variable no longer hides it. Findings name the variable, and no auto-fix overwrites the reference.
+- AI verification rejects a "fix" that deletes a resource.
+- `review` judges a change by the base branch's policy, so a pull request cannot loosen its own gate; it lists policy loosening and newly silenced findings.
+- Preflight checks aliased providers in their own region and counts create-before-destroy replacements.
 - Require Go 1.26.10: Go 1.25.0's standard library has known net/http and crypto/tls vulnerabilities. Docker builds use golang:1.26.10-alpine.
 - Server: `/metrics` requires the token when one is set; no directory listings or Go source from the embedded site; the rate limiter uses the proxy-appended client address; usage stats stay bounded under floods and keep counting known rules.
 - CLI: every flag has a description, and `-h` exits cleanly on every command.
@@ -15,6 +19,8 @@ All notable changes are documented here. The format follows
 - Share links are capped at 5 MB when expanded and their contents are validated before loading.
 
 ### Added
+- Policy options `inline_ignores: false` and `max_waiver_days`.
+- `preflight --headroom N` (and the Action's `headroom` input): fail a plan that only fits by using the last N% of a quota.
 - `terraguard preflight` (and the Action's `command: preflight`): checks a plan against live cloud quotas (AWS, Azure, Google Cloud) and S3 bucket name availability before apply, with read-only calls. Separate from the deterministic gate.
 - Guarantees and limits page: drift, quotas, partial applies, permissions, unknown values, modules, false positives, AI.
 - Redesigned site and workspace: animated node-network background, 3D hero, cursor light, scroll progress, a teal-to-violet palette in both themes, self-hosted Manrope and Space Grotesk fonts (no Google Fonts request). Workspace tabs show icons and live counts; the status bar shows a severity distribution; the graph draws clearly visible, hover-highlighted connections.

@@ -137,6 +137,15 @@ func Scan(in Input) *Report {
 			rep.Trace.Evaluations++
 			for _, h := range rule.Check(r) {
 				f := newFinding(rule.ID, h.Sev, h.Msg, r.Address, r.File, r.line(h.Path))
+				src := r.via(h.Path)
+				if h.Fix != nil && src == "" {
+					src = r.via(strings.Join(h.Fix.Path, "."))
+				}
+				if src != "" {
+					// Fix the variable's value, not the reference, so no auto-fix here.
+					f.Message += " The value comes from " + src + "; change it where that is set."
+					h.Fix = nil
+				}
 				if h.Fix != nil && !r.FromPlan {
 					fx := *h.Fix
 					fx.File = r.File

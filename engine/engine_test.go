@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func load(t *testing.T, dir string) Input {
@@ -477,6 +478,91 @@ output "name" {
 	for _, f := range r.Findings {
 		if (f.RuleID == "TG-VAL-011" || f.RuleID == "TG-VAL-012") && f.Resource != "module.vpc" {
 			t.Errorf("%s reported on %s, want module.vpc", f.RuleID, f.Resource)
+		}
+	}
+}
+
+func TestVariablesAndLocalsAreResolved(t *testing.T) {
+	scan := func(files map[string]string) map[string]Finding {
+		out := map[string]Finding{}
+		for _, f := range Scan(Input{Files: files}).Findings {
+			out[f.RuleID] = f
+		}
+		return out
+	}
+	main := `variable "acl" {
+  default = "private"
+}
+resource "aws_s3_bucket" "b" {
+  bucket = "my-bucket-1"
+  acl    = var.acl
+}`
+	if _, ok := scan(map[string]string{"main.tf": main})["TG-AWS-S3-001"]; ok {
+		t.Error("a private default must not be flagged")
+	}
+	got := scan(map[string]string{"main.tf": main, "terraform.tfvars": `acl = "public-read"`})
+	f, ok := got["TG-AWS-S3-001"]
+	if !ok {
+		t.Fatal("terraform.tfvars overrides the default and must be checked")
+	}
+	if f.Fix != nil || !strings.Contains(f.Message, "var.acl") {
+		t.Errorf("a value from a variable gets no auto-fix and names its source: %+v", f)
+	}
+	// Two environment files that disagree: the value is not known statically.
+	if _, ok := scan(map[string]string{"main.tf": main, "dev.tfvars": `acl = "public-read"`, "prod.tfvars": `acl = "private"`})["TG-AWS-S3-001"]; ok {
+		t.Error("conflicting tfvars files must not be guessed")
+	}
+	// A module folder's variables are its own.
+	if _, ok := scan(map[string]string{"main.tf": `variable "acl" {
+  default = "private"
+}`, "modules/b/main.tf": main, "modules/b/terraform.tfvars": `acl = "public-read"`})["TG-AWS-S3-001"]; !ok {
+		t.Error("tfvars next to a module apply to that module")
+	}
+}
+
+func TestStrictExceptionControls(t *testing.T) {
+	src := "# terraguard:ignore TG-AWS-S3-001\nresource \"aws_s3_bucket\" \"b\" {\n  bucket = \"strict-bucket\"\n  acl    = \"public-read\"\n}\n"
+	active := func(cfg string) (bool, map[string]int) {
+		r := Scan(Input{Files: map[string]string{"main.tf": src}, Config: cfg})
+		on := false
+		for _, f := range r.Findings {
+			if f.RuleID == "TG-AWS-S3-001" && !f.Waived {
+				on = true
+			}
+		}
+		return on, ids(r)
+	}
+	if on, _ := active(""); on {
+		t.Fatal("inline ignores work by default")
+	}
+	if on, _ := active("inline_ignores: false\n"); !on {
+		t.Error("inline_ignores: false must make ignore comments have no effect")
+	}
+	waiver := "max_waiver_days: 90\nwaivers:\n  - rule: TG-AWS-S3-001\n    reason: public site\n"
+	if on, got := active("inline_ignores: false\n" + waiver + "    expires: 2099-01-01\n"); !on || got["TG-POL-002"] == 0 {
+		t.Errorf("a waiver beyond max_waiver_days must not apply and must be reported: %v", got)
+	}
+	if on, got := active("inline_ignores: false\n" + waiver); !on || got["TG-POL-002"] == 0 {
+		t.Errorf("a waiver without expiry must not apply under max_waiver_days: %v", got)
+	}
+	soon := time.Now().AddDate(0, 0, 30).Format("2006-01-02")
+	if on, _ := active("inline_ignores: false\n" + waiver + "    expires: " + soon + "\n"); on {
+		t.Error("a waiver within the limit applies")
+	}
+}
+
+func TestPolicyWeakening(t *testing.T) {
+	base := "fail_on: HIGH\nmax_waiver_days: 90\nmax_findings: {MEDIUM: 5}\ncustom_rules:\n  - {id: ORG-1, resource_types: [aws_*], attribute: tags.owner, exists: true}\n"
+	if got := PolicyWeakening(base, base+"disable: []\n"); len(got) != 0 {
+		t.Errorf("no change reported as weakening: %v", got)
+	}
+	if got := PolicyWeakening(base, "fail_on: MEDIUM\nmax_waiver_days: 30\nmax_findings: {MEDIUM: 2}\ncustom_rules:\n  - {id: ORG-1, resource_types: [aws_*], attribute: tags.owner, exists: true}\n"); len(got) != 0 {
+		t.Errorf("a stricter policy reported as weaker: %v", got)
+	}
+	got := strings.Join(PolicyWeakening(base, "fail_on: CRITICAL\nwaivers:\n  - {rule: TG-AWS-*}\n"), "; ")
+	for _, want := range []string{"fail_on loosened from HIGH to CRITICAL", "adds a waiver for TG-AWS-*", "removes custom rule ORG-1", "MEDIUM budget", "max_waiver_days"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %q", want, got)
 		}
 	}
 }

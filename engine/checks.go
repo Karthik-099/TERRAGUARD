@@ -39,6 +39,7 @@ var ModuleRules = []Rule{
 	{ID: "TG-PLAN-001", Title: "Plan destroys a resource", Severity: High, Category: CatPlan, Remediation: "Confirm the destroy is intended; protect stateful resources with lifecycle { prevent_destroy = true }."},
 	{ID: "TG-PLAN-002", Title: "Plan replaces a resource", Severity: Medium, Category: CatPlan, Remediation: "Check the attribute forcing replacement; for stateful resources use create_before_destroy, a moved block, or revert the change."},
 	{ID: "TG-POL-001", Title: "Waiver has expired", Severity: Medium, Category: CatPolicy, Remediation: "Fix the finding or renew the waiver with a new expiry and approver."},
+	{ID: "TG-POL-002", Title: "Waiver exceeds the allowed duration", Severity: Medium, Category: CatPolicy, Remediation: "Give the waiver an expiry within max_waiver_days, or fix the finding."},
 }
 
 var (
@@ -112,7 +113,7 @@ func stateChecks(m *Module) []Finding {
 			if nb.Type != "backend" || len(nb.Labels) == 0 || nb.Labels[0] != "s3" {
 				continue
 			}
-			attrs := walkBody(nb.Body, m.Files[b.File], "", map[string]int{}, new([]Ref), nil)
+			attrs := walkBody(nb.Body, m.Files[b.File], "", map[string]int{}, new([]Ref), nil, nil, nil)
 			line := nb.DefRange().Start.Line
 			if !is(attrs["encrypt"], true) {
 				out = append(out, newFinding("TG-STATE-001", "", "S3 backend without encrypt = true stores state (and its secrets) unencrypted.", "backend.s3", b.File, line))

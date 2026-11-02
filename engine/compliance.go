@@ -84,7 +84,7 @@ var ruleThemes = map[string][]string{
 	"TG-GCP-LB-001": {"encryption-in-transit"}, "TG-GCP-REDIS-001": {"access", "encryption-in-transit"},
 	"TG-K8S-004": {"access"}, "TG-K8S-005": {"access"}, "TG-K8S-006": {"access"}, "TG-K8S-007": {"access"}, "TG-K8S-008": {"access"},
 	"TG-SCHEMA-001": {"change"}, "TG-SCHEMA-002": {"change"}, "TG-SCHEMA-003": {"change"},
-	"TG-PLAN-001": {"backup", "change"}, "TG-PLAN-002": {"backup", "change"}, "TG-POL-001": {"change"},
+	"TG-PLAN-001": {"backup", "change"}, "TG-PLAN-002": {"backup", "change"}, "TG-POL-001": {"change"}, "TG-POL-002": {"change"},
 }
 
 func complianceReport(fs []Finding) []Framework {

@@ -30,7 +30,16 @@ usage:
 | Azure | Regional vCPUs, public IP addresses |
 | Google Cloud | Regional CPUs per machine family, static and in-use external addresses |
 
-vCPUs are estimated from instance type names. In GitHub Actions the same check
+vCPUs are estimated from instance type names. Each provider alias is checked
+in its own region.
+
+Preflight reads a snapshot. Another pipeline can use quota between preflight
+and apply, and the cloud only reserves capacity at create time, so no check
+can close that gap completely. Three things narrow it: run preflight in the
+same job right before `terraform apply`; serialise applies that share an
+account and region (a CI concurrency group); and keep spare capacity with
+`--headroom 20`, which fails a plan that only fits by using the last 20% of a
+limit. Whatever still slips through is recovered from state on the retry. In GitHub Actions the same check
 runs with `command: preflight`.
 
 ### Live state and drift

@@ -2,6 +2,7 @@
 package engine
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -80,10 +81,28 @@ type Resource struct {
 	File     string
 	Line     int
 	Attrs    map[string]any
-	Lines    map[string]int // dotted attr path (with block indexes) -> line
-	Refs     []string       // addresses this resource references
+	Lines    map[string]int    // dotted attr path (with block indexes) -> line
+	Refs     []string          // addresses this resource references
+	Via      map[string]string // attribute path -> the var.x or local.y its value came from
 	FromPlan bool
 }
+
+// via names the variable or local behind the attribute at path (or inside it).
+func (r *Resource) via(path string) string {
+	if v := r.Via[path]; v != "" {
+		return v
+	}
+	for k, v := range r.Via {
+		if strings.HasPrefix(k, path+".") || stripIndexes(k) == path {
+			return v
+		}
+	}
+	return ""
+}
+
+var indexRE = regexp.MustCompile(`\.\d+(\.|$)`)
+
+func stripIndexes(p string) string { return indexRE.ReplaceAllString(p, "$1") }
 
 func (r *Resource) line(path string) int {
 	if l, ok := r.Lines[path]; ok {

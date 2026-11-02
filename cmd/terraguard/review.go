@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/Karthik-099/TERRAGUARD/engine"
@@ -43,9 +44,22 @@ func runReview(args []string) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	baseRep := engine.Scan(engine.Input{Files: baseFiles, Config: head.Config, FailOn: head.FailOn, Schema: head.Schema})
-	headRep := engine.Scan(head)
+	// A change is judged by the policy it is merging into, so it cannot loosen
+	// its own gate. An explicit --config is a location CI controls; use it as is.
+	policy := head.Config
+	if *config == "" {
+		policy, err = basePolicy(*base, paths)
+		if err != nil {
+			return 2, err
+		}
+	}
+	judged := head
+	judged.Config = policy
+	baseRep := engine.Scan(engine.Input{Files: baseFiles, Config: policy, FailOn: head.FailOn, Schema: head.Schema})
+	headRep := engine.Scan(judged)
 	rev := engine.NewReview(baseRep, headRep, engine.ChangedTerraform(strings.Fields(diff)))
+	rev.PolicyChanges = engine.PolicyWeakening(policy, head.Config)
+	rev.Silenced = engine.SilencedBy(baseRep, headRep)
 
 	md := rev.Markdown()
 	// Like model routing by risk tier: only full reviews are worth an AI call.
@@ -93,6 +107,21 @@ func git(args ...string) (string, error) {
 }
 
 // gitFilesAt reads files at a revision, keyed like loadFiles.
+// basePolicy returns the .terraguard.yml at the base revision ("" when it has
+// none, which means the defaults), with extends resolved.
+func basePolicy(rev string, paths []string) (string, error) {
+	cands := []string{".terraguard.yml", ".terraguard.yaml"}
+	for _, p := range paths {
+		cands = append([]string{filepath.ToSlash(filepath.Join(p, ".terraguard.yml")), filepath.ToSlash(filepath.Join(p, ".terraguard.yaml"))}, cands...)
+	}
+	for _, c := range cands {
+		if src, err := git("show", rev+":./"+c); err == nil {
+			return resolvePolicy(src, filepath.Dir(c))
+		}
+	}
+	return "", nil
+}
+
 func gitFilesAt(rev string, paths []string) (map[string]string, error) {
 	list, err := git(append([]string{"ls-tree", "-r", "--name-only", rev, "--"}, paths...)...)
 	if err != nil {
