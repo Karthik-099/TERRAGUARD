@@ -1357,6 +1357,30 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-GCP-VM-203` | MEDIUM | security | VM turns off Shielded VM protections |  | 2.1 |
 | `TG-GCP-WORKBENCH-301` | MEDIUM | security | Workbench instance disks are not encrypted with a customer managed key |  | 2.1 |
 | `TG-GCP-WORKBENCH-302` | HIGH | security | Workbench instance has a public IP address |  | 2.1 |
+| `TG-GDM-BIGQUERY-001` | HIGH | security | BigQuery dataset is public |  | 2.1 |
+| `TG-GDM-COMPUTE-001` | MEDIUM | security | VM has a public IP address |  | 2.1 |
+| `TG-GDM-COMPUTE-002` | MEDIUM | security | VM has IP forwarding on |  | 2.1 |
+| `TG-GDM-COMPUTE-003` | MEDIUM | security | VM has the serial console enabled |  | 2.1 |
+| `TG-GDM-COMPUTE-004` | HIGH | security | VM uses the default service account with full API access |  | 2.1 |
+| `TG-GDM-COMPUTE-005` | LOW | security | VM accepts project-wide SSH keys |  | 2.1 |
+| `TG-GDM-COMPUTE-006` | MEDIUM | security | VM turns OS Login off |  | 2.1 |
+| `TG-GDM-COMPUTE-101` | HIGH | security | Firewall opens ports to the internet |  | 2.1 |
+| `TG-GDM-COMPUTE-201` | LOW | security | Disk does not use a customer-managed key |  | 2.1 |
+| `TG-GDM-DNS-001` | MEDIUM | security | Public DNS zone has DNSSEC off |  | 2.1 |
+| `TG-GDM-DNS-002` | MEDIUM | security | DNSSEC uses RSASHA1 |  | 2.1 |
+| `TG-GDM-GKE-001` | MEDIUM | security | GKE cluster nodes have public IP addresses |  | 2.1 |
+| `TG-GDM-GKE-002` | HIGH | security | GKE cluster has legacy ABAC enabled |  | 2.1 |
+| `TG-GDM-GKE-003` | MEDIUM | security | GKE control plane has no authorized networks |  | 2.1 |
+| `TG-GDM-GKE-004` | MEDIUM | security | GKE cluster issues client certificates or basic auth |  | 2.1 |
+| `TG-GDM-GKE-005` | LOW | security | GKE cluster does not enforce network policy |  | 2.1 |
+| `TG-GDM-SQL-001` | HIGH | security | Cloud SQL instance accepts connections from any address |  | 2.1 |
+| `TG-GDM-SQL-002` | MEDIUM | security | Cloud SQL instance does not require SSL |  | 2.1 |
+| `TG-GDM-SQL-003` | MEDIUM | reliability | Cloud SQL instance has automated backups off |  | 2.1 |
+| `TG-GDM-SQL-004` | MEDIUM | security | MySQL instance has local_infile on |  | 2.1 |
+| `TG-GDM-STORAGE-001` | HIGH | security | Storage bucket grants access to all users |  | 2.1 |
+| `TG-GDM-STORAGE-002` | MEDIUM | security | Storage bucket does not use uniform bucket-level access |  | 2.1 |
+| `TG-GDM-STORAGE-003` | LOW | security | Storage bucket versioning is off |  | 2.1 |
+| `TG-GDM-STORAGE-004` | LOW | security | Storage bucket access logging is off |  | 2.1 |
 | `TG-GH-001` | MEDIUM | security | Branch protection allows unreviewed or forced pushes |  | 2.1 |
 | `TG-GH-002` | HIGH | security | GitHub Actions secret value is in the code |  | 2.1 |
 | `TG-GH-BRANCH-101` | LOW | security | Branch protection does not require signed commits |  | 2.1 |
@@ -1644,6 +1668,8 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-VAL-011` | HIGH | validate | Module call passes an undeclared input (validate will fail) | yes | 2.1 |
 | `TG-VAL-012` | HIGH | validate | Module call is missing a required input (validate will fail) | yes | 2.1 |
 | `TG-VAL-020` | HIGH | validate | Value the AWS API rejects | yes | 2.1 |
+| `TG-VAL-021` | HIGH | validate | Value Azure rejects | yes | 2.1 |
+| `TG-VAL-022` | HIGH | validate | Value Google Cloud rejects | yes | 2.1 |
 | `TG-VULTR-001` | HIGH | security | Vultr firewall rule open to the internet |  | 2.0 |
 | `TG-YC-COMPUTE-101` | HIGH | security | Yandex compute instance has a public IP address |  | 2.1 |
 | `TG-YC-COMPUTE-102` | MEDIUM | security | Yandex compute instance has the serial console enabled |  | 2.1 |
