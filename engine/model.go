@@ -2,13 +2,14 @@
 package engine
 
 import (
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-const Version = "2.0.0"
+const Version = "2.1.0"
 
 type Severity string
 
@@ -67,6 +68,14 @@ type Fix struct {
 	Path        []string `json:"path"`  // nested block names then attribute name
 	Value       any      `json:"value"`
 	Description string   `json:"description"`
+	// Other formats: Format names the editor, Doc and Root locate a YAML
+	// object, Line, Old and New are a Dockerfile line edit.
+	Format string `json:"format,omitempty"`
+	Doc    int    `json:"doc,omitempty"`
+	Root   string `json:"root,omitempty"`
+	Line   int    `json:"line,omitempty"`
+	Old    string `json:"old,omitempty"`
+	New    string `json:"new,omitempty"`
 }
 
 // Unknown marks an attribute whose value is not a literal (references, function calls).
@@ -85,6 +94,9 @@ type Resource struct {
 	Refs     []string          // addresses this resource references
 	Via      map[string]string // attribute path -> the var.x or local.y its value came from
 	FromPlan bool
+	Format   string // "" for Terraform; otherwise the format the resource came from
+	Doc      int    // YAML formats: the document in the file
+	Root     string // YAML formats: where the object sits in that document (items.2 in a List)
 }
 
 // via names the variable or local behind the attribute at path (or inside it).
@@ -131,6 +143,9 @@ func get(v any, path string) any {
 			v = l[0]
 		}
 		m, ok := v.(map[string]any)
+		if seg == "0" && (!ok && v != nil || ok && m["0"] == nil) { // index 0 of a single value or block is itself
+			continue
+		}
 		if !ok {
 			return nil
 		}
@@ -220,4 +235,10 @@ func sortFindings(fs []Finding) {
 		}
 		return a.Line < b.Line
 	})
+}
+
+// IsTerraformFile reports the files TerraGuard reads: Terraform and OpenTofu
+// code, variable files, and Terragrunt configuration.
+func IsTerraformFile(name string) bool {
+	return strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".tofu") || strings.HasSuffix(name, ".tfvars") || path.Base(name) == "terragrunt.hcl" || path.Base(name) == ".terraform.lock.hcl" || strings.HasSuffix(name, ".tf.json")
 }

@@ -75,7 +75,10 @@ func writeBaselineFile(path string, rep *engine.Report) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
-var fixtureHeader = regexp.MustCompile(`(?m)^#\s*(expect|forbid):\s*(.+)$`)
+var (
+	fixtureHeader = regexp.MustCompile(`(?m)^#\s*(expect|forbid):\s*(.+)$`)
+	fixturePath   = regexp.MustCompile(`(?m)^#\s*path:\s*(.+)$`)
+)
 
 // runPolicy validates a policy or runs its fixture tests.
 func runPolicy(args []string) (int, error) {
@@ -109,9 +112,15 @@ func runPolicy(args []string) (int, error) {
 	}
 
 	dir := paths[0]
-	cases, _ := filepath.Glob(filepath.Join(dir, "*.tf"))
+	all, _ := filepath.Glob(filepath.Join(dir, "*"))
+	var cases []string
+	for _, c := range all {
+		if engine.IsScannable(c) && !strings.HasPrefix(filepath.Base(c), ".terraguard") {
+			cases = append(cases, c)
+		}
+	}
 	if len(cases) == 0 {
-		return 2, fmt.Errorf("no *.tf fixtures in %s", dir)
+		return 2, fmt.Errorf("no fixtures in %s", dir)
 	}
 	failed := 0
 	for _, c := range cases {
@@ -119,14 +128,22 @@ func runPolicy(args []string) (int, error) {
 		if err != nil {
 			return 2, err
 		}
+		headers := string(src)
+		if side, err := os.ReadFile(c + ".expect"); err == nil { // JSON cannot hold comments
+			headers = string(side)
+		}
+		name := filepath.Base(c)
+		if m := fixturePath.FindStringSubmatch(headers); m != nil {
+			name = strings.TrimSpace(m[1]) // e.g. .github/workflows/ci.yml, where the path decides the format
+		}
 		got := map[string]bool{}
-		for _, f := range engine.Scan(engine.Input{Files: map[string]string{filepath.Base(c): string(src)}, Config: text}).Findings {
+		for _, f := range engine.Scan(engine.Input{Files: map[string]string{name: string(src)}, Config: text}).Findings {
 			if !f.Waived {
 				got[f.RuleID] = true
 			}
 		}
 		var problems []string
-		for _, m := range fixtureHeader.FindAllStringSubmatch(string(src), -1) {
+		for _, m := range fixtureHeader.FindAllStringSubmatch(headers, -1) {
 			for _, id := range strings.Split(m[2], ",") {
 				id = strings.TrimSpace(id)
 				if m[1] == "expect" && !got[id] {

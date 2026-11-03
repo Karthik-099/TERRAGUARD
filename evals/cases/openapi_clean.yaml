@@ -1,0 +1,12 @@
+# forbid: TG-OAS-001, TG-OAS-002, TG-OAS-003, TG-OAS-004, TG-OAS-007, TG-OAS-010
+openapi: 3.1.0
+info: { title: t, version: "1" }
+servers: [ { url: https://api.example.com } ]
+security: [ { bearer: [] } ]
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+paths:
+  /users:
+    get:
+      responses: { "200": { description: ok } }

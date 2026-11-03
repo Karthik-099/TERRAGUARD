@@ -16,13 +16,24 @@ on GitHub. You'll get a response within 7 days.
 
 ## Verifying releases
 
-From v2.1 onward, every release ships an SPDX SBOM, build provenance for each
-binary, and a keyless Sigstore signature on the Docker image.
+From v2.1 onward, every release ships SPDX and CycloneDX SBOMs
+(`terraguard.spdx.json`, `terraguard.cdx.json`), `checksums.txt` signed keyless
+with Sigstore (`checksums.txt.sigstore.json`), build provenance for every file,
+and a keyless signature on the Docker image. Everything uses free GitHub and
+Sigstore services; no key is stored anywhere.
 
 ```bash
+# 1. The checksum file was signed by this repository's release workflow.
+cosign verify-blob checksums.txt --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/Karthik-099/TERRAGUARD/.github/workflows/release.yml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+# 2. The binary matches the signed checksum.
+sha256sum --ignore-missing -c checksums.txt
+# Or, with the GitHub CLI, check provenance directly.
 gh attestation verify terraguard_linux_amd64 --repo Karthik-099/TERRAGUARD
+# The container image.
 cosign verify ghcr.io/karthik-099/terraguard:latest \
-  --certificate-identity-regexp 'https://github.com/Karthik-099/TERRAGUARD/' \
+  --certificate-identity-regexp '^https://github.com/Karthik-099/TERRAGUARD/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 

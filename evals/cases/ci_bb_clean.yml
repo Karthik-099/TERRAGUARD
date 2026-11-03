@@ -1,0 +1,10 @@
+# path: bitbucket-pipelines.yml
+# forbid: TG-BB-001, TG-BB-002, TG-BB-003, TG-BB-004, TG-BB-005, TG-SEC-001
+image: python:3.12@sha256:8888888888888888888888888888888888888888888888888888888888888888
+pipelines:
+  default:
+    - step:
+        name: Build
+        script:
+          - pip install -r requirements.txt
+          - pytest

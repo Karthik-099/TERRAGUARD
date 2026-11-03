@@ -2,17 +2,21 @@
 
 # TerraGuard
 
-**Catch Terraform failures and security risks before `apply`.**
+**Catch infrastructure failures and security risks before they ship.**
 
-TerraGuard checks Terraform code and plans for misconfigurations, apply-time
-errors and destructive changes. It explains every finding, fixes many of them
-automatically, and enforces your organization's standards as code. One Go
-engine runs in the browser, the editor, the terminal, CI, AI agents and your
-own server. It is open source and costs nothing to run.
+TerraGuard checks Terraform and OpenTofu, Kubernetes manifests (and Helm and
+Kustomize), CloudFormation and SAM, Serverless Framework, Azure ARM and Bicep,
+Dockerfiles, docker-compose, Ansible, OpenAPI and CI pipelines (GitHub Actions,
+GitLab, Azure Pipelines, CircleCI, Bitbucket) for misconfigurations, apply-time
+errors, destructive changes and cost. It explains every finding, fixes many of
+them automatically, and enforces your organization's standards as code. One Go
+engine runs in the browser, the editor, the terminal, CI, AI agents, your own
+server and as a Kubernetes admission controller. It is open source and costs
+nothing to run.
 
 [![ci](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/ci.yml/badge.svg)](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/ci.yml)
 [![pages](https://github.com/Karthik-099/TERRAGUARD/actions/workflows/pages.yml/badge.svg)](https://karthik-099.github.io/TERRAGUARD/)
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-334155)](LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Karthik-099/TERRAGUARD/badge)](https://scorecard.dev/viewer/?uri=github.com/Karthik-099/TERRAGUARD)
 
@@ -45,7 +49,7 @@ discovered too late:
 
 | Stage | What goes wrong | How TerraGuard helps |
 |---|---|---|
-| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 271 rules with exact lines and fixes, verified AI fixes |
+| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 1,688 rules with exact lines and fixes, verified AI fixes |
 | **Init** | Unpinned providers; local, unencrypted or unlocked state; committed `*.tfstate` | Pinning, backend and state-file checks |
 | **Validate** | `terraform validate` needs init and credentials, and misses provider-side errors | Syntax, reference and apply-time checks with no init |
 | **Plan** | A destroy or replace of a database hides in a long plan | Plan risk with the attribute that forced replacement; rules on resolved values |
@@ -53,12 +57,35 @@ discovered too late:
 | **Apply** | Partial failures, data loss, no gate | Will-it-apply verdict, policy gate, GitOps pipeline with approval |
 | **Operate** | Drift, audits, no view of who follows the standards | Pulse adoption reports, compliance mapping, opt-in drift detection |
 
+## Formats
+
+| Format | Read from | Notes |
+|---|---|---|
+| Terraform, OpenTofu | `.tf`, `.tofu`, `.tf.json`, `.tfvars`, `terragrunt.hcl`, plan JSON | Variables, locals, tfvars and Terragrunt inputs resolved; bundled AWS, Azure and Google schemas |
+| Kubernetes | YAML or JSON manifests; Helm charts with `--helm`; Kustomize with `--kustomize` | Every Kubernetes rule runs on manifests and on the Terraform kubernetes provider alike |
+| CloudFormation, SAM | YAML or JSON templates | Parameter defaults resolved, intrinsic functions understood, SAM Globals applied |
+| Serverless Framework | `serverless.yml` | Functions inherit provider settings; `resources` read as CloudFormation |
+| Azure ARM, Bicep | ARM JSON; `.bicep` with `--bicep` | Parameters, variables and common functions evaluated; nested and child resources |
+| Dockerfile | `Dockerfile`, `*.dockerfile`, `Containerfile` | Multi-stage builds; only shipped stages judged where it matters |
+| docker-compose | `docker-compose*.yml`, `compose.yml` | Services, volumes, networks |
+| CI pipelines | GitHub Actions, GitLab CI, Azure Pipelines, CircleCI, Bitbucket | Script injection, unpinned actions, write-all tokens, `pull_request_target` checkouts |
+| Ansible | Playbooks and task files | Cloud modules, shell and download hygiene |
+| OpenAPI | 2.0 and 3.x, YAML or JSON | Security schemes, transport, input limits |
+
+Files of other kinds are skipped. `--framework kubernetes,dockerfile` limits a
+scan to some formats.
+
 ## What TerraGuard does
 
 | Capability | Details |
 |---|---|
-| **Will it apply?** | Syntax, duplicates, undeclared references, `count` + `for_each`, invalid CIDRs, S3 bucket names, port ranges, deprecated Lambda runtimes, missing tfvars. No `terraform init`. |
-| **Security and correctness rules** | 271 rules across AWS, Google Cloud, Azure, Cloudflare, DigitalOcean, Hetzner, Akamai/Linode, OVHcloud/OpenStack, Oracle Cloud, Alibaba Cloud, Vultr, Kubernetes and Helm |
+| **Will it apply?** | Syntax, duplicates, undeclared references, `count` + `for_each`, invalid CIDRs, S3 bucket names, port ranges, deprecated Lambda runtimes, missing tfvars, unknown or missing provider arguments, and values the AWS API rejects (1,322 arguments checked against the published API models). No `terraform init`. |
+| **Security and correctness rules** | 1,688 rules across every format above and 23 cloud providers |
+| **Cost** | `terraguard cost`: offline monthly estimate for AWS, Azure and Google Cloud, usage-based charges from a usage file, your own negotiated prices, a budget gate, and the change shown in every pull request |
+| **Your own policies** | YAML rules in `.terraguard.yml`, graph policies in Checkov's YAML format, Rego (Conftest style), plain-English drafts |
+| **Coverage** | Every resource with the number of checks that ran on it, which passed and which failed, and the resource types no rule is written for, in the CLI (`--coverage`), the report and the workspace |
+| **Any editor** | `terraguard lsp`: diagnostics and quick fixes over the Language Server Protocol for Neovim, JetBrains, Zed, Helix, Emacs and Sublime; a VS Code extension too |
+| **Kubernetes admission** | `terraguard serve` validates objects at `/api/k8s/validate` with the same rules, so the cluster refuses what CI would |
 | **Attack paths** | Cross-resource graph checks, e.g. a public Lambda running as an admin role |
 | **Plan risk** | Destroys and replaces of stateful resources, with the forcing attribute |
 | **Auto-fix** | Syntax-tree edits that keep comments; `terraguard fix` |
@@ -68,7 +95,7 @@ discovered too late:
 | **Pulse** | Control adoption, waiver inventory and trend across many modules |
 | **Compliance** | Indicative mapping to CIS v8, SOC 2, PCI DSS 4.0, ISO 27001:2022, HIPAA |
 | **Docs for humans and agents** | `terraguard docs` (README) and `terraguard agents-md` (AGENTS.md) |
-| **Outputs** | Text, JSON, SARIF, JUnit, GitLab Code Quality, Markdown |
+| **Outputs** | Text, JSON, SARIF, JUnit, Checkstyle, GitLab Code Quality, GitHub annotations, Azure DevOps, Markdown, Mermaid and DOT graphs |
 
 ## Quick start
 
@@ -76,7 +103,14 @@ discovered too late:
 # Install (or use Docker below)
 go install github.com/Karthik-099/TERRAGUARD/cmd/terraguard@latest
 
+terraguard init                           # policy (recommended pack), CI workflow and pre-commit in one step
 terraguard scan .                         # report; exit code 1 when the policy fails
+terraguard scan . --coverage              # every resource: how many checks ran, which failed
+terraguard scan . --watch                 # rescan on every save
+terraguard ui .                           # the workspace on your machine, folder loaded from disk
+terraguard explain TG-AWS-S3-001          # why a rule exists and how to fix it
+terraguard doctor                         # check the install, the policy and optional tools
+terraguard cost --plan plan.json          # monthly cost change of a plan
 terraguard scan . --plan plan.json        # add plan risk analysis
 terraguard fix .                          # deterministic auto-fixes
 terraguard agent . --write                # plus AI fixes, each verified by the engine
@@ -117,7 +151,7 @@ flowchart TB
   subgraph Engine["engine/ (Go, no I/O)"]
     P[HCL parser] --> N[Normalized resource model]
     PL[Plan JSON] --> N
-    N --> R[271 rules] & M[Module and graph checks]
+    N --> R[1,688 rules] & M[Module and graph checks]
     R & M --> POL[Policy: packs, budgets, baselines, waivers]
     POL --> REP[Report, verdict, compliance]
     REP --> OUT[SARIF / JUnit / Code Quality / JSON / Markdown]
@@ -190,6 +224,55 @@ waivers:
 A complete example lives in [examples/policies](examples/policies).
 
 
+### Policy packs
+
+```yaml
+# .terraguard.yml
+extends: [terraguard:recommended]   # or terraguard:strict, terraguard:minimal
+```
+
+| Pack | Gate | Exceptions |
+|---|---|---|
+| `minimal` | CRITICAL and changes that will not apply | As written in your policy |
+| `recommended` | HIGH | Waivers expire within 90 days; leaked secrets and committed state cannot be waived |
+| `strict` | MEDIUM | Waivers expire within 30 days, no inline ignores; public data, wildcard IAM, privileged workloads and script injection cannot be waived |
+
+Your own settings override the pack. Packs resolve everywhere, the browser included.
+
+### Editors
+
+VS Code: the TerraGuard extension. Any other editor: point its LSP client at
+`terraguard lsp`. Neovim: the plugin in [editors/nvim](editors/nvim) (`require("terraguard").setup()`). JetBrains: LSP4IJ, see [editors/jetbrains](editors/jetbrains).
+
+Diagnostics follow your policy; findings with a safe fix offer it as a quick fix.
+
+### What blocks a merge
+
+A change fails the gate when it will not apply (blocking findings) or adds an
+active finding at or above `fail_on` (default HIGH). Lower severities, rules
+newer than your `rules_version`, baselined debt, waived findings and, in
+`review`, anything that already existed on the base branch are reported but do
+not block. See [the gate](docs/REFERENCE.md#what-the-gate-fails-on-and-what-it-leaves-out).
+
+### Coming from Checkov, Trivy or TFLint
+
+Existing `checkov:skip=` and `trivy:ignore:` comments keep working: every
+Checkov Terraform check ID maps to the TerraGuard rule that covers it. Your own
+graph policies in Checkov's YAML format run with `--policy-dir` (or
+`--external-checks-dir`), and Conftest-style Rego policies (`deny`, `violation`,
+`warn`) run with `--rego`, against the code or a plan. `--check`, `--skip-check`, `--skip-path`
+and `--var-file` behave like the flags you know. Output formats include SARIF
+(with stable fingerprints), JUnit, Checkstyle, GitLab Code Quality, GitHub
+annotations and Azure DevOps.
+
+### OpenTofu and Terragrunt
+
+Terraform JSON (`.tf.json`, as CDKTF writes) is read too, with findings on the
+JSON lines. `--include-modules` also scans modules that `terraform init`
+downloaded. `.tofu` files are read with OpenTofu's precedence, and `terragrunt.hcl`
+`inputs` feed variable values, so insecure inputs are caught. Terragrunt
+`remote_state` is checked for encryption and locking.
+
 ### Quota preflight
 
 ```bash
@@ -199,18 +282,73 @@ terraguard preflight --plan plan.json --live   # read-only cloud access
 Quotas and global names (like S3 buckets) are only enforced when resources are
 created, so a clean plan can still fail halfway through apply. Preflight counts
 what the plan needs per quota, compares it with live limits and usage, and
-checks that new bucket names are free. It is opt-in and separate from the
-deterministic gate. See [Guarantees and limits](docs/LIMITS.md).
+checks that new bucket names are free and that the CI role has the IAM
+permissions the creates, deletes and replacements need. It is opt-in and
+separate from the deterministic gate. See [Guarantees and limits](docs/LIMITS.md).
+
+### Cost of a plan
+
+```bash
+terraguard cost --plan plan.json --fail-above 500   # before and after a plan
+terraguard cost .                                   # from the code, no plan needed
+terraguard cost --plan plan.json --usage usage.yml --prices negotiated.yml
+```
+
+Estimates monthly charges before and after the plan for AWS, Azure and Google
+Cloud (instances and VMs, node pools, databases, caches, disks, NAT gateways,
+load balancers, Kubernetes control planes, App Service plans and more) at
+bundled list prices, offline and without an API key. Usage-based charges (S3
+and Blob storage, Lambda and Functions, DynamoDB, requests, logs, data
+transfer) are priced from a usage file:
+
+```yaml
+resource_usage:
+  aws_lambda_function.api: { monthly_requests: 10000000, request_duration_ms: 120 }
+  aws_s3_bucket.logs: { storage_gb: 500 }
+resource_type_default_usage:
+  aws_nat_gateway: { monthly_data_processed_gb: 200 }
+```
+
+`--prices` overrides any bundled price (for example `aws.nat_gateway.hour: 0.04`)
+for negotiated rates. Scans with `--plan` add the estimate to the report and the
+pull request comment.
+
+### Desktop workspace
+
+```bash
+terraguard ui ~/code/platform
+```
+
+Opens the full workspace in your browser with the folder loaded from disk: no
+upload, nothing else to install, the same on Linux, macOS and Windows. It
+listens on loopback only, needs a one-time token, never writes files, and
+reloads when you switch back to the window.
+
+### Kubernetes admission controller
+
+```bash
+terraguard serve --addr 0.0.0.0:8443 --tls-cert tls.crt --tls-key tls.key --admission-policy .terraguard.yml
+```
+
+Register `https://<host>:8443/api/k8s/validate` in a
+`ValidatingWebhookConfiguration`. Objects with findings at or above
+`TERRAGUARD_ADMISSION_FAIL_ON` (default HIGH) are refused with the reasons;
+lower findings come back as warnings that `kubectl` prints. Set
+`TERRAGUARD_SERVER_TOKEN` to require a bearer token.
 
 ### Provider schema checks
+
+Checks every argument and block against what the provider accepts: typos (with
+a "did you mean"), read-only and missing arguments, block limits, deprecations.
+Schemas for AWS, Azure and Google Cloud are bundled, so this runs with no
+`terraform init`; it applies only when the module's version constraint and lock
+file allow the bundled version, and skips resources served by another provider
+such as `google-beta`. For other providers or versions:
 
 ```bash
 terraform providers schema -json > schema.json
 terraguard scan . --schema schema.json
 ```
-
-Checks every argument and block against what the provider accepts: typos (with
-a "did you mean"), read-only and missing arguments, block limits, deprecations.
 
 ### Standards in plain English
 
@@ -276,7 +414,12 @@ fmt, validate, OIDC plan, TerraGuard gate, approval and apply.
 | | TerraGuard | Checkov | Trivy (tfsec) | TFLint | `terraform validate` |
 |---|---|---|---|---|---|
 | Runs in the browser, no install | Yes | No | No | No | No |
-| Security policy breadth | 271 rules | 1,000+ policies | Hundreds | Correctness focus | None |
+| Formats | Terraform, OpenTofu, Kubernetes, Helm, Kustomize, CloudFormation, SAM, Serverless, ARM, Bicep, Dockerfile, Compose, Ansible, OpenAPI, 5 CI systems | Similar, plus SCA and secrets | Terraform, CloudFormation, Kubernetes, Helm, Dockerfile, ARM | Terraform | Terraform |
+| Values the cloud API rejects | 1,322 AWS arguments | No | No | Yes, deepest | No |
+| Kubernetes admission control | Built in | No | Via operator | No | No |
+| Security policy breadth | 1,688 rules, checked against reference fixtures | 1,000+ policies | Hundreds | Correctness focus | None |
+| Your own policies | YAML rules, Checkov-format graph YAML, Rego | Python, YAML | Rego | Go plugins | No |
+| Cost of a plan | Offline estimate, budget gate | No | No | No | No |
 | Apply-time validation | Common failures | No | No | Deep, provider rulesets | Syntax and references |
 | Plan destroy and replace risk | Yes, with cause | Security only | Security only | No | No |
 | Diff-aware PR gating | Yes | Baseline file | No | No | No |
@@ -284,9 +427,24 @@ fmt, validate, OIDC plan, TerraGuard gate, approval and apply.
 | Waivers with approver and expiry | Yes | Skip comments | Expiry in comments | Ignore comments | No |
 | Org adoption reporting | Pulse | Paid platform | No | No | No |
 
-Mature scanners have broader libraries. TerraGuard focuses on the developer
-workflow and works well alongside them. This comparison is based on public
+TerraGuard covers the controls of the major scanners in one engine and adds
+validation, plan risk, cost and verified fixes. This comparison is based on public
 documentation as of November 2026; corrections are welcome as an issue.
+
+## Accuracy
+
+| Measurement | Result |
+|---|---|
+| False "will not apply" predictions on 14 widely used public module repositories (2,016 Terraform files, 110 Kubernetes manifests, 65 GitHub workflows, 4 Dockerfiles) | 0 |
+| Resource rules agreeing with the reference fixtures for the same controls | 563 of 643 |
+| Graph policies agreeing with the reference fixtures | 172 of 175 |
+| Kubernetes, CloudFormation, ARM, Dockerfile and CI checks agreeing with the reference fixtures | 82 of 106, 121 of 130, 48 of 65, 15 of 15 |
+| Labelled eval cases (all formats) | 84 of 84 |
+
+Where a rule disagrees with a reference fixture on purpose, it is because the
+provider default is already safe, the fixture is not valid Terraform, or the
+reference list is out of date. `CKV_SRC=<checkout> go test ./engine -run Parity`
+reproduces the fixture numbers.
 
 ## Performance
 
@@ -294,8 +452,8 @@ documentation as of November 2026; corrections are welcome as an issue.
 |---|---|
 | Full scan of a 12-resource module (native) | 1.3 ms |
 | 200 files, 2,400 resources, 6,800 findings | 0.25 s, about 55 MB of memory |
+| 14 public module repositories, every format, all rules | 4.3 s |
 | Network calls during a scan | 0 |
-| Rule evals (45 labelled cases) | 100% recall, 100% precision |
 
 Reproduce these with `go test -bench Scan ./engine` and `make evals`.
 

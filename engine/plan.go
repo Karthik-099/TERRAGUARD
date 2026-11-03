@@ -13,7 +13,11 @@ type PlanSummary struct {
 	Delete  int          `json:"delete"`
 	Replace int          `json:"replace"`
 	NoOp    int          `json:"no_op"`
+	Import  int          `json:"import"`
+	Moved   int          `json:"moved"`
 	Changes []PlanChange `json:"changes"`
+	Outputs []PlanChange `json:"outputs,omitempty"` // output values that change
+	Drift   []PlanChange `json:"drift,omitempty"`   // changed outside Terraform; Reasons lists the attributes
 }
 
 type PlanChange struct {
@@ -21,21 +25,31 @@ type PlanChange struct {
 	Type    string   `json:"type"`
 	Action  string   `json:"action"` // create | update | delete | replace | read | no-op
 	Reasons []string `json:"reasons,omitempty"`
+	From    string   `json:"from,omitempty"` // previous address when moved
+}
+
+type tfChange struct {
+	Address         string `json:"address"`
+	PreviousAddress string `json:"previous_address"`
+	Mode            string `json:"mode"`
+	Type            string `json:"type"`
+	Name            string `json:"name"`
+	Change          struct {
+		Actions      []string       `json:"actions"`
+		Before       map[string]any `json:"before"`
+		After        map[string]any `json:"after"`
+		ReplacePaths [][]any        `json:"replace_paths"`
+		Importing    any            `json:"importing"`
+	} `json:"change"`
 }
 
 type tfPlan struct {
-	FormatVersion   string `json:"format_version"`
-	ResourceChanges []struct {
-		Address string `json:"address"`
-		Mode    string `json:"mode"`
-		Type    string `json:"type"`
-		Name    string `json:"name"`
-		Change  struct {
-			Actions      []string       `json:"actions"`
-			After        map[string]any `json:"after"`
-			ReplacePaths [][]any        `json:"replace_paths"`
-		} `json:"change"`
-	} `json:"resource_changes"`
+	FormatVersion   string     `json:"format_version"`
+	ResourceChanges []tfChange `json:"resource_changes"`
+	ResourceDrift   []tfChange `json:"resource_drift"`
+	OutputChanges   map[string]struct {
+		Actions []string `json:"actions"`
+	} `json:"output_changes"`
 }
 
 // Stateful resources lose data when destroyed or replaced.
@@ -88,8 +102,14 @@ func parsePlan(raw string) (*PlanSummary, []*Resource, []Finding, error) {
 			}
 			reasons = append(reasons, strings.Join(parts, "."))
 		}
-		if action != "no-op" {
-			sum.Changes = append(sum.Changes, PlanChange{Address: rc.Address, Type: rc.Type, Action: action, Reasons: reasons})
+		if rc.Change.Importing != nil {
+			sum.Import++
+		}
+		if rc.PreviousAddress != "" && rc.PreviousAddress != rc.Address {
+			sum.Moved++
+		}
+		if action != "no-op" || rc.Change.Importing != nil || rc.PreviousAddress != "" {
+			sum.Changes = append(sum.Changes, PlanChange{Address: rc.Address, Type: rc.Type, Action: action, Reasons: reasons, From: rc.PreviousAddress})
 		}
 		stateful := statefulTypes[rc.Type]
 		switch action {
@@ -116,5 +136,51 @@ func parsePlan(raw string) (*PlanSummary, []*Resource, []Finding, error) {
 				File: "plan.json", Attrs: rc.Change.After, Lines: map[string]int{}, FromPlan: true})
 		}
 	}
+	for _, name := range sortedKeys(p.OutputChanges) {
+		if a := strings.Join(p.OutputChanges[name].Actions, ","); a != "no-op" {
+			sum.Outputs = append(sum.Outputs, PlanChange{Address: "output." + name, Action: a})
+		}
+	}
+	planned := map[string]string{}
+	for _, rc := range p.ResourceChanges {
+		planned[rc.Address] = strings.Join(rc.Change.Actions, ",")
+	}
+	for _, d := range p.ResourceDrift {
+		changed := driftedAttributes(d.Change.Before, d.Change.After)
+		action := strings.Join(d.Change.Actions, ",")
+		sum.Drift = append(sum.Drift, PlanChange{Address: d.Address, Type: d.Type, Action: action, Reasons: changed})
+		msg := d.Address + " was changed outside Terraform"
+		if action == "delete" {
+			msg = d.Address + " was deleted outside Terraform"
+		} else if len(changed) > 0 {
+			msg += " (" + strings.Join(changed, ", ") + ")"
+		}
+		sev, tail := Low, ". This apply will put it back to what the code says."
+		if statefulTypes[d.Type] || action == "delete" {
+			sev = Medium
+		}
+		if a, ok := planned[d.Address]; ok && (a == "no-op" || a == "read") {
+			// Covered by ignore_changes, or the change does not matter to the code.
+			sev, tail = Info, ". This plan leaves it as it is (for example ignore_changes)."
+		}
+		out = append(out, newFinding("TG-PLAN-003", sev, msg+tail, d.Address, "plan.json", 0))
+	}
 	return sum, res, out, nil
+}
+
+// driftedAttributes lists the top-level attributes whose live value differs
+// from what Terraform last recorded.
+func driftedAttributes(before, after map[string]any) []string {
+	var out []string
+	for _, k := range sortedKeys(before) {
+		if fmt.Sprint(before[k]) != fmt.Sprint(after[k]) {
+			out = append(out, k)
+		}
+	}
+	for _, k := range sortedKeys(after) {
+		if _, ok := before[k]; !ok {
+			out = append(out, k)
+		}
+	}
+	return out
 }

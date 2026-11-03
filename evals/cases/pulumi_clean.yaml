@@ -1,0 +1,44 @@
+# path: Pulumi.yaml
+# forbid: TG-AWS-S3-001, TG-AWS-RDS-001, TG-AWS-RDS-002, TG-AWS-SG-001, TG-GCP-VM-004
+name: clean
+runtime: yaml
+config:
+  dbPassword:
+    type: string
+    secret: true
+resources:
+  key:
+    type: aws:kms:Key
+    properties:
+      enableKeyRotation: true
+  db:
+    type: aws:rds/instance:Instance
+    properties:
+      allocatedStorage: 10
+      engine: postgres
+      instanceClass: db.t3.micro
+      username: app
+      password: ${dbPassword}
+      publiclyAccessible: false
+      storageEncrypted: true
+      kmsKeyId: ${key.arn}
+  web:
+    type: aws:ec2:SecurityGroup
+    properties:
+      description: web
+      ingress:
+        - description: https from the load balancer
+          protocol: tcp
+          fromPort: 443
+          toPort: 443
+          cidrBlocks: ["10.0.0.0/16"]
+  vm:
+    type: gcp:compute/instance:Instance
+    properties:
+      machineType: e2-small
+      zone: us-central1-a
+      bootDisk:
+        initializeParams:
+          image: debian-cloud/debian-12
+      networkInterfaces:
+        - network: default

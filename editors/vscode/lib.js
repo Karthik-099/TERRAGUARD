@@ -6,7 +6,7 @@ const LEVEL = { CRITICAL: 0, HIGH: 0, MEDIUM: 1, LOW: 2, INFO: 3 };
 function toDiagnostics(report, minSeverity = "LOW") {
   const byFile = {};
   for (const f of report.findings || []) {
-    if (f.waived || !f.file || f.file.endsWith(".json") || (RANK[f.severity] || 0) < (RANK[minSeverity] || 0)) continue;
+    if (f.waived || !f.file || f.file === "plan.json" || (RANK[f.severity] || 0) < (RANK[minSeverity] || 0)) continue;
     (byFile[f.file] ||= []).push({
       line: Math.max((f.line || 1) - 1, 0), // editors are 0-based
       severity: LEVEL[f.severity] ?? 2,

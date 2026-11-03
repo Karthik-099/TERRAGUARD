@@ -26,6 +26,14 @@ type Config struct {
 	InlineIgnores *bool `yaml:"inline_ignores,omitempty" json:"inline_ignores,omitempty"`
 	// MaxWaiverDays rejects waivers with no expiry or one further out than this.
 	MaxWaiverDays int `yaml:"max_waiver_days,omitempty" json:"max_waiver_days,omitempty"`
+	// Unwaivable rules (IDs or globs) cannot be silenced by inline ignores or waivers.
+	Unwaivable []string `yaml:"unwaivable,omitempty" json:"unwaivable,omitempty"`
+	// RulesVersion pins the gating rule set; findings from newer rules are reported only.
+	RulesVersion string `yaml:"rules_version,omitempty" json:"rules_version,omitempty"`
+	// Data holds named lists, such as approved regions, that custom rules use
+	// with in_data and not_in_data.
+	Data map[string][]any `yaml:"data,omitempty" json:"data,omitempty"`
+	only []string         // set per run by --check
 }
 
 // Waiver is an auditable exception: who accepted which risk, why, until when.
@@ -49,6 +57,8 @@ type Condition struct {
 	NotMatches string   `yaml:"not_matches,omitempty" json:"not_matches,omitempty"`
 	Contains   any      `yaml:"contains,omitempty" json:"contains,omitempty"` // list element, map key or substring
 	Min        *float64 `yaml:"min,omitempty" json:"min,omitempty"`
+	InData     string   `yaml:"in_data,omitempty" json:"in_data,omitempty"` // name of a list in data
+	NotInData  string   `yaml:"not_in_data,omitempty" json:"not_in_data,omitempty"`
 	Max        *float64 `yaml:"max,omitempty" json:"max,omitempty"`
 	re, notRe  *regexp.Regexp
 }
@@ -108,6 +118,9 @@ func ParseConfig(src string) (*Config, error) {
 		budgets[sev] = v
 	}
 	c.MaxFindings = budgets
+	if c.RulesVersion != "" && (!rulesVersionRE.MatchString(c.RulesVersion) || newerThan(c.RulesVersion, RulesVersion)) {
+		return nil, fmt.Errorf(".terraguard.yml: rules_version must be like \"2.0\" and not newer than this build's %s (got %q)", RulesVersion, c.RulesVersion)
+	}
 	ids := map[string]bool{}
 	for i := range c.CustomRules {
 		cr := &c.CustomRules[i]
@@ -124,6 +137,11 @@ func ParseConfig(src string) (*Config, error) {
 		cr.Severity = ParseSeverity(string(cr.Severity))
 		if cr.Attribute == "" && len(cr.Assert) == 0 {
 			return nil, fmt.Errorf("custom_rules[%s]: needs an attribute condition or an assert list", cr.ID)
+		}
+		for _, cond := range append(append([]*Condition{&cr.Condition}, ptrs(cr.Assert)...), ptrs(cr.Where)...) {
+			if err := cond.useData(c.Data, cr.ID); err != nil {
+				return nil, err
+			}
 		}
 		if cr.Attribute != "" {
 			if err := cr.Condition.compile("custom_rules[" + cr.ID + "]"); err != nil {
@@ -146,7 +164,7 @@ func ParseConfig(src string) (*Config, error) {
 
 // ResolveExtends merges extends packs, base first. load does the I/O.
 func ResolveExtends(src string, load func(ref string) (string, error)) (string, error) {
-	merged, err := resolve(src, load, map[string]bool{}, 0)
+	merged, err := resolve(src, packLoader(load), map[string]bool{}, 0)
 	if err != nil {
 		return "", err
 	}
@@ -201,6 +219,22 @@ func mergeInto(base, child *Config) {
 			base.MaxFindings = map[Severity]int{}
 		}
 		base.MaxFindings[k] = v
+	}
+	if child.InlineIgnores != nil {
+		base.InlineIgnores = child.InlineIgnores
+	}
+	if child.MaxWaiverDays > 0 {
+		base.MaxWaiverDays = child.MaxWaiverDays
+	}
+	if child.RulesVersion != "" {
+		base.RulesVersion = child.RulesVersion
+	}
+	base.Unwaivable = append(base.Unwaivable, child.Unwaivable...)
+	for k, v := range child.Data {
+		if base.Data == nil {
+			base.Data = map[string][]any{}
+		}
+		base.Data[k] = v
 	}
 	for _, cr := range child.CustomRules {
 		replaced := false
@@ -324,20 +358,58 @@ func (cr *CustomRule) check(r *Resource) (string, bool) {
 
 var ignoreRE = regexp.MustCompile(`(?:#|//)\s*terraguard:ignore[:\s]+([A-Za-z0-9_,\- *]+)`)
 
-// inlineIgnores maps file -> line -> rule IDs from `# terraguard:ignore TG-X` comments.
-func inlineIgnores(files map[string][]byte) map[string]map[int][]string {
+// inlineIgnores maps file -> line -> rule IDs from ignore comments: TerraGuard's
+// own (`terraguard:ignore TG-X [exp:YYYY-MM-DD]`, `terraguard:ignore-file`),
+// and Checkov's and Trivy's, translated through foreignRules. Line 0 holds
+// file-level ignores. Expired ignores are dropped.
+func inlineIgnores(files map[string][]byte, now time.Time) map[string]map[int][]string {
 	out := map[string]map[int][]string{}
+	add := func(name string, line int, ids []string) {
+		if len(ids) == 0 {
+			return
+		}
+		if out[name] == nil {
+			out[name] = map[int][]string{}
+		}
+		out[name][line] = append(out[name][line], ids...)
+	}
+	expired := func(date string) bool {
+		d, err := time.Parse("2006-01-02", date)
+		return err == nil && now.After(d.Add(24*time.Hour))
+	}
 	for name, src := range files {
+		header := true // ignore-file only counts in the leading comments, like tflint
 		for i, line := range strings.Split(string(src), "\n") {
-			m := ignoreRE.FindStringSubmatch(line)
-			if m == nil {
+			trimmed := strings.TrimSpace(line)
+			if header && trimmed != "" && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, "//") {
+				header = false
+			}
+			if fm := fileIgnoreRE.FindStringSubmatch(line); fm != nil {
+				if header {
+					add(name, 0, strings.FieldsFunc(fm[1], func(r rune) bool { return r == ',' || r == ' ' }))
+				}
 				continue
 			}
-			if out[name] == nil {
-				out[name] = map[int][]string{}
+			if m := ignoreRE.FindStringSubmatch(line); m != nil {
+				if e := ignoreExpRE.FindStringSubmatch(line); e == nil || !expired(e[1]) {
+					var ids []string
+					for _, tok := range strings.FieldsFunc(m[1], func(r rune) bool { return r == ',' || r == ' ' }) {
+						if tok != "exp" {
+							ids = append(ids, tok)
+						}
+					}
+					add(name, i+1, ids)
+				}
 			}
-			for _, id := range strings.FieldsFunc(m[1], func(r rune) bool { return r == ',' || r == ' ' }) {
-				out[name][i+1] = append(out[name][i+1], strings.TrimSpace(id))
+			for _, m := range checkovSkipRE.FindAllStringSubmatch(line, -1) {
+				for _, id := range strings.Split(m[1], ",") {
+					add(name, i+1, foreignRules[strings.TrimSpace(id)])
+				}
+			}
+			for _, m := range trivyIgnoreRE.FindAllStringSubmatch(line, -1) {
+				if m[2] == "" || !expired(m[2]) {
+					add(name, i+1, foreignRules[m[1]])
+				}
 			}
 		}
 	}
@@ -361,7 +433,11 @@ func applyPolicy(fs []Finding, cfg *Config, ign map[string]map[int][]string, blo
 			return false
 		}
 		lines := ign[f.File]
-		for _, l := range []int{f.Line, f.Line - 1, blockLine[f.Resource] - 1} {
+		check := []int{0, f.Line, f.Line - 1} // 0 holds file-level ignores
+		if bl := blockLine[f.Resource]; bl > 0 {
+			check = append(check, bl-1, bl, bl+1) // around the block's first line, where checkov:skip usually sits
+		}
+		for _, l := range check {
 			for _, id := range lines[l] {
 				if id == f.RuleID || id == "*" {
 					return true
@@ -373,17 +449,22 @@ func applyPolicy(fs []Finding, cfg *Config, ign map[string]map[int][]string, blo
 	var out []Finding
 	expiredSeen := map[int]bool{}
 	for _, f := range fs {
-		if globAny(cfg.Disable, f.RuleID) {
+		// An unwaivable rule cannot be disabled, skipped, downgraded, pinned out or ignored.
+		locked := globAny(cfg.Unwaivable, f.RuleID)
+		if !locked && (globAny(cfg.Disable, f.RuleID) || (len(cfg.only) > 0 && !globAny(cfg.only, f.RuleID))) {
 			continue
 		}
-		if s, ok := override(f.RuleID); ok {
+		if s, ok := override(f.RuleID); ok && !locked {
 			f.Severity = ParseSeverity(string(s))
 		}
-		if ignored(f) {
+		if !locked && ignored(f) {
 			f.Waived, f.WaiverReason = true, inlineIgnoreReason
 		}
+		if since := RuleSince(f.RuleID); !f.Waived && !locked && cfg.RulesVersion != "" && newerThan(since, cfg.RulesVersion) {
+			f.Waived, f.WaiverReason = true, "new in rules "+since+"; reported only while rules_version is "+cfg.RulesVersion
+		}
 		for i, w := range cfg.Waivers {
-			if ruleMatch, _ := path.Match(w.Rule, f.RuleID); f.Waived || !ruleMatch {
+			if ruleMatch, _ := path.Match(w.Rule, f.RuleID); f.Waived || locked || !ruleMatch {
 				continue
 			}
 			if w.Resource != "" {
@@ -430,6 +511,14 @@ func orDash(s string) string {
 }
 
 const inlineIgnoreReason = "inline terraguard:ignore comment"
+
+var (
+	rulesVersionRE = regexp.MustCompile(`^\d+\.\d+$`)
+	fileIgnoreRE   = regexp.MustCompile(`^\s*(?:#|//)\s*terraguard:ignore-file[:\s]+([A-Za-z0-9_,\- *]+)`)
+	ignoreExpRE    = regexp.MustCompile(`\bexp:(\d{4}-\d{2}-\d{2})`)
+	checkovSkipRE  = regexp.MustCompile(`(?:checkov|bridgecrew|cortex):skip=\s*([A-Za-z0-9_\-]+(?:,[A-Za-z0-9_\-]+)*)`)
+	trivyIgnoreRE  = regexp.MustCompile(`(?:trivy|tfsec):ignore:([A-Za-z0-9_\-]+)(?::exp:(\d{4}-\d{2}-\d{2}))?`)
+)
 
 // PolicyWeakening lists how head is less strict than base. Review judges a
 // change by the base policy, so these take effect only once merged.
@@ -502,9 +591,43 @@ func PolicyWeakening(base, head string) []string {
 	if (b.InlineIgnores != nil && !*b.InlineIgnores) && (h.InlineIgnores == nil || *h.InlineIgnores) {
 		out = append(out, "allows inline ignores again")
 	}
+	for _, u := range b.Unwaivable {
+		if !in(h.Unwaivable, u) {
+			out = append(out, "lets "+u+" be waived again")
+		}
+	}
+	if h.RulesVersion != "" && (b.RulesVersion == "" || newerThan(b.RulesVersion, h.RulesVersion)) {
+		out = append(out, "pins rules_version to "+h.RulesVersion+", so newer rules stop gating")
+	}
 	if b.MaxWaiverDays > 0 && (h.MaxWaiverDays == 0 || h.MaxWaiverDays > b.MaxWaiverDays) {
 		out = append(out, fmt.Sprintf("relaxes max_waiver_days (was %d)", b.MaxWaiverDays))
 	}
 	sort.Strings(out)
 	return out
+}
+
+func ptrs(cs []Condition) []*Condition {
+	out := make([]*Condition, len(cs))
+	for i := range cs {
+		out[i] = &cs[i]
+	}
+	return out
+}
+
+// useData turns in_data and not_in_data into in and not_in lists.
+func (c *Condition) useData(data map[string][]any, rule string) error {
+	for _, ref := range []struct {
+		name string
+		dst  *[]any
+	}{{c.InData, &c.In}, {c.NotInData, &c.NotIn}} {
+		if ref.name == "" {
+			continue
+		}
+		list, ok := data[ref.name]
+		if !ok {
+			return fmt.Errorf("custom_rules[%s]: data list %q is not defined", rule, ref.name)
+		}
+		*ref.dst = append(*ref.dst, list...)
+	}
+	return nil
 }

@@ -1,0 +1,12 @@
+# expect: TG-OAS-002, TG-OAS-003, TG-OAS-004
+openapi: 3.0.3
+info: { title: t, version: "1" }
+servers: [ { url: http://api.example.com } ]
+components:
+  securitySchemes:
+    key: { type: apiKey, in: query, name: api_key }
+paths:
+  /users:
+    delete:
+      security: []
+      responses: { "204": { description: gone } }

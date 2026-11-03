@@ -11,8 +11,11 @@
     hcloud: "Hetzner", linode: "Akamai / Linode", openstack: "OpenStack / OVH", ovh: "OVHcloud", oci: "Oracle Cloud",
     alicloud: "Alibaba Cloud", vultr: "Vultr", kubernetes: "Kubernetes", helm: "Helm",
   };
+  const BRANDS = { aws: "aws", google: "gcp", azurerm: "azure", cloudflare: "cloudflare", digitalocean: "digitalocean", oci: "oracle", kubernetes: "kubernetes", helm: "helm" };
+  const brandIcon = (c) => BRANDS[c] ? `<img class="brand-ic" src="assets/brands/${BRANDS[c]}.svg" alt="" width="16" height="16">` : "";
   const CATEGORY = { security: "Security", validate: "Validation", reliability: "Reliability", "best-practice": "Best practice", "attack-path": "Attack path", plan: "Plan risk", policy: "Policy", cost: "Cost" };
-  const EXAMPLES = { insecure: ["main.tf", "variables.tf", "terraform.tfvars", ".terraguard.yml"], "aws-network": ["main.tf"], multicloud: ["main.tf"], secure: ["main.tf"] };
+  const EXAMPLES = { insecure: ["main.tf", "variables.tf", "terraform.tfvars", ".terraguard.yml"], "aws-network": ["main.tf"], multicloud: ["main.tf"], secure: ["main.tf"],
+    "beyond-terraform": ["deployment.yaml", "template.yaml", "Dockerfile", "docker-compose.yml", ".github/workflows/ci.yml"] };
   // assetsBase: serve libraries from this origin (air-gapped Docker image).
   const JSD = "https://cdn.jsdelivr.net/npm";
   const LOCAL = CFG.assetsBase ? CFG.assetsBase.replace(/\/$/, "") : "";
@@ -245,7 +248,9 @@
     let tried = null;
     try { tried = JSON.parse(sessionStorage.getItem("tg.try")); sessionStorage.removeItem("tg.try"); } catch {}
     const state = shared || tried || restore();
-    if (state && Object.keys(state.files || {}).length) {
+    if (LOCAL_TOKEN && await loadLocal()) {
+      addEventListener("focus", () => loadLocal(true)); // pick up edits made in another editor
+    } else if (state && Object.keys(state.files || {}).length) {
       S.config = state.config || "";
       S.plan = state.plan || "";
       S.chat = state.chat || [];
@@ -259,7 +264,7 @@
     showTab("overview");
   }
 
-  const input = () => ({ files: S.files, plan: S.plan, config: S.config });
+  const input = () => ({ files: S.files, plan: S.plan, config: S.config, coverage: true });
 
   function scan() {
     if (!window.terraguard) return;
@@ -274,7 +279,7 @@
   const scanSoon = () => { clearTimeout(scanTimer); scanTimer = setTimeout(scan, 250); };
 
   // Files
-  const langOf = (n) => (n.endsWith(".json") ? "json" : /\.ya?ml$/.test(n) ? "yaml" : "hcl");
+  const langOf = (n) => (n.endsWith(".json") ? "json" : /\.ya?ml$/.test(n) ? "yaml" : /(^|\/)(Dockerfile|Containerfile)|\.dockerfile$/i.test(n) ? "dockerfile" : "hcl");
 
   function setFiles(files, active) {
     for (const m of Object.values(models)) m.dispose();
@@ -286,7 +291,8 @@
 
   function addFile(name, content, open = true) {
     if (name === POLICY_FILE || name.endsWith("/" + POLICY_FILE)) { S.config = content; $("#policy-input").value = content; return; }
-    if (name.endsWith(".json") && !name.endsWith(".tf.json")) { S.plan = content; $("#plan-input").value = content; return; }
+    // Only plan JSON goes to the Plan tab; CloudFormation and ARM templates are files.
+    if (name.endsWith(".json") && !name.endsWith(".tf.json") && /"(resource_changes|planned_values)"/.test(content.slice(0, 200000))) { S.plan = content; $("#plan-input").value = content; return; }
     S.files[name] = content;
     if (monacoRef) {
       models[name]?.dispose();
@@ -400,6 +406,20 @@
   // A pass, fail or warning mark for checklists.
   const mark = (ok) => `<span class="mark ${ok === null ? "warn" : ok ? "pass" : "fail"}">${icon(ok === null ? "spark" : ok ? "check" : "x", "ic sm")}</span>`;
 
+  // What was checked: every resource, how many rules judged it, which failed.
+  function coverageTile(c) {
+    if (!c || !c.resources) return "";
+    const pct = c.checks ? Math.round((c.passed / c.checks) * 100) : 0;
+    const rows = (c.items || []).map((it) => {
+      const st = it.failed?.length ? `<span class="sev HIGH">${it.failed.length} failed</span>` : it.checks ? `<span class="sev LOW">passed</span>` : `<span class="sev INFO">no rules</span>`;
+      return `<tr><td>${st}</td><td class="mono"><button class="loc" data-jump="${esc(it.file)}" data-line="${it.line || 0}">${esc(it.address)}</button></td><td>${it.checks}</td><td class="mono">${esc((it.failed || []).join(", "))}</td></tr>`;
+    }).join("");
+    return `<div class="tile w12"><h4>Coverage</h4>
+      <div class="kpis"><div><div class="kpi">${c.resources}</div><div class="kpi-label">resources</div></div><div><div class="kpi">${c.checks}</div><div class="kpi-label">checks run</div></div><div><div class="kpi" style="color:var(--ok, #4fe3c1)">${c.passed}</div><div class="kpi-label">passed (${pct}%)</div></div><div><div class="kpi" style="color:var(--high)">${c.failed}</div><div class="kpi-label">failed</div></div></div>
+      ${c.uncovered?.length ? `<p class="hint">No rule is written for: ${esc(c.uncovered.join(", "))}. Generic checks (secrets, references, policy) still ran on them.</p>` : ""}
+      <details><summary>Every resource</summary><div class="table-wrap"><table><thead><tr><th>Status</th><th>Resource</th><th>Checks</th><th>Failed rules</th></tr></thead><tbody>${rows}</tbody></table></div></details></div>`;
+  }
+
   function renderOverview() {
     const r = S.report;
     if (!r) return;
@@ -439,6 +459,7 @@
           <li><span class="num">${fmtN(r.trace.evaluations)}</span><span>rule evaluations on ${r.stats.resources} resources</span></li>
           <li><span class="num">${r.stats.rules}</span><span>rules active, fail_on ${esc(r.fail_on)}${r.trace.custom_rules ? `, ${r.trace.custom_rules} custom` : ""}</span></li></ul>` : `<div class="empty-sm">Trace unavailable.</div>`}</div>
         <div class="tile"><h4>Activity</h4>${S.activity.length ? `<ul class="checks">${S.activity.slice(0, 8).map((a) => `<li><span class="status ${a.ok ? "pass" : "fail"}">${esc(a.kind)}</span><span>${esc(a.text)} <span class="muted">${a.at.toLocaleTimeString()}</span></span></li>`).join("")}</ul>` : `<div class="empty-sm">Fixes and AI proposals appear here, with the engine's decision.</div>`}</div>
+        ${coverageTile(r.coverage)}
         ${r.plan ? `<div class="tile w12"><h4>Plan</h4><div class="kpis"><div><div class="kpi">${r.plan.create}</div><div class="kpi-label">to add</div></div><div><div class="kpi">${r.plan.update}</div><div class="kpi-label">to change</div></div><div><div class="kpi" style="color:var(--crit)">${r.plan.delete}</div><div class="kpi-label">to destroy</div></div><div><div class="kpi" style="color:var(--high)">${r.plan.replace}</div><div class="kpi-label">to replace</div></div></div></div>` : ""}
       </div>`;
   }
@@ -482,7 +503,7 @@
     const r = S.report;
     $("#sev-chips").innerHTML = SEVS.map((s) => `<button class="chip ${S.filter.sev.has(s) ? "on" : ""}" data-sev="${s}"><span class="sevdot" style="background:${sevColor(s)}"></span>${s.toLowerCase()} ${r?.summary[s] || 0}</button>`).join("");
     const clouds = Object.entries(r?.by_provider || {}).sort((a, b) => b[1] - a[1]);
-    $("#cloud-chips").innerHTML = clouds.length ? `<button class="chip ${!S.filter.cloud ? "on" : ""}" data-cloud="">All providers</button>` + clouds.map(([c, n]) => `<button class="chip ${S.filter.cloud === c ? "on" : ""}" data-cloud="${esc(c)}">${esc(CLOUDS[c] || c)} ${n}</button>`).join("") : "";
+    $("#cloud-chips").innerHTML = clouds.length ? `<button class="chip ${!S.filter.cloud ? "on" : ""}" data-cloud="">All providers</button>` + clouds.map(([c, n]) => `<button class="chip ${S.filter.cloud === c ? "on" : ""}" data-cloud="${esc(c)}">${brandIcon(c)}${esc(CLOUDS[c] || c)} ${n}</button>`).join("") : "";
     $("#btn-fixall").disabled = !r?.fixable;
     $("#btn-fixall").textContent = `Fix all (${r?.fixable || 0})`;
     if (!Object.keys(S.files).length && !S.plan) {
@@ -496,6 +517,18 @@
       : `<div class="empty">${r?.findings.length ? "No findings match the filters." : "No findings. Clean scan."}</div>`;
   }
 
+  const usd = (n) => "$" + Number(n || 0).toFixed(2);
+  function costView(c) {
+    if (!c) return "";
+    const d = (c.after || 0) - (c.before || 0);
+    return `<h3 class="sec">Estimated monthly cost</h3>
+      <p><b>${usd(c.before)}</b> to <b>${usd(c.after)}</b> <span class="${d > 0 ? "sev HIGH" : "sev LOW"}">${d >= 0 ? "+" : "-"}${usd(Math.abs(d))}</span></p>
+      <table><thead><tr><th>Resource</th><th>Detail</th><th>Before</th><th>After</th></tr></thead><tbody>
+      ${(c.lines || []).slice(0, 12).map((l) => `<tr><td class="mono">${esc(l.address)}</td><td>${esc(l.detail)}</td><td>${usd(l.before)}</td><td>${usd(l.after)}</td></tr>`).join("")}
+      </tbody></table>
+      <p class="hint">${esc(c.basis)}. Usage-based charges are not included${c.unpriced?.length ? "; not priced: " + esc(c.unpriced.join(", ")) : ""}.</p>`;
+  }
+
   function renderPlan() {
     const p = S.report?.plan;
     if (!p) {
@@ -507,12 +540,19 @@
       <div class="plan-bars">
         <div class="plan-stat create"><b>${p.create}</b>to add</div><div class="plan-stat"><b>${p.update}</b>to change</div>
         <div class="plan-stat delete"><b>${p.delete}</b>to destroy</div><div class="plan-stat replace"><b>${p.replace}</b>to replace</div>
+        ${p.import ? `<div class="plan-stat"><b>${p.import}</b>to import</div>` : ""}${p.moved ? `<div class="plan-stat"><b>${p.moved}</b>moved</div>` : ""}
       </div>
       ${risky.length ? `<div class="list">${risky.map((f) => findingCard(f, S.report.findings.indexOf(f), false)).join("")}</div>` : `<p class="hint">No destructive changes.</p>`}
+      ${costView(S.report.cost)}
       <h3 class="sec">Changes</h3>
       <table><thead><tr><th>Action</th><th>Address</th><th>Forced by</th></tr></thead><tbody>
-      ${(p.changes || []).map((c) => `<tr><td><span class="act ${c.action}">${c.action === "delete" ? "destroy" : c.action}</span></td><td class="mono">${esc(c.address)}</td><td class="mono">${esc((c.reasons || []).join(", "))}</td></tr>`).join("")}
-      </tbody></table>`;
+      ${(p.changes || []).map((c) => `<tr><td><span class="act ${c.action}">${c.action === "delete" ? "destroy" : c.action}</span></td><td class="mono">${esc(c.address)}${c.from ? `<div class="hint">moved from ${esc(c.from)}</div>` : ""}</td><td class="mono">${esc((c.reasons || []).join(", "))}</td></tr>`).join("")}
+      </tbody></table>
+      ${p.drift?.length ? `<h3 class="sec">Changed outside Terraform</h3>
+      <table><thead><tr><th>Drift</th><th>Address</th><th>Attributes</th></tr></thead><tbody>
+      ${p.drift.map((c) => `<tr><td><span class="act ${c.action}">${c.action === "delete" ? "deleted" : "changed"}</span></td><td class="mono">${esc(c.address)}</td><td class="mono">${esc((c.reasons || []).join(", "))}</td></tr>`).join("")}
+      </tbody></table>` : ""}
+      ${p.outputs?.length ? `<h3 class="sec">Outputs that change</h3><p class="mono">${p.outputs.map((o) => esc(o.address)).join(", ")}</p>` : ""}`;
   }
 
   // Graph colours and our own line icons (vendor logos are trademarks).
@@ -1025,6 +1065,28 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
+  // terraguard ui: the folder on disk, served read-only to this page with a one-time token.
+  const LOCAL_TOKEN = (location.hash.match(/[?&]local=([a-f0-9]{32})/) || [])[1] || "";
+  async function loadLocal(quiet) {
+    try {
+      const res = await fetch("api/local/files", { headers: { "X-TerraGuard-Local": LOCAL_TOKEN }, cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      const { files, root } = await res.json();
+      const config = files[".terraguard.yml"] || files[".terraguard.yaml"] || "";
+      delete files[".terraguard.yml"]; delete files[".terraguard.yaml"];
+      if (quiet && JSON.stringify(files) === JSON.stringify(S.files) && config === S.config) return true;
+      S.config = config;
+      $("#policy-input").value = S.config;
+      setFiles(files, S.active);
+      scan();
+      if (!quiet) toast(`Loaded ${Object.keys(files).length} file(s) from ${root}`);
+      return true;
+    } catch {
+      if (!quiet) toast("Could not read the local folder");
+      return false;
+    }
+  }
+
   async function loadExample(name) {
     try {
       if (name === "plan") {
@@ -1050,7 +1112,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     let n = 0;
     for (const f of fileList) {
       const path = f.webkitRelativePath || f.name;
-      if (!/\.(tf|tfvars|json|ya?ml)$|\.tfstate/.test(path) || /(^|\/)\.terraform\//.test(path)) continue;
+      if (!/\.(tf|tofu|tfvars|json|ya?ml|template|dockerfile)$|(^|\/)(terragrunt\.hcl|Dockerfile[^/]*|Containerfile)$|\.tfstate/i.test(path) || /(^|\/)(\.terraform|node_modules|vendor)\//.test(path)) continue;
       const name = path.split("/").slice(f.webkitRelativePath ? 1 : 0).join("/") || f.name;
       // A committed state file is itself the finding; never load its secrets into the editor.
       addFile(name, /\.tfstate/.test(name) ? "" : await f.text(), false);
@@ -1139,7 +1201,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     $("#example-select").onchange = (e) => { if (e.target.value) loadExample(e.target.value); e.target.value = ""; };
     $("#btn-download").onclick = () => S.active && download(S.active, S.files[S.active]);
     $("#btn-format").onclick = () => {
-      if (!S.active || !/\.(tf|tfvars)$/.test(S.active)) return;
+      if (!S.active || !/\.(tf|tofu|tfvars)$/.test(S.active)) return;
       setFileContent(S.active, terraguard.fmt(S.files[S.active]));
       toast("Formatted");
     };
@@ -1220,7 +1282,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       const f = e.target.dataset.export;
       if (!f) return;
       $("#export-menu").hidden = true;
-      download({ markdown: "terraguard-report.md", json: "terraguard-report.json", sarif: "terraguard.sarif", junit: "terraguard-junit.xml", codequality: "gl-code-quality.json" }[f], terraguard.render(JSON.stringify(input()), f));
+      download({ markdown: "terraguard-report.md", json: "terraguard-report.json", sarif: "terraguard.sarif", junit: "terraguard-junit.xml", codequality: "gl-code-quality.json", checkstyle: "terraguard-checkstyle.xml" }[f], terraguard.render(JSON.stringify(input()), f));
     };
 
     $("#plan-input").oninput = (e) => { S.plan = e.target.value; scanSoon(); };

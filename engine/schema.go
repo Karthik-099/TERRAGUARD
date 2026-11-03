@@ -32,6 +32,22 @@ type schemaAttr struct {
 	Optional   bool `json:"optional"`
 	Computed   bool `json:"computed"`
 	Deprecated bool `json:"deprecated"`
+	Type       any  `json:"type"`
+	BlockOK    bool `json:"block_ok"` // bundled schemas: a list of objects that also takes block syntax
+}
+
+// takesBlocks is true for list or set of object attributes, which Terraform
+// also accepts written as blocks ("attributes as blocks").
+func (a schemaAttr) takesBlocks() bool {
+	if a.BlockOK {
+		return true
+	}
+	t, ok := a.Type.([]any)
+	if !ok || len(t) != 2 || (t[0] != "list" && t[0] != "set") {
+		return false
+	}
+	inner, ok := t[1].([]any)
+	return ok && len(inner) > 0 && inner[0] == "object"
 }
 
 type schemaBlockType struct {
@@ -79,9 +95,14 @@ func (s *providerSchemas) lookup(kind, typ string) (*schemaBlock, bool) {
 
 // schemaChecks skips types the schema doesn't know.
 func schemaChecks(m *Module, s *providerSchemas) []Finding {
+	return schemaChecksSkip(m, s, nil)
+}
+
+// schemaChecksSkip leaves out blocks skip reports as served by another provider.
+func schemaChecksSkip(m *Module, s *providerSchemas, skip func(*Block) bool) []Finding {
 	var out []Finding
 	for _, b := range m.Blocks {
-		if (b.Kind != "resource" && b.Kind != "data") || len(b.Labels) != 2 || b.body == nil {
+		if (b.Kind != "resource" && b.Kind != "data") || len(b.Labels) != 2 || b.body == nil || skip != nil && skip(b) {
 			continue
 		}
 		sb, ok := s.lookup(b.Kind, b.Labels[0])
@@ -116,7 +137,8 @@ func (v *schemaVisitor) body(body *hclsyntax.Body, sb *schemaBlock, where string
 			v.add("TG-SCHEMA-001", fmt.Sprintf("%s: %q is a block, not an argument; write %s { ... }.", where, name, name), line)
 		case !ok:
 			v.add("TG-SCHEMA-001", fmt.Sprintf("%s does not support argument %q.%s", where, name, suggest(name, sb)), line)
-		case attr.Computed && !attr.Optional && !attr.Required:
+		case attr.Computed && !attr.Optional && !attr.Required && isLiteral(a.Expr):
+			// an expression may be null, which Terraform accepts for a read-only attribute
 			v.add("TG-SCHEMA-001", fmt.Sprintf("%s: %q is read-only; the provider sets it.", where, name), line)
 		case attr.Deprecated:
 			v.add("TG-SCHEMA-003", fmt.Sprintf("%s: %q is deprecated.", where, name), line)
@@ -140,9 +162,13 @@ func (v *schemaVisitor) body(body *hclsyntax.Body, sb *schemaBlock, where string
 		line := nb.TypeRange.Start.Line
 		bt, ok := sb.BlockTypes[typ]
 		if !ok {
-			if _, isAttr := sb.Attributes[typ]; isAttr {
+			a, isAttr := sb.Attributes[typ]
+			switch {
+			case isAttr && a.takesBlocks():
+				// written as blocks; the attribute's object type is not checked
+			case isAttr:
 				v.add("TG-SCHEMA-001", fmt.Sprintf("%s: %q is an argument, not a block; write %s = { ... }.", where, typ, typ), line)
-			} else {
+			default:
 				v.add("TG-SCHEMA-001", fmt.Sprintf("%s does not support block %q.%s", where, typ, suggest(typ, sb)), line)
 			}
 			continue
@@ -218,4 +244,14 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func isLiteral(e hclsyntax.Expression) bool {
+	switch t := e.(type) {
+	case *hclsyntax.LiteralValueExpr:
+		return !t.Val.IsNull()
+	case *hclsyntax.TemplateExpr:
+		return t.IsStringLiteral()
+	}
+	return false
 }

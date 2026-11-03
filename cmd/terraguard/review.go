@@ -129,7 +129,7 @@ func gitFilesAt(rev string, paths []string) (map[string]string, error) {
 	}
 	files := map[string]string{}
 	for _, p := range strings.Fields(list) {
-		if !strings.HasSuffix(p, ".tf") && !strings.HasSuffix(p, ".tfvars") {
+		if !engine.IsTerraformFile(p) {
 			continue
 		}
 		src, err := git("show", rev+":./"+p)

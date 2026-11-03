@@ -1,5 +1,6 @@
-# TerraGuard in Atlantis: check the plan before anyone can apply it.
-# Server-side repos.yaml (the terraguard binary must be on the Atlantis image).
+# TerraGuard in Atlantis (server-side repos.yaml). The terraguard binary must be
+# on the Atlantis image. Every plan is checked against your policy, and the
+# quota, bucket-name and permission preflight runs right before apply.
 repos:
   - id: /.*/
     workflow: terraguard
@@ -9,4 +10,10 @@ workflows:
       steps:
         - init
         - plan
-        - run: terraform show -json $PLANFILE > plan.json && terraguard scan . --plan plan.json --fail-on HIGH
+        - run: terraform show -json $PLANFILE > $PLANFILE.json && terraguard scan . --plan $PLANFILE.json --fail-on HIGH
+    apply:
+      steps:
+        # Read-only cloud calls; fails if a quota would be exceeded, a bucket
+        # name is taken or the apply role is explicitly denied a permission.
+        - run: terraform show -json $PLANFILE > $PLANFILE.json && terraguard preflight --plan $PLANFILE.json --live --headroom 10
+        - apply

@@ -52,6 +52,21 @@ func TestRemoteMCPScansInlineFilesOnly(t *testing.T) {
 		t.Fatalf("validate_rule did not dry-run the rule: %v %+v", err, res)
 	}
 
+	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "scan_terraform", Arguments: map[string]any{
+		"files": map[string]string{"Dockerfile": "FROM node:latest\nUSER root\n"}}})
+	if err != nil || res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "TG-DOCKER") {
+		t.Fatalf("the scan tool must read other formats: %v %+v", err, res)
+	}
+	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "estimate_cost", Arguments: map[string]any{
+		"files": map[string]string{"main.tf": `resource "aws_nat_gateway" "n" {}`}}})
+	if err != nil || res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, `"after": 32.85`) {
+		t.Fatalf("estimate_cost: %v %+v", err, res)
+	}
+	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "estimate_cost", Arguments: map[string]any{"path": "/etc"}})
+	if err == nil && !res.IsError {
+		t.Fatal("remote cost estimate of a server path was allowed")
+	}
+
 	// Remote callers must never read the server's disk.
 	res, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "scan_terraform", Arguments: map[string]any{"path": "/etc"}})
 	if err == nil && !res.IsError {

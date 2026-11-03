@@ -1,15 +1,15 @@
 # Use from any repo's .pre-commit-config.yaml:
 #   - repo: https://github.com/Karthik-099/TERRAGUARD
-#     rev: v2.0.0
+#     rev: v2.1.0
 #     hooks:
 #       - id: terraguard
 #       - id: terraguard-fix        # optional: apply safe auto-fixes first
 - id: terraguard
   name: TerraGuard scan
-  description: Terraform security, apply-time validation and policy gate.
+  description: Security, apply-time validation and policy gate for Terraform, Kubernetes, CloudFormation, ARM, Dockerfiles, CI pipelines and more.
   entry: terraguard scan
   language: golang
-  files: \.(tf|tfvars)$|\.terraguard\.ya?ml$
+  files: \.(tf|tofu|tfvars|ya?ml|json|template|dockerfile)$|(^|/)(Dockerfile[^/]*|Containerfile|terragrunt\.hcl)$
   pass_filenames: false
   args: ["."]
 

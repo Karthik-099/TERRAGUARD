@@ -1,0 +1,14 @@
+# path: .circleci/config.yml
+# forbid: TG-CIRCLE-001, TG-CIRCLE-002, TG-CIRCLE-003, TG-CIRCLE-004, TG-CIRCLE-005, TG-CIRCLE-006, TG-CIRCLE-007, TG-CIRCLE-008, TG-CIRCLE-009, TG-SEC-001
+version: 2.1
+orbs:
+  node: circleci/node@5.2.0
+jobs:
+  build:
+    docker:
+      - image: cimg/node:20.11@sha256:7777777777777777777777777777777777777777777777777777777777777777
+    steps:
+      - checkout
+      - run: echo "branch $CIRCLE_BRANCH"
+      - run:
+          command: npm ci && npm test

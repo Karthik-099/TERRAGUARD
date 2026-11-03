@@ -1,0 +1,30 @@
+# path: compose.yaml
+# forbid: TG-COMPOSE-001, TG-COMPOSE-002, TG-COMPOSE-003, TG-COMPOSE-004, TG-COMPOSE-005, TG-COMPOSE-006, TG-COMPOSE-007, TG-COMPOSE-008, TG-COMPOSE-009
+# forbid: TG-COMPOSE-010, TG-COMPOSE-011, TG-COMPOSE-012, TG-COMPOSE-013, TG-COMPOSE-014, TG-COMPOSE-015, TG-COMPOSE-016, TG-COMPOSE-017, TG-COMPOSE-018
+# forbid: TG-COMPOSE-019, TG-COMPOSE-020, TG-COMPOSE-021, TG-COMPOSE-022, TG-COMPOSE-023, TG-COMPOSE-024, TG-COMPOSE-025, TG-SEC-001
+services:
+  web:
+    image: nginx:1.27.0@sha256:3333333333333333333333333333333333333333333333333333333333333333
+    user: "101"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: "on-failure:5"
+    pids_limit: 200
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./site:/usr/share/nginx/html:ro
+      - cache:/var/cache/nginx
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD}
+      LOG_LEVEL: info
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+volumes:
+  cache: {}

@@ -1,0 +1,13 @@
+arm:CKV2_AZURE_27	SQL server allows SQL authentication	Local SQL logins bypass Entra ID controls such as MFA and conditional access.	Low
+arm:CKV_AZURE_65	App Service detailed error logging is off	Failed requests leave no detailed error record for troubleshooting.	Low
+arm:CKV_AZURE_66	App Service failed request tracing is off	Slow and failing requests cannot be traced after the fact.	Low
+arm:CKV_AZURE_72	App Service has remote debugging enabled	An open debugger port gives a direct way into the running app.	Medium
+arm:CKV_AZURE_80	App Service pins an outdated .NET Framework version	An old runtime misses security patches.	Low
+arm:CKV_AZURE_104	Data Factory is reachable from the public internet	Pipelines and linked services can be managed from any network with valid credentials.	High
+arm:CKV_AZURE_109	Key Vault firewall allows all networks by default	Any network can reach the vault; only credentials stand in the way.	Medium
+arm:CKV_AZURE_113	SQL server allows public network access	The server can be reached from the internet if firewall rules allow it.	High
+arm:CKV_AZURE_137	Container registry admin account is enabled	The shared admin user has full push and pull rights and is easy to leak.	High
+arm:CKV_AZURE_141	AKS cluster allows local admin accounts	The static cluster-admin credential bypasses Entra ID and cannot be audited per user.	Medium
+arm:CKV_AZURE_145	App Service allows TLS older than 1.2	Old TLS versions have known weaknesses that let an attacker downgrade or decrypt traffic.	Medium
+arm:CKV_AZURE_151	VM has no encryption at host	Temp disks and disk caches on the host are not encrypted.	Medium
+arm:CKV_AZURE_216	Azure Firewall does not block threat-intelligence matches	Traffic to known malicious addresses and domains is only logged, not blocked.	Medium

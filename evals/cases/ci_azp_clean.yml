@@ -1,0 +1,15 @@
+# path: azure-pipelines.yml
+# forbid: TG-AZP-001, TG-AZP-002, TG-AZP-003, TG-AZP-004, TG-AZP-005, TG-AZP-006, TG-AZP-007, TG-AZP-008, TG-SEC-001
+variables:
+  - group: release-secrets
+  - name: configuration
+    value: Release
+stages:
+  - stage: Build
+    jobs:
+      - job: Build
+        container: ubuntu@sha256:6666666666666666666666666666666666666666666666666666666666666666
+        steps:
+          - checkout: self
+          - script: make build
+          - bash: echo "##vso[task.setvariable variable=version]1.2.3"

@@ -1,0 +1,64 @@
+# forbid: TG-AWS-RDS-001, TG-AWS-RDS-002, TG-AWS-SG-001, TG-GCP-GCS-001, TG-GCP-CONTAINER-101
+apiVersion: rds.aws.upbound.io/v1beta1
+kind: Instance
+metadata:
+  name: db
+spec:
+  forProvider:
+    region: us-east-1
+    engine: postgres
+    instanceClass: db.t3.micro
+    allocatedStorage: 20
+    publiclyAccessible: false
+    storageEncrypted: true
+    kmsKeyIdRef:
+      name: db-key
+---
+apiVersion: storage.gcp.upbound.io/v1beta1
+kind: Bucket
+metadata:
+  name: logs
+spec:
+  forProvider:
+    location: US
+    uniformBucketLevelAccess: true
+    publicAccessPrevention: enforced
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: database
+spec:
+  compositeTypeRef:
+    apiVersion: example.org/v1alpha1
+    kind: XDatabase
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: rds
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta1
+              kind: Instance
+              spec:
+                forProvider:
+                  region: us-east-1
+                  engine: postgres
+                  instanceClass: db.t3.micro
+                  storageEncrypted: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.public
+                toFieldPath: spec.forProvider.publiclyAccessible
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: settings
+data:
+  mode: production

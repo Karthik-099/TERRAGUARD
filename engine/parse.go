@@ -31,6 +31,11 @@ type Ref struct {
 	Line int
 }
 
+type localDecl struct {
+	name, file string
+	line       int
+}
+
 func (b *Block) Address() string {
 	switch b.Kind {
 	case "resource":
@@ -49,14 +54,20 @@ func (b *Block) Address() string {
 func (b *Block) fixAddr() string { return strings.Join(append([]string{b.Kind}, b.Labels...), ".") }
 
 type Module struct {
-	Files     map[string][]byte
-	Blocks    []*Block
-	Resources []*Resource
-	Locals    map[string]int // name -> line
-	LocalFile map[string]string
-	Tfvars    map[string]map[string]int // file -> var name -> line
-	State     []string                  // *.tfstate files found in the input
-	Syntax    []Finding
+	Files      map[string][]byte
+	Blocks     []*Block
+	Resources  []*Resource
+	Locals     map[string]int // name -> line
+	LocalFile  map[string]string
+	localDecls []localDecl               // every local with its file; names repeat across modules
+	Tfvars     map[string]map[string]int // file -> var name -> line
+	State      []string                  // *.tfstate files found in the input
+	Terragrunt []*Block                  // remote_state blocks from terragrunt.hcl
+	Provided   map[string]bool           // "dir|var" set by --var-file or Terragrunt inputs
+	Locks      []string                  // .terraform.lock.hcl contents, for provider versions
+	JSONLines  map[string]map[int]int    // .tf.json: converted line -> line in the JSON file
+	Formats    map[string]string         // non-Terraform files read, and their format
+	Syntax     []Finding
 }
 
 var funcs = map[string]function.Function{
@@ -74,8 +85,15 @@ var funcs = map[string]function.Function{
 }
 
 // Parse turns syntax errors into findings so one bad file doesn't hide the rest.
-func Parse(files map[string]string) *Module {
-	m := &Module{Files: map[string][]byte{}, Locals: map[string]int{}, LocalFile: map[string]string{}, Tfvars: map[string]map[string]int{}}
+// VarFile is a tfvars file passed explicitly (terraform -var-file) for the
+// module in Dir. Like Terraform, it overrides terraform.tfvars and auto files.
+type VarFile struct {
+	Dir    string `json:"dir"`
+	Source string `json:"source"`
+}
+
+func Parse(files map[string]string, varFiles ...VarFile) *Module {
+	m := &Module{Files: map[string][]byte{}, Locals: map[string]int{}, LocalFile: map[string]string{}, Tfvars: map[string]map[string]int{}, Provided: map[string]bool{}, JSONLines: map[string]map[int]int{}, Formats: map[string]string{}}
 	names := make([]string, 0, len(files))
 	for n := range files {
 		names = append(names, n)
@@ -84,11 +102,48 @@ func Parse(files map[string]string) *Module {
 
 	var sources []parsedFile
 	for _, name := range names {
+		// OpenTofu reads x.tofu instead of x.tf when both exist.
+		if strings.HasSuffix(name, ".tf") {
+			if _, ok := files[strings.TrimSuffix(name, ".tf")+".tofu"]; ok {
+				continue
+			}
+		}
 		if strings.Contains(name, ".tfstate") {
 			m.State = append(m.State, name)
 			continue
 		}
+		if path.Base(name) == ".terraform.lock.hcl" {
+			m.Locks = append(m.Locks, files[name]) // read only for provider versions
+			continue
+		}
+		if !isHCLFile(name) {
+			if f := detectFormat(name, files[name]); f != "" {
+				m.Formats[name] = f
+				m.Files[name] = []byte(files[name]) // for inline ignores and context
+				if parse := formatParsers[f]; parse != nil {
+					rs, syntax := parse(name, files[name])
+					for _, r := range rs {
+						if r.File == "" {
+							r.File = name
+						}
+						r.Format = f
+					}
+					m.Resources = append(m.Resources, rs...)
+					m.Syntax = append(m.Syntax, syntax...)
+				}
+			}
+			continue
+		}
 		src := []byte(files[name])
+		if strings.HasSuffix(name, ".tf.json") {
+			text, lines, err := jsonToHCL(files[name])
+			if err != nil {
+				m.Syntax = append(m.Syntax, Finding{RuleID: "TG-VAL-001", Severity: High, Category: CatValidate, Blocking: true,
+					Title: "HCL syntax error", Message: "Invalid Terraform JSON: " + err.Error(), File: name, Remediation: "Fix the JSON; terraform cannot parse this file."})
+				continue
+			}
+			src, m.JSONLines[name] = []byte(text), lines
+		}
 		m.Files[name] = src
 		f, diags := hclsyntax.ParseConfig(src, name, hcl.InitialPos)
 		for _, d := range diags {
@@ -124,9 +179,20 @@ func Parse(files map[string]string) *Module {
 
 	// Second pass: evaluate with var.* and local.* known per directory, so a
 	// value moved into a variable or local is still checked.
-	ctxs := moduleContexts(sources)
+	ctxs := moduleContexts(sources, varFiles, m)
 	for _, pf := range sources {
 		if strings.HasSuffix(pf.name, ".tfvars") {
+			continue
+		}
+		if path.Base(pf.name) == "terragrunt.hcl" {
+			// Only remote_state matters for checks; inputs were used as variable values above.
+			for _, hb := range pf.body.Blocks {
+				if hb.Type == "remote_state" {
+					b := &Block{Kind: hb.Type, File: pf.name, Line: hb.DefRange().Start.Line, Lines: map[string]int{}, body: hb.Body}
+					b.Attrs = walkBody(hb.Body, pf.src, "", b.Lines, &b.Refs, nil, ctxs[path.Dir(pf.name)], nil)
+					m.Terragrunt = append(m.Terragrunt, b)
+				}
+			}
 			continue
 		}
 		name, src, body, ctx := pf.name, pf.src, pf.body, ctxs[path.Dir(pf.name)]
@@ -135,6 +201,7 @@ func Parse(files map[string]string) *Module {
 				for n, a := range hb.Body.Attributes {
 					m.Locals[n] = a.SrcRange.Start.Line
 					m.LocalFile[n] = name
+					m.localDecls = append(m.localDecls, localDecl{n, name, a.SrcRange.Start.Line})
 				}
 			}
 			b := &Block{Kind: hb.Type, Labels: hb.Labels, File: name, Line: hb.DefRange().Start.Line,
@@ -166,7 +233,7 @@ func walkBody(body *hclsyntax.Body, src []byte, prefix string, lines map[string]
 	out := map[string]any{}
 	for name, a := range body.Attributes {
 		lines[prefix+name] = a.SrcRange.Start.Line
-		if name != "provider" && name != "providers" {
+		if name != "provider" && name != "providers" && name != "ignore_changes" {
 			collectRefs(a.Expr, refs, skipRoots)
 		}
 		out[name] = evalExpr(a.Expr, src, ctx)
@@ -186,7 +253,7 @@ func walkBody(body *hclsyntax.Body, src []byte, prefix string, lines map[string]
 		switch nb.Type {
 		case "lifecycle":
 			// ignore_changes holds bare attribute names, not references.
-			out[nb.Type] = []any{walkBody(nb.Body, src, prefix+"lifecycle.0.", lines, new([]Ref), nil, ctx, via)}
+			out[nb.Type] = []any{walkBody(nb.Body, src, prefix+"lifecycle.0.", lines, refs, skipRoots, ctx, via)}
 			continue
 		case "dynamic":
 			if len(nb.Labels) == 0 {
@@ -325,18 +392,20 @@ type parsedFile struct {
 // moduleContexts gives each directory the var.* and local.* values that are
 // knowable without a plan: tfvars over defaults, and locals built from them.
 // Anything depending on resources or unset variables stays unknown.
-func moduleContexts(sources []parsedFile) map[string]*hcl.EvalContext {
+func moduleContexts(sources []parsedFile, varFiles []VarFile, m *Module) map[string]*hcl.EvalContext {
 	type dirVals struct {
 		vars   map[string]cty.Value
+		inputs map[string]cty.Value   // Terragrunt inputs, passed as TF_VAR_ values (below tfvars)
 		auto   map[string]cty.Value   // terraform.tfvars and *.auto.tfvars, as Terraform loads them
 		other  map[string][]cty.Value // other .tfvars files; used only when they agree
 		locals map[string]hclsyntax.Expression
 	}
 	dirs := map[string]*dirVals{}
+	var calls []moduleCall
 	get := func(name string) *dirVals {
 		d := path.Dir(name)
 		if dirs[d] == nil {
-			dirs[d] = &dirVals{vars: map[string]cty.Value{}, auto: map[string]cty.Value{}, other: map[string][]cty.Value{}, locals: map[string]hclsyntax.Expression{}}
+			dirs[d] = &dirVals{vars: map[string]cty.Value{}, inputs: map[string]cty.Value{}, auto: map[string]cty.Value{}, other: map[string][]cty.Value{}, locals: map[string]hclsyntax.Expression{}}
 		}
 		return dirs[d]
 	}
@@ -346,6 +415,19 @@ func moduleContexts(sources []parsedFile) map[string]*hcl.EvalContext {
 	}
 	for _, pf := range sources {
 		dv := get(pf.name)
+		if path.Base(pf.name) == "terragrunt.hcl" {
+			if a, ok := pf.body.Attributes["inputs"]; ok {
+				if v, diags := a.Expr.Value(&hcl.EvalContext{Functions: funcs}); !diags.HasErrors() && (v.Type().IsObjectType() || v.Type().IsMapType()) && !v.IsNull() {
+					for it := v.ElementIterator(); it.Next(); {
+						k, ev := it.Element()
+						if ev.IsWhollyKnown() {
+							dv.inputs[k.AsString()] = ev
+						}
+					}
+				}
+			}
+			continue
+		}
 		if strings.HasSuffix(pf.name, ".tfvars") {
 			base := path.Base(pf.name)
 			for n, a := range pf.body.Attributes {
@@ -371,11 +453,19 @@ func moduleContexts(sources []parsedFile) map[string]*hcl.EvalContext {
 				for n, a := range hb.Body.Attributes {
 					dv.locals[n] = a.Expr
 				}
+			case hb.Type == "module" && len(hb.Labels) == 1:
+				if c, ok := localModuleCall(pf.name, hb); ok {
+					calls = append(calls, c)
+				}
 			}
 		}
 	}
 	out := map[string]*hcl.EvalContext{}
 	for d, dv := range dirs {
+		for n, v := range dv.inputs {
+			dv.vars[n] = v
+			m.Provided[d+"|"+n] = true
+		}
 		for n, vs := range dv.other {
 			same := true
 			for _, v := range vs[1:] {
@@ -388,27 +478,125 @@ func moduleContexts(sources []parsedFile) map[string]*hcl.EvalContext {
 		for n, v := range dv.auto {
 			dv.vars[n] = v
 		}
-		locals := map[string]cty.Value{}
-		ctx := &hcl.EvalContext{Functions: funcs, Variables: map[string]cty.Value{}}
-		for pass := 0; pass < 4; pass++ { // locals may build on each other
-			ctx.Variables["var"] = cty.ObjectVal(dv.vars)
-			ctx.Variables["local"] = cty.ObjectVal(locals)
-			added := false
-			for n, e := range dv.locals {
-				if _, done := locals[n]; done {
-					continue
-				}
-				if v, diags := e.Value(ctx); !diags.HasErrors() && v.IsWhollyKnown() {
-					locals[n] = v
-					added = true
-				}
+		for _, vf := range varFiles {
+			if path.Clean(vf.Dir) != d {
+				continue
 			}
-			if !added {
-				break
+			f, diags := hclsyntax.ParseConfig([]byte(vf.Source), "var-file", hcl.InitialPos)
+			if diags.HasErrors() {
+				continue
+			}
+			for n, a := range f.Body.(*hclsyntax.Body).Attributes {
+				if v, ok := literal(a.Expr); ok {
+					dv.vars[n] = v
+				}
+				m.Provided[d+"|"+n] = true
 			}
 		}
-		ctx.Variables["local"] = cty.ObjectVal(locals)
-		out[d] = ctx
+		out[d] = evalContext(dv.vars, dv.locals)
+	}
+	// A local module's variables take the values its callers pass, as in
+	// Terraform; when callers disagree the value stays unknown. Nested modules
+	// resolve over a few passes.
+	for pass := 0; pass < 4 && len(calls) > 0; pass++ {
+		passed := map[string]map[string][]cty.Value{} // child dir -> var -> values from each call
+		callsTo := map[string]int{}
+		for _, c := range calls {
+			ctx := out[c.parent]
+			if ctx == nil || dirs[c.child] == nil {
+				continue
+			}
+			callsTo[c.child]++
+			if passed[c.child] == nil {
+				passed[c.child] = map[string][]cty.Value{}
+			}
+			for n, e := range c.args {
+				m.Provided[c.child+"|"+n] = true
+				if v, diags := e.Value(ctx); !diags.HasErrors() && v.IsWhollyKnown() {
+					passed[c.child][n] = append(passed[c.child][n], v)
+				}
+			}
+		}
+		changed := false
+		for child, vars := range passed {
+			dv := dirs[child]
+			for n, vs := range vars {
+				same := len(vs) == callsTo[child]
+				for _, v := range vs[1:] {
+					same = same && v.RawEquals(vs[0])
+				}
+				if old, had := dv.vars[n]; same && (!had || !old.RawEquals(vs[0])) {
+					dv.vars[n] = vs[0]
+					changed = true
+				}
+			}
+			out[child] = evalContext(dv.vars, dv.locals)
+		}
+		if !changed {
+			break
+		}
 	}
 	return out
+}
+
+// evalContext resolves var.* and local.* for one module directory.
+func evalContext(vars map[string]cty.Value, exprs map[string]hclsyntax.Expression) *hcl.EvalContext {
+	locals := map[string]cty.Value{}
+	ctx := &hcl.EvalContext{Functions: funcs, Variables: map[string]cty.Value{}}
+	for pass := 0; pass < 4; pass++ { // locals may build on each other
+		ctx.Variables["var"] = cty.ObjectVal(vars)
+		ctx.Variables["local"] = cty.ObjectVal(locals)
+		added := false
+		for n, e := range exprs {
+			if _, done := locals[n]; done {
+				continue
+			}
+			if v, diags := e.Value(ctx); !diags.HasErrors() && v.IsWhollyKnown() {
+				locals[n] = v
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	ctx.Variables["local"] = cty.ObjectVal(locals)
+	return ctx
+}
+
+type moduleCall struct {
+	parent, child string
+	args          map[string]hclsyntax.Expression
+}
+
+// moduleMeta are module block arguments that are not inputs.
+var moduleMeta = map[string]bool{"source": true, "version": true, "providers": true, "count": true, "for_each": true, "depends_on": true}
+
+// localModuleCall reads a module block whose source is a path in the repository.
+func localModuleCall(file string, b *hclsyntax.Block) (moduleCall, bool) {
+	a, ok := b.Body.Attributes["source"]
+	if !ok {
+		return moduleCall{}, false
+	}
+	v, diags := a.Expr.Value(nil)
+	if diags.HasErrors() || v.Type() != cty.String {
+		return moduleCall{}, false
+	}
+	src := v.AsString()
+	if !strings.HasPrefix(src, "./") && !strings.HasPrefix(src, "../") {
+		return moduleCall{}, false
+	}
+	c := moduleCall{parent: path.Dir(file), child: path.Clean(path.Join(path.Dir(file), src)), args: map[string]hclsyntax.Expression{}}
+	if _, multi := b.Body.Attributes["for_each"]; multi {
+		return moduleCall{}, false // each instance may differ
+	}
+	if _, multi := b.Body.Attributes["count"]; multi {
+		return moduleCall{}, false
+	}
+	for n, at := range b.Body.Attributes {
+		if !moduleMeta[n] {
+			c.args[n] = at.Expr
+		}
+	}
+	return c, true
 }

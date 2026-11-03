@@ -1,0 +1,8 @@
+# Intentionally weak compose file.
+services:
+  app:
+    image: myapp:latest
+    privileged: true
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

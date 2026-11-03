@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"path"
 	"regexp"
 	"sort"
@@ -18,6 +19,10 @@ var ModuleRules = []Rule{
 	{ID: "TG-VAL-008", Title: "Required variable has no value", Severity: Medium, Category: CatValidate, Remediation: "Add it to a .tfvars file, give it a default, or export TF_VAR_<name>; CI runs with -input=false fail otherwise."},
 	{ID: "TG-VAL-009", Title: "tfvars sets an undeclared variable", Severity: Low, Category: CatValidate, Remediation: "Remove the value or declare the variable; terraform warns and the value is silently ignored."},
 	{ID: "TG-TF-004", Title: "Variable or output has no description", Severity: Info, Category: CatBestPrac, Remediation: "Add description = \"...\" so module users (and generated docs) know what it is for."},
+	{ID: "TG-TF-005", Title: "Deprecated interpolation syntax", Severity: Info, Category: CatBestPrac, Remediation: `Write var.x instead of "${var.x}" when the string holds only one expression.`},
+	{ID: "TG-TF-006", Title: "Variable has no type", Severity: Info, Category: CatBestPrac, Remediation: "Add type = string (or list(...), object({...})) so wrong inputs fail early with a clear error."},
+	{ID: "TG-TF-007", Title: "Unused local", Severity: Info, Category: CatBestPrac, Remediation: "Delete the local, or use it."},
+	{ID: "TG-TF-008", Title: "Unused data source", Severity: Info, Category: CatBestPrac, Remediation: "Delete the data block; it is read on every plan and can fail if the API is unavailable."},
 	{ID: "TG-VAL-010", Title: "Unused variable", Severity: Info, Category: CatBestPrac, Remediation: "Delete it to keep the module interface honest."},
 	{ID: "TG-SEC-001", Title: "Hardcoded secret in configuration", Severity: High, Category: CatSecurity, CWE: "CWE-798", Remediation: "Read it from a sensitive variable, AWS Secrets Manager / SSM data source, or use manage_master_user_password for RDS. Rotate the leaked value — it is in git history."},
 	{ID: "TG-SEC-002", Title: "Credential pattern found in file", Severity: Critical, Category: CatSecurity, CWE: "CWE-798", Remediation: "Revoke the credential immediately, remove it from git history, and use OIDC / a secrets manager instead."},
@@ -37,6 +42,7 @@ var ModuleRules = []Rule{
 	{ID: "TG-PATH-002", Title: "Attack path: public endpoint runs with admin privileges", Severity: Critical, Category: CatAttackPath, CWE: "CWE-269", Remediation: "Scope the execution role to least privilege; one bug in the public code path currently means full account takeover."},
 	{ID: "TG-PATH-003", Title: "Attack path: internet-exposed instance with admin role", Severity: Critical, Category: CatAttackPath, CWE: "CWE-269", Remediation: "Close the security group, enforce IMDSv2, and scope the instance role."},
 	{ID: "TG-PLAN-001", Title: "Plan destroys a resource", Severity: High, Category: CatPlan, Remediation: "Confirm the destroy is intended; protect stateful resources with lifecycle { prevent_destroy = true }."},
+	{ID: "TG-PLAN-003", Title: "Resource drifted from its code", Severity: Low, Category: CatPlan, Remediation: "Decide which side is right: put the manual change into code, or let this apply revert it. Find who changed it in the cloud's audit log."},
 	{ID: "TG-PLAN-002", Title: "Plan replaces a resource", Severity: Medium, Category: CatPlan, Remediation: "Check the attribute forcing replacement; for stateful resources use create_before_destroy, a moved block, or revert the change."},
 	{ID: "TG-POL-001", Title: "Waiver has expired", Severity: Medium, Category: CatPolicy, Remediation: "Fix the finding or renew the waiver with a new expiry and approver."},
 	{ID: "TG-POL-002", Title: "Waiver exceeds the allowed duration", Severity: Medium, Category: CatPolicy, Remediation: "Give the waiver an expiry within max_waiver_days, or fix the finding."},
@@ -45,6 +51,9 @@ var ModuleRules = []Rule{
 var (
 	secretAttrRE = regexp.MustCompile(`(?i)(^|_)(password|passwd|secret|secret_string|token|api_key|apikey|access_key|secret_key|private_key|client_secret)$`)
 	secretVarRE  = regexp.MustCompile(`(?i)(password|passwd|secret|token|api_key|apikey|private_key|access_key)`)
+	// Settings about a secret rather than the secret itself: secret_rotation_interval, password_length.
+	secretMetaRE = regexp.MustCompile(`(?i)(_(interval|rotation|period|enabled|name|names|id|ids|arn|arns|type|length|days|version|ttl|count|path|policy|rules?|config|expiry|expiration)$|^(enable|create|use|manage)_)`)
+	notSecretRE  = regexp.MustCompile(`(?i)^(\d+[smhd]?|true|false|none|null|disabled|enabled)$`)
 	credPatterns = []struct {
 		re   *regexp.Regexp
 		name string
@@ -70,6 +79,9 @@ var ruleIndex = func() map[string]*Rule {
 	}
 	for i := range schemaRules {
 		m[schemaRules[i].ID] = &schemaRules[i]
+	}
+	for i := range graphRules {
+		m[graphRules[i].ID] = &graphRules[i]
 	}
 	return m
 }()
@@ -101,6 +113,15 @@ func stateChecks(m *Module) []Finding {
 		out = append(out, newFinding("TG-STATE-002", "", f+" is part of the scanned files. Anyone with repo access can read every secret it holds.", "", f, 0))
 	}
 	hasBackend := false
+	for _, b := range m.Terragrunt {
+		hasBackend = true
+		backend, _ := asString(b.Attrs["backend"])
+		cfg, _ := b.Attrs["config"].(map[string]any)
+		if backend != "s3" || cfg == nil {
+			continue
+		}
+		out = append(out, s3StateFindings(cfg, "Terragrunt remote_state (s3)", "remote_state", b.File, b.Line)...)
+	}
 	for _, b := range m.Blocks {
 		if b.Kind != "terraform" {
 			continue
@@ -115,12 +136,7 @@ func stateChecks(m *Module) []Finding {
 			}
 			attrs := walkBody(nb.Body, m.Files[b.File], "", map[string]int{}, new([]Ref), nil, nil, nil)
 			line := nb.DefRange().Start.Line
-			if !is(attrs["encrypt"], true) {
-				out = append(out, newFinding("TG-STATE-001", "", "S3 backend without encrypt = true stores state (and its secrets) unencrypted.", "backend.s3", b.File, line))
-			}
-			if attrs["dynamodb_table"] == nil && !is(attrs["use_lockfile"], true) {
-				out = append(out, newFinding("TG-STATE-001", "", "S3 backend has no state locking; two concurrent applies can corrupt state.", "backend.s3", b.File, line))
-			}
+			out = append(out, s3StateFindings(attrs, "S3 backend", "backend.s3", b.File, line)...)
 		}
 	}
 	versioned := false
@@ -135,7 +151,13 @@ func stateChecks(m *Module) []Finding {
 			break
 		}
 	}
-	if !hasBackend && len(m.Resources) > 0 {
+	tfResources := 0
+	for _, r := range m.Resources {
+		if r.Format == "" {
+			tfResources++
+		}
+	}
+	if !hasBackend && tfResources > 0 {
 		r := m.Resources[0]
 		out = append(out, newFinding("TG-STATE-003", "", "State will be written to a local terraform.tfstate file.", "", r.File, 0))
 	}
@@ -162,7 +184,7 @@ func splitByDir(m *Module) map[string]*Module {
 	get := func(file string) *Module {
 		d := path.Dir(file)
 		if subs[d] == nil {
-			subs[d] = &Module{Files: m.Files, Locals: map[string]int{}, Tfvars: map[string]map[string]int{}}
+			subs[d] = &Module{Files: m.Files, Locals: map[string]int{}, LocalFile: map[string]string{}, Tfvars: map[string]map[string]int{}, Provided: m.Provided}
 		}
 		return subs[d]
 	}
@@ -170,8 +192,9 @@ func splitByDir(m *Module) map[string]*Module {
 		sub := get(b.File)
 		sub.Blocks = append(sub.Blocks, b)
 	}
-	for name, line := range m.Locals {
-		get(m.LocalFile[name]).Locals[name] = line
+	for _, l := range m.localDecls {
+		sub := get(l.file)
+		sub.Locals[l.name], sub.LocalFile[l.name] = l.line, l.file
 	}
 	for file, vars := range m.Tfvars {
 		get(file).Tfvars[file] = vars
@@ -262,6 +285,10 @@ func dirDeclarationChecks(m *Module) []Finding {
 			used[ref.Addr] = true
 			root, _, _ := strings.Cut(ref.Addr, ".")
 			checkable := root == "var" || root == "local" || root == "module" || root == "data" || strings.Contains(root, "_")
+			// moved, removed and import blocks name addresses that are meant to be gone or new.
+			if b.Kind == "moved" || b.Kind == "removed" || b.Kind == "import" {
+				checkable = false
+			}
 			if !checkable || declared[ref.Addr] || reported[ref.Addr+b.File] {
 				continue
 			}
@@ -291,7 +318,7 @@ func dirDeclarationChecks(m *Module) []Finding {
 		}
 		name := b.Labels[0]
 		_, hasDefault := b.Attrs["default"]
-		if len(m.Tfvars) > 0 && !hasDefault && !tfvarsSet[name] {
+		if len(m.Tfvars) > 0 && !hasDefault && !tfvarsSet[name] && !m.Provided[path.Dir(b.File)+"|"+name] {
 			out = append(out, newFinding("TG-VAL-008", "", fmt.Sprintf("Variable %q has no default and is not set in any .tfvars file.", name), b.Address(), b.File, b.Line))
 		}
 		if b.Attrs["description"] == nil {
@@ -300,18 +327,51 @@ func dirDeclarationChecks(m *Module) []Finding {
 		if !used["var."+name] {
 			out = append(out, newFinding("TG-VAL-010", "", fmt.Sprintf("Variable %q is declared but never referenced.", name), b.Address(), b.File, b.Line))
 		}
-		if secretVarRE.MatchString(name) {
-			if !is(b.Attrs["sensitive"], true) {
+		if b.Attrs["type"] == nil {
+			out = append(out, newFinding("TG-TF-006", "", fmt.Sprintf("Variable %q has no type, so any value is accepted.", name), b.Address(), b.File, b.Line))
+		}
+		if secretVarRE.MatchString(name) && !secretMetaRE.MatchString(name) {
+			if !is(b.Attrs["sensitive"], true) && !isUnknown(b.Attrs["sensitive"]) {
 				f := newFinding("TG-SEC-003", "", fmt.Sprintf("Variable %q looks like a secret but will be printed in plan output.", name), b.Address(), b.File, b.Line)
 				f.Fix = &Fix{File: b.File, Block: b.fixAddr(), Path: []string{"sensitive"}, Value: true, Description: "Set sensitive = true"}
 				out = append(out, f)
 			}
-			if s, ok := asString(b.Attrs["default"]); ok && s != "" {
+			if s, ok := asString(b.Attrs["default"]); ok && s != "" && !notSecretRE.MatchString(s) {
 				out = append(out, newFinding("TG-SEC-001", "", fmt.Sprintf("Variable %q has a hardcoded default secret.", name), b.Address(), b.File, b.Lines["default"]))
 			}
 		}
 	}
+	for _, n := range sortedKeys(m.Locals) {
+		if !used["local."+n] {
+			out = append(out, newFinding("TG-TF-007", "", fmt.Sprintf("Local %q is declared but never used.", n), "local."+n, m.LocalFile[n], m.Locals[n]))
+		}
+	}
+	for _, b := range m.Blocks {
+		if b.Kind == "data" && len(b.Labels) == 2 && !used[b.Address()] {
+			out = append(out, newFinding("TG-TF-008", "", b.Address()+" is read but never used; it still runs on every plan.", b.Address(), b.File, b.Line))
+		}
+		if b.body != nil {
+			for _, line := range wrappedInterpolations(b.body) {
+				out = append(out, newFinding("TG-TF-005", "", `"${...}" around a single expression is the old Terraform 0.11 style; write the expression directly.`, b.Address(), b.File, line))
+			}
+		}
+	}
 	return out
+}
+
+// wrappedInterpolations finds attributes written as "${expr}" with nothing else.
+func wrappedInterpolations(body *hclsyntax.Body) []int {
+	var lines []int
+	for _, a := range body.Attributes {
+		if _, ok := a.Expr.(*hclsyntax.TemplateWrapExpr); ok {
+			lines = append(lines, a.SrcRange.Start.Line)
+		}
+	}
+	for _, nb := range body.Blocks {
+		lines = append(lines, wrappedInterpolations(nb.Body)...)
+	}
+	sort.Ints(lines)
+	return lines
 }
 
 func secretChecks(m *Module) []Finding {
@@ -341,6 +401,11 @@ func secretChecks(m *Module) []Finding {
 			}
 		}
 		walk("", b.Attrs)
+	}
+	for _, r := range m.Resources {
+		if r.Format != "" {
+			out = append(out, literalSecrets(r)...)
+		}
 	}
 	names := make([]string, 0, len(m.Files))
 	for n := range m.Files {
@@ -600,5 +665,54 @@ func graphChecks(m *Module) []Finding {
 			out = append(out, newFinding("TG-AWS-S3-003", "", fmt.Sprintf("%s has no versioning; deleted or overwritten objects are unrecoverable.", r.Address), r.Address, r.File, r.Line))
 		}
 	}
+	return out
+}
+
+// s3StateFindings checks an s3 state config, from a backend block or a
+// Terragrunt remote_state, for encryption and locking.
+func s3StateFindings(cfg map[string]any, what, attr, file string, line int) []Finding {
+	var out []Finding
+	if !is(cfg["encrypt"], true) && !isUnknown(cfg["encrypt"]) {
+		out = append(out, newFinding("TG-STATE-001", "", what+" without encrypt = true stores state (and its secrets) unencrypted.", attr, file, line))
+	}
+	if cfg["dynamodb_table"] == nil && !is(cfg["use_lockfile"], true) {
+		out = append(out, newFinding("TG-STATE-001", "", what+" has no state locking; two concurrent applies can corrupt state.", attr, file, line))
+	}
+	return out
+}
+
+var (
+	// camelCase and PascalCase names used outside Terraform: MasterUserPassword, clientSecret.
+	secretKeyRE = regexp.MustCompile(`(?i)(password|passwd|secret|token|apikey|api_key|accesskey|access_key|secretkey|secret_key|privatekey|private_key|clientsecret)$`)
+	// Values that point at a secret instead of holding one.
+	secretRefRE = regexp.MustCompile(`^\s*(\$\{|\$\(|\{\{|<|%|arn:|!|\$[A-Z_]+\s*$)|resolve:(secretsmanager|ssm)`)
+)
+
+// literalSecrets reports secret-named settings with literal values in
+// non-Terraform resources: manifests, templates, compose and CI files.
+func literalSecrets(r *Resource) []Finding {
+	var out []Finding
+	var walk func(p string, v any)
+	walk = func(p string, v any) {
+		switch t := v.(type) {
+		case map[string]any:
+			for _, k := range sortedKeys(t) {
+				q := k
+				if p != "" {
+					q = p + "." + k
+				}
+				if s, ok := t[k].(string); ok && secretKeyRE.MatchString(k) && !secretMetaRE.MatchString(k) && len(s) >= 6 && !secretRefRE.MatchString(s) && !notSecretRE.MatchString(s) {
+					out = append(out, newFinding("TG-SEC-001", "", fmt.Sprintf("%q is set to a literal value in %s.", k, r.Address), r.Address, r.File, r.line(q)))
+					continue
+				}
+				walk(q, t[k])
+			}
+		case []any:
+			for i, e := range t {
+				walk(fmt.Sprintf("%s.%d", p, i), e)
+			}
+		}
+	}
+	walk("", r.Attrs)
 	return out
 }

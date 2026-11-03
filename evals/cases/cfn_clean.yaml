@@ -1,0 +1,53 @@
+# forbid: TG-CFN-SG-201, TG-CFN-RDS-202, TG-CFN-LAMBDA-203, TG-CFN-IAM-201, TG-CFN-S3-102, TG-CFN-LAMBDA-201
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  AdminCidr:
+    Type: String
+Resources:
+  Web:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: web
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AdminCidr
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+  Db:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      DBInstanceClass: db.t3.micro
+      StorageEncrypted: true
+  Worker:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.12
+      Handler: app.handler
+      Environment:
+        Variables:
+          DB_PASSWORD: "{{resolve:secretsmanager:db:SecretString:password}}"
+          DB_SECRET_NAME: app/db
+  Reader:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: arn:aws:s3:::app-data/*
+  Site:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private

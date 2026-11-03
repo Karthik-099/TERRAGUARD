@@ -87,7 +87,7 @@ function activate(context) {
     }),
     vscode.languages.registerCodeActionsProvider([{ pattern: "**/*.tf" }, { pattern: "**/*.tfvars" }], new Actions(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (!cfg().onSave || !/\.(tf|tfvars)$/.test(doc.fileName)) return;
+      if (!cfg().onSave || !/\.(tf|tofu|tfvars|ya?ml|json|template|dockerfile)$|(^|[\\/])(Dockerfile[^\\/]*|Containerfile)$/i.test(doc.fileName)) return;
       const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
       if (!folder) return;
       clearTimeout(timers.get(folder.uri.fsPath));

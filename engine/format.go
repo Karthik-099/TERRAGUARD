@@ -18,7 +18,13 @@ func SARIF(r *Report) ([]byte, error) {
 	var rules []obj
 	ruleIdx := map[string]int{}
 	var results []obj
+	seenKey := map[string]int{}
 	for _, f := range r.Findings {
+		key := FindingKey(f)
+		if n := seenKey[key]; n > 0 { // the same rule twice on one resource stays two alerts
+			key = fmt.Sprintf("%s#%d", key, n)
+		}
+		seenKey[FindingKey(f)]++
 		if _, ok := ruleIdx[f.RuleID]; !ok {
 			ruleIdx[f.RuleID] = len(rules)
 			tags := []string{f.Category}
@@ -33,7 +39,9 @@ func SARIF(r *Report) ([]byte, error) {
 		}
 		loc := obj{"physicalLocation": obj{"artifactLocation": obj{"uri": f.File}, "region": obj{"startLine": max(f.Line, 1)}}}
 		res := obj{"ruleId": f.RuleID, "ruleIndex": ruleIdx[f.RuleID], "level": sarifLevel[f.Severity],
-			"message": obj{"text": f.Message}, "locations": []obj{loc}}
+			"message": obj{"text": f.Message}, "locations": []obj{loc},
+			// Line-independent, so moving code does not turn a finding into a new alert.
+			"partialFingerprints": obj{"terraguardFindingKey/v1": fingerprint(key)}}
 		if f.Waived {
 			res["suppressions"] = []obj{{"kind": "external", "justification": f.WaiverReason}}
 		}
@@ -64,10 +72,27 @@ func Markdown(r *Report) string {
 		apply = "No. " + r.Verdict.Message
 	}
 	fmt.Fprintf(&b, "**Will it apply?** %s\n\n", apply)
+	if c := r.Coverage; c != nil && c.Resources > 0 {
+		fmt.Fprintf(&b, "**Coverage:** %s\n\n", coverageLine(c))
+	}
 	fmt.Fprintf(&b, "| Critical | High | Medium | Low | Info | Waived | Auto-fixable |\n|---|---|---|---|---|---|---|\n| %d | %d | %d | %d | %d | %d | %d |\n\n",
 		r.Summary[Critical], r.Summary[High], r.Summary[Medium], r.Summary[Low], r.Summary[Info], r.Waived, r.Fixable)
 	if p := r.Plan; p != nil {
-		fmt.Fprintf(&b, "**Plan:** %d to add, %d to change, %d to destroy, %d to replace.\n\n", p.Create, p.Update, p.Delete, p.Replace)
+		fmt.Fprintf(&b, "**Plan:** %d to add, %d to change, %d to destroy, %d to replace", p.Create, p.Update, p.Delete, p.Replace)
+		if p.Import+p.Moved > 0 {
+			fmt.Fprintf(&b, ", %d to import, %d moved", p.Import, p.Moved)
+		}
+		b.WriteString(".")
+		if len(p.Drift) > 0 {
+			fmt.Fprintf(&b, " **%d resource(s) drifted** from their code.", len(p.Drift))
+		}
+		if len(p.Outputs) > 0 {
+			fmt.Fprintf(&b, " %d output(s) change.", len(p.Outputs))
+		}
+		b.WriteString("\n\n")
+	}
+	if c := r.Cost; c != nil {
+		fmt.Fprintf(&b, "**Estimated monthly cost:** %s to %s (%s, fixed charges only; %s).\n\n", money(c.Before), money(c.After), signed(c.Delta()), c.Basis)
 	}
 	var active []Finding
 	for _, f := range r.Findings {
@@ -122,6 +147,18 @@ func Text(r *Report) string {
 	}
 	fmt.Fprintf(&b, "\n%s\nScore %d/100 (%s) · %d critical · %d high · %d medium · %d low · %d info · %d waived · %d auto-fixable\n",
 		r.Verdict.Message, r.Score, r.Grade, r.Summary[Critical], r.Summary[High], r.Summary[Medium], r.Summary[Low], r.Summary[Info], r.Waived, r.Fixable)
+	if c := r.Coverage; c != nil && c.Resources > 0 {
+		b.WriteString(coverageLine(c) + "\n")
+		for _, it := range c.Items {
+			status := "ok  "
+			if len(it.Failed) > 0 {
+				status = "FAIL"
+			} else if it.Checks == 0 {
+				status = "none"
+			}
+			fmt.Fprintf(&b, "  %s %-60s %3d checks  %s\n", status, it.Address, it.Checks, strings.Join(it.Failed, " "))
+		}
+	}
 	for _, g := range r.GateFailures {
 		fmt.Fprintf(&b, "gate: %s\n", g)
 	}
@@ -207,4 +244,104 @@ func CodeQuality(r *Report) ([]byte, error) {
 			Severity: sev, Location: location{Path: f.File, Lines: lines{Begin: max(f.Line, 1)}}})
 	}
 	return json.MarshalIndent(out, "", "  ")
+}
+
+// ciLevel maps severities to error, warning or notice for CI annotations.
+func ciLevel(s Severity) string {
+	switch s {
+	case Critical, High:
+		return "error"
+	case Medium:
+		return "warning"
+	}
+	return "notice"
+}
+
+// GitHubAnnotations renders workflow commands, so findings show on the pull
+// request's files without code scanning or SARIF upload rights.
+func GitHubAnnotations(r *Report) string {
+	esc := strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
+	prop := strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C")
+	var b strings.Builder
+	for _, f := range r.Findings {
+		if f.Waived {
+			continue
+		}
+		fmt.Fprintf(&b, "::%s file=%s,line=%d,title=%s::%s\n", ciLevel(f.Severity), prop.Replace(f.File), max(f.Line, 1),
+			prop.Replace(f.RuleID+" "+f.Title), esc.Replace(f.Message+" Fix: "+f.Remediation))
+	}
+	return b.String()
+}
+
+// AzureDevOps renders ##vso logging commands for Azure Pipelines.
+func AzureDevOps(r *Report) string {
+	prop := strings.NewReplacer(";", ",", "]", ")", "\r", " ", "\n", " ")
+	var b strings.Builder
+	for _, f := range r.Findings {
+		if f.Waived {
+			continue
+		}
+		level := "warning"
+		if ciLevel(f.Severity) == "error" {
+			level = "error"
+		}
+		fmt.Fprintf(&b, "##vso[task.logissue type=%s;sourcepath=%s;linenumber=%d;code=%s]%s\n", level, prop.Replace(f.File), max(f.Line, 1), f.RuleID,
+			strings.NewReplacer("\r", " ", "\n", " ").Replace(f.Title+": "+f.Message))
+	}
+	return b.String()
+}
+
+// Checkstyle renders the checkstyle XML format read by Jenkins, Bitbucket and many IDEs.
+func Checkstyle(r *Report) ([]byte, error) {
+	type issue struct {
+		Line     int    `xml:"line,attr"`
+		Severity string `xml:"severity,attr"`
+		Message  string `xml:"message,attr"`
+		Source   string `xml:"source,attr"`
+	}
+	type file struct {
+		Name   string  `xml:"name,attr"`
+		Errors []issue `xml:"error"`
+	}
+	byFile := map[string]*file{}
+	var order []string
+	for _, f := range r.Findings {
+		if f.Waived {
+			continue
+		}
+		if byFile[f.File] == nil {
+			byFile[f.File] = &file{Name: f.File}
+			order = append(order, f.File)
+		}
+		sev := map[string]string{"error": "error", "warning": "warning", "notice": "info"}[ciLevel(f.Severity)]
+		byFile[f.File].Errors = append(byFile[f.File].Errors, issue{Line: f.Line, Severity: sev, Message: f.Title + ": " + f.Message, Source: "terraguard." + f.RuleID})
+	}
+	doc := struct {
+		XMLName xml.Name `xml:"checkstyle"`
+		Version string   `xml:"version,attr"`
+		Files   []file   `xml:"file"`
+	}{Version: "4.3"}
+	for _, n := range order {
+		doc.Files = append(doc.Files, *byFile[n])
+	}
+	b, err := xml.MarshalIndent(doc, "", "  ")
+	return append([]byte(xml.Header), b...), err
+}
+
+func fingerprint(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:16])
+}
+
+// coverageLine is the one-line summary of what was checked.
+func coverageLine(c *Coverage) string {
+	line := fmt.Sprintf("Checked %d resource(s) with %d rule evaluations: %d passed, %d failed.", c.Resources, c.Checks, c.Passed, c.Failed)
+	if n := c.Resources - c.Covered; n > 0 {
+		types := c.Uncovered
+		if len(types) > 6 {
+			types = append(append([]string{}, types[:6]...), fmt.Sprintf("and %d more", len(c.Uncovered)-6))
+		}
+		line += fmt.Sprintf(" %d resource(s) have no rule written for their type (%s).", n, strings.Join(types, ", "))
+	}
+	return line
 }

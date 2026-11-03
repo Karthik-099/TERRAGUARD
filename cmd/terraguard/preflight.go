@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ func runPreflight(args []string) (int, error) {
 	format := fs.String("format", "text", "stdout format: text, json or markdown")
 	mdOut := fs.String("markdown", "", "also write a Markdown report to this file")
 	jsonOut := fs.String("json", "", "also write the JSON report to this file")
+	strictPerms := fs.Bool("strict-permissions", false, "also fail on implicitDeny; by default only explicitDeny fails, because the simulator checks against \"*\" and misses resource-scoped grants")
 	if err := fs.Parse(args); err != nil {
 		return 2, err
 	}
@@ -67,14 +69,20 @@ func runPreflight(args []string) (int, error) {
 		}
 	}
 	results := engine.CheckQuotas(demands, usage, *headroom)
+	perms := engine.PermissionNeeds(string(raw))
+	if *live && len(perms) > 0 {
+		if err := simulatePermissions(perms); err != nil {
+			notes = append(notes, "permissions: "+err.Error())
+		}
+	}
 	buckets := engine.NewBucketNames(string(raw))
 	if *live {
 		for i := range buckets {
 			buckets[i].Status = bucketStatus(buckets[i].Name)
 		}
 	}
-	md := preflightMarkdown(results, notes) + bucketsMarkdown(buckets)
-	b, _ := json.MarshalIndent(map[string]any{"results": results, "buckets": buckets, "notes": notes}, "", "  ")
+	md := preflightMarkdown(results, notes) + bucketsMarkdown(buckets) + permissionsMarkdown(perms)
+	b, _ := json.MarshalIndent(map[string]any{"results": results, "buckets": buckets, "permissions": perms, "notes": notes}, "", "  ")
 	if err := writeIf(*mdOut, md); err != nil {
 		return 2, err
 	}
@@ -87,7 +95,7 @@ func runPreflight(args []string) (int, error) {
 	case "markdown":
 		fmt.Print(md)
 	default:
-		fmt.Print(preflightText(results, notes) + bucketsText(buckets))
+		fmt.Print(preflightText(results, notes) + bucketsText(buckets) + permissionsText(perms))
 	}
 	for _, r := range results {
 		if r.Status == "exceeds" || r.Status == "tight" {
@@ -99,12 +107,20 @@ func runPreflight(args []string) (int, error) {
 			return 1, nil
 		}
 	}
+	for _, p := range perms {
+		if p.Decision == "explicitDeny" || (*strictPerms && p.Decision == "implicitDeny") {
+			return 1, nil
+		}
+	}
 	return 0, nil
 }
 
 // bucketStatus asks S3 whether a name is free: 404 free, 403 owned by another
 // account, success means a bucket you can see already has the name.
 func bucketStatus(name string) string {
+	if !safeBucketRE.MatchString(name) {
+		return "unknown" // the scan already reports invalid bucket names
+	}
 	_, err := runCLI("aws", "s3api", "head-bucket", "--bucket", name)
 	switch {
 	case err == nil:
@@ -248,9 +264,18 @@ var awsUsageQueries = map[string][]string{
 	"L-DC2B2D3D": {"s3api", "list-buckets", "--query", "length(Buckets)"},
 }
 
+// Values from the plan become CLI arguments; a value starting with "-" would be read as a flag.
+var (
+	safeRegionRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,40}$`)
+	safeBucketRE = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+)
+
 func liveUsage(d engine.QuotaDemand) (engine.QuotaUsage, error) {
 	if d.Region == "unknown" {
 		return engine.QuotaUsage{}, errors.New("region unknown; pass --region")
+	}
+	if !safeRegionRE.MatchString(d.Region) {
+		return engine.QuotaUsage{}, fmt.Errorf("region %q is not a valid region name", d.Region)
 	}
 	switch d.Cloud {
 	case "aws":
@@ -363,4 +388,80 @@ func awsUsed(code, region string) (float64, error) {
 		return 0, err
 	}
 	return strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
+}
+
+var assumedRoleRE = regexp.MustCompile(`^arn:(aws[a-z-]*):sts::(\d+):assumed-role/([^/]+)/`)
+
+// simulatePermissions asks the IAM policy simulator whether the identity CI
+// runs as may perform each action. It evaluates identity policies and
+// permission boundaries; resource policies and SCPs can still deny at apply.
+func simulatePermissions(perms []engine.PermissionNeed) error {
+	out, err := runCLI("aws", "sts", "get-caller-identity", "--query", "Arn", "--output", "text")
+	if err != nil {
+		return err
+	}
+	arn := strings.TrimSpace(string(out))
+	if m := assumedRoleRE.FindStringSubmatch(arn); m != nil {
+		// The simulator needs the role's own ARN, which includes its path.
+		role, err := runCLI("aws", "iam", "get-role", "--role-name", m[3], "--query", "Role.Arn", "--output", "text")
+		if err != nil {
+			return err
+		}
+		arn = strings.TrimSpace(string(role))
+	}
+	actions := make([]string, len(perms))
+	for i, p := range perms {
+		actions[i] = p.Action
+	}
+	out, err = runCLI("aws", append([]string{"iam", "simulate-principal-policy", "--policy-source-arn", arn, "--output", "json", "--action-names"}, actions...)...)
+	if err != nil {
+		return err
+	}
+	var res struct {
+		EvaluationResults []struct {
+			EvalActionName string `json:"EvalActionName"`
+			EvalDecision   string `json:"EvalDecision"`
+		} `json:"EvaluationResults"`
+	}
+	if err := json.Unmarshal(out, &res); err != nil {
+		return err
+	}
+	decided := map[string]string{}
+	for _, r := range res.EvaluationResults {
+		decided[r.EvalActionName] = r.EvalDecision
+	}
+	for i := range perms {
+		if d := decided[perms[i].Action]; d != "" {
+			perms[i].Decision = d
+		}
+	}
+	return nil
+}
+
+func permissionsText(ps []engine.PermissionNeed) string {
+	var b strings.Builder
+	for _, p := range ps {
+		if p.Decision == "allowed" || p.Decision == "unknown" {
+			continue
+		}
+		label := "DENIED  "
+		if p.Decision == "implicitDeny" {
+			// Simulated against "*": a grant scoped to specific ARNs shows as implicitDeny.
+			label = "UNSURE  "
+		}
+		fmt.Fprintf(&b, "%s %s (%s) for %s\n", label, p.Action, p.Decision, strings.Join(p.Resources, ", "))
+	}
+	return b.String()
+}
+
+func permissionsMarkdown(ps []engine.PermissionNeed) string {
+	if len(ps) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n| Permission | Decision | Needed for |\n|---|---|---|\n")
+	for _, p := range ps {
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", p.Action, p.Decision, strings.Join(p.Resources, ", "))
+	}
+	return b.String()
 }

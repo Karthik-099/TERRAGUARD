@@ -1,0 +1,202 @@
+CKV_ALI_4	ActionTrail trail does not cover all regions	Activity in regions outside the trail goes unrecorded, leaving blind spots during an investigation.	Low
+CKV_ALI_5	ActionTrail trail does not record all event types	Skipping read or write events leaves gaps in the audit record of who did what.	Low
+CKV_ALI_6	OSS bucket is not encrypted with a customer managed key	Without your own KMS key you cannot control rotation, revoke access to the data or audit key use.	Low
+CKV_ALI_10	OSS bucket has versioning turned off	Overwritten or deleted objects cannot be recovered after a mistake or a ransomware attack.	Low
+CKV_ALI_11	OSS bucket has transfer acceleration turned off	Uploads and downloads from distant clients are slower; this is a performance choice, not a security gap.	Info
+CKV_ALI_12	OSS bucket has no access logging	Requests to the bucket are not recorded, so data access cannot be traced afterwards.	Low
+CKV_ALI_14	RAM password policy does not require a number	Users can pick simpler passwords that are easier to guess or crack.	Medium
+CKV_ALI_15	RAM password policy does not require a symbol	Users can pick simpler passwords that are easier to guess or crack.	Medium
+CKV_ALI_17	RAM password policy does not require a lowercase letter	Users can pick simpler passwords that are easier to guess or crack.	Medium
+CKV_ALI_19	RAM password policy does not require an uppercase letter	Users can pick simpler passwords that are easier to guess or crack.	Medium
+CKV_ALI_20	ApsaraDB RDS instance does not enforce SSL	Database traffic can travel in plaintext and be read or altered on the network.	Medium
+CKV_ALI_24	RAM does not enforce MFA at console login	A stolen password alone is enough to sign in to the account.	High
+CKV_ALI_28	KMS key is not enabled	Services that depend on the key cannot encrypt or decrypt, which can break workloads.	Low
+CKV_ALI_29	ALB access control list includes 0.0.0.0/0	An entry for every address makes the list cover the whole internet, which can expose the listener.	Medium
+CKV_ALI_30	ApsaraDB RDS instance does not apply minor upgrades automatically	Security patches for the database engine are not applied unless someone upgrades by hand.	Low
+CKV_ALI_31	Kubernetes node pool has auto repair turned off	Unhealthy nodes stay in service until someone replaces them by hand.	Low
+CKV_ALI_33	SLB TLS cipher policy allows TLS 1.0 or 1.1	Old TLS versions have known weaknesses that let an attacker downgrade or decrypt traffic.	Medium
+CKV_ALI_38	Log audit does not collect RDS logs	Database activity is missing from the central audit, so suspicious queries go unnoticed.	Low
+CKV_ALI_41	MongoDB instance is not placed in a VPC	The database sits on the classic network without private isolation from other tenants.	Medium
+CKV_ALI_42	MongoDB instance does not enforce SSL	Database traffic can travel in plaintext and be read or altered on the network.	Medium
+CKV_ALI_44	MongoDB instance has transparent data encryption turned off	Data files and backups are stored unencrypted on disk.	Medium
+CKV_AWS_5	Elasticsearch or OpenSearch domain is not encrypted at rest	Indexed data and snapshots are stored unencrypted on disk.	Medium
+CKV_AWS_11	IAM password policy does not require a lowercase letter	Users can pick simpler passwords that are easier to guess or crack.	Medium
+CKV_AWS_12	IAM password policy does not require a number	Users can pick simpler passwords that are easier to guess or crack.	Medium
+CKV_AWS_14	IAM password policy does not require a symbol	Users can pick simpler passwords that are easier to guess or crack.	Medium
+CKV_AWS_15	IAM password policy does not require an uppercase letter	Users can pick simpler passwords that are easier to guess or crack.	Medium
+CKV_AWS_17	RDS database instance is publicly accessible	The database gets a public address and can be reached from the internet if security groups allow it.	High
+CKV_AWS_22	SageMaker notebook instance has no customer managed KMS key	The notebook volume uses an AWS managed key, so you cannot control rotation or revoke access.	Low
+CKV_AWS_29	ElastiCache replication group is not encrypted at rest	Cached data and backups are stored unencrypted on disk.	Medium
+CKV_AWS_30	ElastiCache replication group is not encrypted in transit	Traffic between clients and cache nodes can be read or altered on the network.	Medium
+CKV_AWS_36	CloudTrail trail does not validate log files	Tampered or deleted log files cannot be detected, weakening the audit trail.	Low
+CKV_AWS_48	Amazon MQ broker has general logging turned off	Broker activity is not recorded, which makes incidents hard to investigate.	Low
+CKV_AWS_51	ECR repository allows image tags to be overwritten	A pushed tag can be replaced with a different image, so deployments may run unreviewed code.	Low
+CKV_AWS_53	S3 public access block does not block public ACLs	New ACLs can still grant the public access to buckets and objects.	High
+CKV_AWS_54	S3 public access block does not block public bucket policies	A bucket policy can still be added that opens the bucket to everyone.	High
+CKV_AWS_55	S3 public access block does not ignore public ACLs	Existing public ACLs keep granting access to buckets and objects.	High
+CKV_AWS_56	S3 public access block does not restrict public buckets	Buckets with public policies stay reachable by anonymous and cross-account users.	High
+CKV_AWS_58	EKS cluster does not encrypt Kubernetes secrets	Secrets are stored in etcd without envelope encryption under your KMS key.	Medium
+CKV_AWS_64	Redshift cluster is not encrypted	Warehouse data and snapshots are stored unencrypted on disk.	Medium
+CKV_AWS_67	CloudTrail trail covers only one region	API calls in other regions are not recorded, so activity there goes unseen.	Low
+CKV_AWS_73	API Gateway stage has X-Ray tracing turned off	Requests cannot be traced across services, which slows down debugging and incident review.	Low
+CKV_AWS_75	Global Accelerator has flow logs turned off	Traffic through the accelerator is not recorded for later analysis.	Low
+CKV_AWS_77	Athena database has no encryption configured	Query results written by the database are stored unencrypted.	Medium
+CKV_AWS_83	Elasticsearch or OpenSearch domain does not enforce HTTPS	Clients can reach the domain over plain HTTP and expose queries and data.	Medium
+CKV_AWS_86	CloudFront distribution has no access logging	Viewer requests are not recorded, so abuse and data access cannot be traced.	Low
+CKV_AWS_87	Redshift cluster is publicly accessible	The cluster gets a public address and can be reached from the internet if security groups allow it.	High
+CKV_AWS_98	SageMaker endpoint configuration has no KMS key	Model data on the endpoint storage is not encrypted under a key you control.	Low
+CKV_AWS_102	Neptune instance is publicly accessible	The graph database can be reached from the internet if security groups allow it.	High
+CKV_AWS_115	Lambda function has no concurrency limit	A traffic spike or runaway loop can use the whole account concurrency and throttle other functions.	Info
+CKV_AWS_116	Lambda function has no dead letter queue	Failed asynchronous events are dropped and cannot be inspected or replayed.	Low
+CKV_AWS_117	Lambda function does not run inside a VPC	The function cannot use VPC security controls to reach private resources; whether it should depends on the workload.	Low
+CKV_AWS_118	RDS instance has no enhanced monitoring	Operating system metrics for the database are not collected, which makes performance issues harder to diagnose.	Info
+CKV_AWS_120	API Gateway stage has caching turned off	Every request reaches the backend, which raises latency and cost under load.	Info
+CKV_AWS_123	VPC endpoint service accepts connections without approval	Any allowed principal can connect to the service without a manual review.	Medium
+CKV_AWS_124	CloudFormation stack has no event notifications	Stack changes and failures are not announced, so unexpected updates go unnoticed.	Low
+CKV_AWS_126	EC2 instance has detailed monitoring turned off	Metrics arrive every five minutes instead of every minute, which slows down detection and scaling.	Info
+CKV_AWS_130	Subnet gives instances a public IP by default	Every instance launched here gets an internet-facing address unless someone opts out.	High
+CKV_AWS_135	EC2 instance is not EBS optimized	Disk traffic shares bandwidth with network traffic, which can slow down storage-heavy workloads.	Info
+CKV_AWS_137	Elasticsearch or OpenSearch domain is not placed in a VPC	The domain has a public endpoint and relies only on its access policy for protection.	Medium
+CKV_AWS_138	Classic load balancer has cross-zone balancing turned off	Traffic is split per zone rather than per instance, which can overload some targets.	Info
+CKV_AWS_139	RDS cluster has deletion protection turned off	A mistaken destroy or console click can delete the database and its data.	Low
+CKV_AWS_141	Redshift cluster does not allow version upgrades	Engine fixes and security patches are not applied during maintenance windows.	Low
+CKV_AWS_142	Redshift cluster has no customer managed KMS key	Warehouse data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_146	RDS cluster snapshot is not encrypted	A copy of the database is stored unencrypted and can be shared or restored elsewhere.	Medium
+CKV_AWS_150	Load balancer has deletion protection turned off	A mistaken destroy can remove the load balancer and take the service offline.	Info
+CKV_AWS_154	Redshift cluster has no subnet group	Without a subnet group the cluster is not placed in subnets you choose inside your VPC.	Medium
+CKV_AWS_155	WorkSpaces user volume is not encrypted	Files on the user volume are stored unencrypted on disk.	Medium
+CKV_AWS_157	RDS instance is not deployed across multiple zones	A zone outage takes the database offline until it is restored.	Info
+CKV_AWS_158	CloudWatch log group has no customer managed KMS key	Logs are not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_160	Timestream database has no customer managed KMS key	Time series data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_162	RDS cluster does not use IAM database authentication	Access relies only on static database passwords instead of short-lived IAM tokens.	Medium
+CKV_AWS_163	ECR repository does not scan images on push	Known vulnerabilities in new images are not reported before they are deployed.	Low
+CKV_AWS_164	Transfer Family server has a public endpoint	The SFTP or FTP server is reachable from the internet instead of only inside a VPC.	High
+CKV_AWS_170	QLDB ledger allows all actions to any authorized user	Any principal with ledger access can run every operation, bypassing table-level permissions.	High
+CKV_AWS_172	QLDB ledger has deletion protection turned off	A mistaken destroy can delete the ledger and its history.	Low
+CKV_AWS_176	WAF web ACL has no logging	Blocked and allowed requests are not recorded, so attacks cannot be analysed.	Low
+CKV_AWS_177	Kinesis video stream has no customer managed KMS key	Video data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_178	FSx for ONTAP file system has no customer managed KMS key	File data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_179	FSx for Windows file system has no customer managed KMS key	File data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_180	Image Builder component has no customer managed KMS key	The component document is not encrypted under a key you control.	Low
+CKV_AWS_181	S3 object copy has no customer managed KMS key	The copied object is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_182	DocumentDB cluster has no customer managed KMS key	Database storage is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_183	EBS snapshot copy has no customer managed KMS key	The copied snapshot is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_184	EFS file system has no customer managed KMS key	File data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_185	Kinesis stream has no KMS key for encryption	Records may be stored without server-side encryption under a key you control.	Medium
+CKV_AWS_186	S3 object has no customer managed KMS key	The object is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_187	SageMaker domain or notebook has no customer managed KMS key	Attached storage is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_189	EBS volume has no customer managed KMS key	Volume data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_190	FSx for Lustre file system has no customer managed KMS key	File data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_191	ElastiCache replication group has no customer managed KMS key	Cached data at rest is not encrypted under a key you control.	Low
+CKV_AWS_193	AppSync API has no CloudWatch logging role	The API cannot write logs, so failed and suspicious requests are not recorded.	Low
+CKV_AWS_194	AppSync API does not log resolver fields	Field-level errors and calls are not recorded, which hides misuse and failures.	Low
+CKV_AWS_195	Glue job, crawler or endpoint has no security configuration	Data written to S3, logs and bookmarks may be stored without encryption.	Medium
+CKV_AWS_199	Image Builder distribution does not encrypt AMIs with a KMS key	Distributed images are not encrypted under a key you control.	Low
+CKV_AWS_201	MemoryDB cluster has no customer managed KMS key	Data at rest is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_203	FSx for OpenZFS file system has no customer managed KMS key	File data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_207	Amazon MQ broker does not apply minor upgrades automatically	Engine security patches are not applied unless someone upgrades by hand.	Low
+CKV_AWS_209	Amazon MQ broker has no customer managed KMS key	Message data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_212	DMS replication instance has no customer managed KMS key	Replication storage is not encrypted under a key you control.	Low
+CKV_AWS_214	AppSync API cache is not encrypted at rest	Cached API responses are stored unencrypted on disk.	Medium
+CKV_AWS_215	AppSync API cache is not encrypted in transit	Traffic to the cache can be read or altered on the network.	Medium
+CKV_AWS_216	CloudFront distribution is disabled	The distribution does not serve traffic; this is usually an oversight rather than a security risk.	Info
+CKV_AWS_217	API Gateway deployment is not created before it is destroyed	Replacing the deployment deletes the old one first, causing downtime for the stage.	Low
+CKV_AWS_218	CloudSearch domain allows TLS older than 1.2	Old TLS versions have known weaknesses that let an attacker downgrade or decrypt traffic.	Medium
+CKV_AWS_219	CodePipeline artifact store has no customer managed KMS key	Build artifacts are not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_220	CloudSearch domain does not enforce HTTPS	Clients can reach the search endpoint over plain HTTP and expose data.	Medium
+CKV_AWS_221	CodeArtifact domain has no customer managed KMS key	Packages are not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_222	DMS replication instance does not apply minor upgrades automatically	Engine security patches are not applied unless someone upgrades by hand.	Low
+CKV_AWS_223	ECS cluster does not log execute command sessions	Interactive commands run inside containers are not recorded for audit.	Low
+CKV_AWS_225	API Gateway method settings have caching turned off	Every request reaches the backend, which raises latency and cost under load.	Info
+CKV_AWS_227	KMS key is disabled	Services that depend on the key cannot encrypt or decrypt, which can break workloads.	Low
+CKV_AWS_233	ACM certificate is not created before it is destroyed	Replacing the certificate removes the old one first and can break TLS for attached endpoints.	Low
+CKV_AWS_235	Copied AMI is not encrypted	Snapshots behind the image are stored unencrypted and can leak data when shared.	Medium
+CKV_AWS_236	Copied AMI has no customer managed KMS key	Image snapshots are not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_237	API Gateway REST API is not created before it is destroyed	Replacing the API removes the old one first, causing downtime for clients.	Low
+CKV_AWS_242	MWAA environment has scheduler logs turned off	Scheduler failures and DAG problems are not recorded for investigation.	Low
+CKV_AWS_243	MWAA environment has worker logs turned off	Task output and errors from workers are not recorded for investigation.	Low
+CKV_AWS_244	MWAA environment has web server logs turned off	Access to the Airflow web interface is not recorded for audit.	Low
+CKV_AWS_245	RDS backup replication has no customer managed KMS key	Replicated backups are not encrypted under a key you control.	Low
+CKV_AWS_246	RDS activity stream has no customer managed KMS key	Database activity records are not encrypted under a key you control.	Low
+CKV_AWS_247	Elasticsearch or OpenSearch domain has no customer managed KMS key	Indexed data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_248	Elasticsearch or OpenSearch domain has no security groups	Network access to the domain inside the VPC is not limited by a security group you define.	Medium
+CKV_AWS_252	CloudTrail trail does not notify an SNS topic	New log deliveries are not announced, so delivery problems go unnoticed.	Low
+CKV_AWS_262	Kendra index has no customer managed KMS key	Indexed documents are not encrypted under a key you control.	Low
+CKV_AWS_263	AppFlow flow has no customer managed KMS key	Data moved by the flow is not encrypted under a key you control.	Low
+CKV_AWS_264	AppFlow connector profile has no customer managed KMS key	Stored connection credentials are not encrypted under a key you control.	Low
+CKV_AWS_266	RDS snapshot copy has no customer managed KMS key	The copied snapshot is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_267	Comprehend entity recognizer model has no KMS key	The trained model is not encrypted under a key you control.	Low
+CKV_AWS_268	Comprehend entity recognizer volume has no KMS key	Training volumes are not encrypted under a key you control.	Low
+CKV_AWS_269	Connect video storage has no customer managed KMS key	Recorded video streams are not encrypted under a key you control.	Low
+CKV_AWS_270	Connect S3 storage has no customer managed KMS key	Stored contact data is not encrypted under a key you control.	Low
+CKV_AWS_271	DynamoDB table replica has no customer managed KMS key	Replicated table data is not encrypted under a key you control.	Low
+CKV_AWS_272	Lambda function does not require code signing	Unsigned or modified code packages can be deployed to the function.	Low
+CKV_AWS_276	API Gateway logs full request and response data	Payloads, tokens and personal data can end up in CloudWatch logs.	Low
+CKV_AWS_278	MemoryDB snapshot has no customer managed KMS key	The snapshot is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_279	Neptune cluster snapshot is not encrypted	A copy of the graph database is stored unencrypted and can be restored elsewhere.	Medium
+CKV_AWS_280	Neptune cluster snapshot has no customer managed KMS key	The snapshot is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_281	Redshift snapshot copy grant has no customer managed KMS key	Cross-region snapshot copies are not encrypted under a key you control.	Low
+CKV_AWS_282	Redshift Serverless namespace has no customer managed KMS key	Warehouse data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_284	Step Functions state machine has X-Ray tracing turned off	Executions cannot be traced across services, which slows down debugging.	Low
+CKV_AWS_285	Step Functions logs leave out execution data	Logged events lack inputs and outputs, so failures are hard to reconstruct.	Low
+CKV_AWS_292	DocumentDB global cluster is not encrypted	Database storage in every member region is unencrypted on disk.	Medium
+CKV_AWS_294	CloudTrail event data store has no customer managed KMS key	Audit events are not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_297	EventBridge schedule has no customer managed KMS key	Schedule payloads are not encrypted under a key you control.	Low
+CKV_AWS_298	DMS S3 endpoint has no customer managed KMS key	Data written to S3 by the endpoint is not encrypted under a key you control.	Low
+CKV_AWS_305	CloudFront distribution has no default root object	Requests to the root path go to the origin directly and can list or expose its contents.	Low
+CKV_AWS_306	SageMaker notebook instance is not placed in a subnet	The notebook uses SageMaker managed networking with direct internet access.	Medium
+CKV_AWS_309	API Gateway v2 route has no authorization	Anyone who knows the URL can call the route without credentials.	High
+CKV_AWS_313	RDS cluster does not copy tags to snapshots	Snapshots lose owner and cost tags, which makes them hard to track and clean up.	Low
+CKV_AWS_319	CloudWatch alarm has its actions disabled	The alarm changes state without notifying anyone or triggering a response.	Low
+CKV_AWS_320	Redshift cluster uses the default database name	A predictable database name makes guessing connection details easier.	Low
+CKV_AWS_321	Redshift cluster has enhanced VPC routing turned off	COPY and UNLOAD traffic bypasses VPC controls such as endpoints and flow logs.	Low
+CKV_AWS_323	ElastiCache cluster has no subnet group	Without a subnet group the cluster is not placed in subnets you choose inside your VPC.	Low
+CKV_AWS_327	RDS cluster has no customer managed KMS key	Database storage is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_330	EFS access point does not set a POSIX user	Clients keep their own user and group identity, so file permissions are not enforced per app.	Low
+CKV_AWS_333	ECS service assigns public IP addresses	Tasks get internet-facing addresses and can be reached directly if security groups allow it.	High
+CKV_AWS_343	Redshift cluster keeps no automated snapshots	There is no backup to restore from after data loss or corruption.	Low
+CKV_AWS_344	Network Firewall has deletion protection turned off	A mistaken destroy can remove the firewall and leave traffic uninspected.	Info
+CKV_AWS_345	Network Firewall or rule group has no customer managed KMS key	Firewall configuration is not encrypted under a key you control.	Low
+CKV_AWS_346	Network Firewall policy has no customer managed KMS key	The policy is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_347	Neptune cluster has no customer managed KMS key	Graph data is not encrypted under a key you control, rotate and can revoke.	Low
+CKV_AWS_348	Access key is created for the root user	Root keys have unrestricted access to the account and cannot be limited by IAM policies.	Critical
+CKV_AWS_365	SES configuration set does not require TLS	Outgoing mail can be delivered over an unencrypted connection.	Medium
+CKV_AWS_367	SageMaker data quality job output has no KMS key	Job results are not encrypted under a key you control.	Low
+CKV_AWS_368	SageMaker data quality job volume has no KMS key	Processing volumes are not encrypted under a key you control.	Low
+CKV_AWS_369	SageMaker data quality job does not encrypt traffic between containers	Data passed between processing nodes can be read on the network.	Medium
+CKV_AWS_370	SageMaker model does not use network isolation	Model containers can make outbound network calls and send data out.	Medium
+CKV_AWS_371	SageMaker notebook instance does not require IMDSv2	Server-side request forgery can read instance credentials through the metadata service.	Medium
+CKV_AWS_372	SageMaker flow definition has no KMS key for output	Human review results are not encrypted under a key you control.	Low
+CKV_AWS_373	Bedrock agent has no customer managed KMS key	Agent session data is not encrypted under a key you control.	Low
+CKV_AWS_374	CloudFront distribution has no geo restriction	Content is served to every country; restrict it only if your audience is limited.	Info
+CKV_AWS_377	Route 53 domain has transfer lock turned off	The domain can be transferred to another registrar, which enables hijacking.	Medium
+CKV_AWS_383	Bedrock agent has no guardrail	Prompts and responses are not filtered for harmful content or sensitive data.	Medium
+CKV_AWS_389	Launch configuration assigns public IP addresses	Every instance it launches gets an internet-facing address.	High
+CKV_AZURE_3	Storage account allows plain HTTP traffic	Data sent to the account over HTTP can be read or altered on the network.	Medium
+CKV_AZURE_18	Web app has HTTP/2 turned off	Clients fall back to HTTP/1.1, losing performance and newer protocol protections.	Low
+CKV_AZURE_19	Defender for Cloud plan is on the free tier	Threat detection and alerts for this resource type are not active.	Low
+CKV_AZURE_20	Security Center contact has no phone number	Microsoft cannot reach anyone by phone about a security incident.	Low
+CKV_AZURE_21	Security Center contact does not receive alert emails	High severity alerts are not emailed, so incidents may go unnoticed.	Low
+CKV_AZURE_22	Security Center alerts are not sent to subscription owners	Owners are not told about security alerts on their subscription.	Low
+CKV_AZURE_26	SQL server alert policy has no email recipients	Threat detection alerts are not sent to anyone.	Low
+CKV_AZURE_27	SQL server alert policy does not notify admins	Account administrators are not told about detected database threats.	Low
+CKV_AZURE_28	MySQL server does not enforce SSL	Database traffic can travel in plaintext and be read or altered on the network.	Medium
+CKV_AZURE_29	PostgreSQL server does not enforce SSL	Database traffic can travel in plaintext and be read or altered on the network.	Medium
+CKV_AZURE_40	Key Vault key has no expiration date	Keys stay valid forever, so a leaked or stale key is never retired.	Low
+CKV_AZURE_41	Key Vault secret has no expiration date	Secrets stay valid forever, so a leaked or stale secret is never retired.	Low
+CKV_AZURE_47	MariaDB server does not enforce SSL	Database traffic can travel in plaintext and be read or altered on the network.	Medium
+CKV_AZURE_48	MariaDB server allows public network access	The database can be reached from the internet if firewall rules allow it.	High
+CKV_AZURE_49	Linux scale set allows password login	Instances accept SSH passwords, which are open to brute force attacks.	Medium
+CKV_AZURE_50	Virtual machine allows extensions	Anyone with VM contributor rights can run code on the machine through an extension.	Low
+CKV_AZURE_52	SQL server allows TLS older than 1.2	Old TLS versions have known weaknesses that let an attacker downgrade or decrypt traffic.	Medium
+CKV_AZURE_53	MySQL server allows public network access	The database can be reached from the internet if firewall rules allow it.	High
+CKV_AZURE_54	MySQL server allows TLS older than 1.2	Old TLS versions have known weaknesses that let an attacker downgrade or decrypt traffic.	Medium
+CKV_AZURE_56	Function app has no built-in authentication	Callers are not authenticated by the platform before reaching the function code.	Medium
+CKV_AZURE_57	Web app allows CORS from any origin	Any website can call the app from a visitor's browser and read the response.	Medium
+CKV_AZURE_59	Storage account allows public network access	The account endpoints can be reached from the internet if keys or SAS tokens leak.	High
+CKV_AZURE_62	Function app allows CORS from any origin	Any website can call the function from a visitor's browser and read the response.	Medium
+CKV_AZURE_63	Web app has HTTP logging turned off	Requests to the app are not recorded, so attacks cannot be traced.	Low
+CKV_AZURE_64	Storage Sync service accepts traffic from any network	The sync endpoint can be reached from the internet instead of only from your virtual networks.	High
+CKV_AZURE_67	Function app has HTTP/2 turned off	Clients fall back to HTTP/1.1, losing performance and newer protocol protections.	Low
+CKV_AZURE_68	PostgreSQL server allows public network access	The database can be reached from the internet if firewall rules allow it.	High
+CKV_AZURE_71	Web app has no managed identity	The app must use stored credentials to reach other Azure services.	Low

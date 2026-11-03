@@ -689,3 +689,33 @@ kbd { font: 600 12px var(--mono); padding: 2px 6px; border: 1px solid var(--line
 #rules-list th:nth-child(2), #rules-list td:nth-child(2) { width: 96px; }
 #rules-list td:nth-child(3) { overflow-wrap: anywhere; }
 @media (max-width: 680px) { #rules-list th:nth-child(1), #rules-list td:nth-child(1) { width: 120px; } }
+
+/* 3D hero: the scene replaces the screenshot once WebGL is running. */
+.hero-3d { position: relative; aspect-ratio: 4 / 3; min-height: 340px; background: radial-gradient(closest-side, rgba(76,195,255,.10), transparent 70%), var(--bg-2); }
+.hero-3d.live { transform: none; border-color: transparent; box-shadow: none; background: radial-gradient(closest-side, rgba(79,227,193,.08), transparent 75%); }
+.hero-3d.live picture { display: none; }
+.engine3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+@media (max-width: 860px) { .hero-3d { min-height: 300px; } }
+
+/* Architecture pipeline: six stages left to right, stacked on small screens. */
+.pipeline { list-style: none; margin: 0 0 40px; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; counter-reset: stage; }
+.pipeline li { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 14px; counter-increment: stage; }
+.pipeline li b { display: block; margin-bottom: 6px; font-size: 15px; }
+.pipeline li b::before { content: counter(stage, decimal-leading-zero) "  "; color: var(--accent); font-family: var(--mono, monospace); font-size: 12px; }
+.pipeline li span { color: var(--muted, #9aa6bf); font-size: 13px; line-height: 1.5; }
+.pipeline li:not(:last-child)::after { content: ""; position: absolute; right: -10px; top: 50%; width: 8px; height: 8px; border-top: 2px solid var(--accent); border-right: 2px solid var(--accent); transform: translateY(-50%) rotate(45deg); }
+@media (max-width: 1000px) { .pipeline { grid-template-columns: 1fr 1fr; } .pipeline li::after { display: none; } }
+@media (max-width: 560px) { .pipeline { grid-template-columns: 1fr; } }
+.foot nav { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+@media (max-width: 560px) { .hero-3d { aspect-ratio: auto; height: 320px; min-height: 0; width: 100%; max-width: 100%; } }
+
+/* Brand marks: real logos on light tiles, so dark marks stay visible in both themes. */
+.brand-strip { padding: 28px 0 8px; }
+.brand-strip .eyebrow { text-align: center; margin-bottom: 14px; }
+.brand-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.brand-list li { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 13px; color: var(--text-2); }
+.brand-list img, .brand-ic, .chip .brand-ic { background: #fff; border-radius: 7px; padding: 3px; box-sizing: border-box; object-fit: contain; }
+.brand-list img { width: 32px; height: 32px; }
+.brand-ic { width: 26px; height: 26px; vertical-align: -7px; margin-right: 8px; }
+.chip .brand-ic { width: 16px; height: 16px; padding: 1px; border-radius: 4px; vertical-align: -3px; margin-right: 5px; }
+@media (max-width: 640px) { .brand-list li span { display: none; } .brand-list li { padding: 6px; } }

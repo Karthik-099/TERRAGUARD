@@ -83,7 +83,7 @@ func AgentsMD(files map[string]string, policy string) string {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		if strings.HasSuffix(n, ".tf") {
+		if strings.HasSuffix(n, ".tf") || strings.HasSuffix(n, ".tofu") {
 			fmt.Fprintf(&b, "- `%s`: %d resource(s)\n", n, perFile[n])
 		}
 	}

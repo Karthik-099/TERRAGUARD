@@ -1,0 +1,8 @@
+# Reviewed adjustments to converted CloudFormation checks.
+# New buckets block public access by default; a partial block is reported by TG-CFN-S3-201.
+cloudformation:CKV_AWS_53 missing_ok
+cloudformation:CKV_AWS_54 missing_ok
+cloudformation:CKV_AWS_55 missing_ok
+cloudformation:CKV_AWS_56 missing_ok
+# New Redshift clusters are private unless PubliclyAccessible is set.
+cloudformation:CKV_AWS_87 missing_ok

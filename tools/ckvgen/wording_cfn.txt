@@ -1,0 +1,30 @@
+cloudformation:CKV_AWS_3	EBS volume is not encrypted	Data on the volume and its snapshots is stored unencrypted on disk.	Medium
+cloudformation:CKV_AWS_6	Elasticsearch or OpenSearch domain does not encrypt node-to-node traffic	Data moving between cluster nodes can be read on the network.	Medium
+cloudformation:CKV_AWS_26	SNS topic is not encrypted	Messages are stored unencrypted while they wait for delivery.	Medium
+cloudformation:CKV_AWS_27	SQS queue has no customer managed KMS key	Messages are encrypted only with a key AWS manages, which you cannot rotate, restrict or revoke.	Low
+cloudformation:CKV_AWS_28	DynamoDB table has no point in time recovery	Accidental writes or deletes cannot be rolled back to an earlier second.	Low
+cloudformation:CKV_AWS_35	CloudTrail logs have no customer managed KMS key	Anyone with read access to the log bucket can read the audit trail.	Low
+cloudformation:CKV_AWS_40	IAM policy is attached directly to users	Permissions granted user by user are hard to audit and revoke.	Low
+cloudformation:CKV_AWS_42	EFS file system is not encrypted	Files are stored unencrypted on disk.	Medium
+cloudformation:CKV_AWS_43	Kinesis stream is not encrypted	Records are stored unencrypted while they are retained.	Medium
+cloudformation:CKV_AWS_44	Neptune cluster storage is not encrypted	Graph data and snapshots are stored unencrypted on disk.	Medium
+cloudformation:CKV_AWS_47	DAX cluster is not encrypted at rest	Cached table data is stored unencrypted on disk.	Medium
+cloudformation:CKV_AWS_68	CloudFront distribution has no WAF web ACL	Requests reach the origin without filtering for common web attacks.	Low
+cloudformation:CKV_AWS_69	Amazon MQ broker is publicly accessible	The broker gets a public endpoint that anyone on the internet can try to reach.	High
+cloudformation:CKV_AWS_71	Redshift cluster has no audit logging	Connections and queries are not recorded for review.	Low
+cloudformation:CKV_AWS_74	DocumentDB cluster is not encrypted at rest	Documents and snapshots are stored unencrypted on disk.	Medium
+cloudformation:CKV_AWS_76	API Gateway stage has no access logging	Requests to the API are not recorded, so abuse cannot be traced.	Low
+cloudformation:CKV_AWS_82	Athena workgroup lets clients override its settings	Queries can turn off result encryption by sending their own configuration.	Medium
+cloudformation:CKV_AWS_89	DMS replication instance is publicly accessible	The instance gets a public address and can be reached from the internet.	High
+cloudformation:CKV_AWS_90	DocumentDB parameter group turns TLS off	Clients connect without encryption, so queries and results can be read on the network.	Medium
+cloudformation:CKV_AWS_92	Classic load balancer has no access logging	Requests through the load balancer are not recorded.	Low
+cloudformation:CKV_AWS_95	HTTP API stage has no access logging	Requests to the API are not recorded, so abuse cannot be traced.	Low
+cloudformation:CKV_AWS_104	DocumentDB parameter group does not enable audit logs	Authentication and data definition events are not recorded.	Low
+cloudformation:CKV_AWS_136	ECR repository has no KMS encryption	Images are encrypted only with a key AWS manages, which you cannot restrict or revoke.	Low
+cloudformation:CKV_AWS_156	WorkSpaces root volume is not encrypted	The operating system disk is stored unencrypted.	Medium
+cloudformation:CKV_AWS_165	DynamoDB global table replica has no point in time recovery	Accidental writes or deletes cannot be rolled back to an earlier second.	Low
+cloudformation:CKV_AWS_166	Backup vault has no customer managed KMS key	Recovery points are encrypted only with a key AWS manages.	Low
+cloudformation:CKV_AWS_258	Lambda function URL has no authentication	Anyone on the internet who learns the URL can invoke the function.	High
+cloudformation:CKV_AWS_291	MSK brokers are publicly reachable	Brokers get public addresses that clients on the internet can try to reach.	High
+cloudformation:CKV_AWS_317	Elasticsearch or OpenSearch domain does not publish audit logs	Who read or changed indexed data is not recorded.	Low
+cloudformation:CKV_AWS_366	Cognito identity pool allows guest access	Unauthenticated visitors receive AWS credentials for the guest role.	High

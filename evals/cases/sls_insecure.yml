@@ -1,0 +1,23 @@
+# expect: TG-SLS-IAM-201, TG-SLS-LAMBDA-201, TG-CFN-S3-102
+# path: sls_insecure/serverless.yml
+service: orders
+custom:
+  accessKey: AKIAIOSFODNN7EXAMPLE
+provider:
+  name: aws
+  runtime: python3.12
+  iamRoleStatements:
+    - Effect: Allow
+      Action: "*"
+      Resource: "*"
+functions:
+  create:
+    handler: orders.create
+    environment:
+      AWS_ACCESS_KEY_ID: ${self:custom.accessKey}
+resources:
+  Resources:
+    Uploads:
+      Type: AWS::S3::Bucket
+      Properties:
+        AccessControl: PublicReadWrite

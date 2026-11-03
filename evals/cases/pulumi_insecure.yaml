@@ -1,0 +1,63 @@
+# path: Pulumi.yaml
+# expect: TG-AWS-S3-001, TG-AWS-RDS-001, TG-AWS-SG-001, TG-GCP-VM-004, TG-AZ-ST-001, TG-K8S-001
+name: insecure
+runtime: yaml
+resources:
+  data:
+    type: aws:s3/bucket:Bucket
+    properties:
+      acl: public-read
+  db:
+    type: aws:rds:Instance
+    properties:
+      allocatedStorage: 10
+      engine: mysql
+      instanceClass: db.t3.micro
+      username: admin
+      password: foobarbaz
+      publiclyAccessible: true
+      skipFinalSnapshot: true
+  web:
+    type: aws:ec2/securityGroup:SecurityGroup
+    properties:
+      ingress:
+        - protocol: tcp
+          fromPort: 22
+          toPort: 22
+          cidrBlocks: ["0.0.0.0/0"]
+  vm:
+    type: gcp:compute:Instance
+    properties:
+      machineType: e2-small
+      zone: us-central1-a
+      bootDisk:
+        initializeParams:
+          image: debian-cloud/debian-12
+      networkInterfaces:
+        - network: default
+          accessConfigs:
+            - {}
+      canIpForward: true
+  store:
+    type: azure:storage/account:Account
+    properties:
+      resourceGroupName: rg
+      accountTier: Standard
+      accountReplicationType: LRS
+      httpsTrafficOnlyEnabled: false
+      minTlsVersion: TLS1_0
+  app:
+    type: kubernetes:apps/v1:Deployment
+    properties:
+      spec:
+        selector:
+          matchLabels: {app: web}
+        template:
+          metadata:
+            labels: {app: web}
+          spec:
+            containers:
+              - name: web
+                image: nginx:latest
+                securityContext:
+                  privileged: true

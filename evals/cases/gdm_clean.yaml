@@ -1,0 +1,88 @@
+# forbid: TG-GDM-STORAGE-001, TG-GDM-STORAGE-002, TG-GDM-STORAGE-003, TG-GDM-STORAGE-004, TG-GDM-SQL-001, TG-GDM-SQL-002, TG-GDM-SQL-003, TG-GDM-SQL-004, TG-GDM-COMPUTE-001, TG-GDM-COMPUTE-002, TG-GDM-COMPUTE-003, TG-GDM-COMPUTE-004, TG-GDM-COMPUTE-005, TG-GDM-COMPUTE-006, TG-GDM-COMPUTE-101, TG-GDM-COMPUTE-201, TG-GDM-GKE-001, TG-GDM-GKE-002, TG-GDM-GKE-003, TG-GDM-GKE-004, TG-GDM-GKE-005, TG-GDM-BIGQUERY-001, TG-GDM-DNS-001, TG-GDM-DNS-002
+resources:
+  - name: private-bucket
+    type: storage.v1.bucket
+    properties:
+      iamConfiguration:
+        uniformBucketLevelAccess:
+          enabled: true
+      versioning:
+        enabled: true
+      logging:
+        logBucket: audit-logs
+  - name: db
+    type: sqladmin.v1beta4.instance
+    properties:
+      databaseVersion: MYSQL_8_0
+      settings:
+        tier: db-n1-standard-1
+        backupConfiguration:
+          enabled: true
+        ipConfiguration:
+          ipv4Enabled: false
+          privateNetwork: $(ref.net.selfLink)
+          sslMode: ENCRYPTED_ONLY
+        databaseFlags:
+          - name: local_infile
+            value: "off"
+  - name: vm
+    type: compute.v1.instance
+    properties:
+      zone: us-central1-a
+      metadata:
+        items:
+          - key: enable-oslogin
+            value: "TRUE"
+      networkInterfaces:
+        - network: $(ref.net.selfLink)
+      serviceAccounts:
+        - email: app@my-project.iam.gserviceaccount.com
+          scopes:
+            - https://www.googleapis.com/auth/cloud-platform
+      diskEncryptionKey:
+        kmsKeyName: projects/p/locations/global/keyRings/r/cryptoKeys/k
+  - name: iap-ssh
+    type: compute.v1.firewall
+    properties:
+      network: $(ref.net.selfLink)
+      sourceRanges: ["35.235.240.0/20"]
+      allowed:
+        - IPProtocol: tcp
+          ports: ["22"]
+  - name: data-disk
+    type: compute.v1.disk
+    properties:
+      zone: us-central1-a
+      diskEncryptionKey:
+        kmsKeyName: projects/p/locations/global/keyRings/r/cryptoKeys/k
+  - name: gke
+    type: container.v1.cluster
+    properties:
+      zone: us-central1-a
+      cluster:
+        privateClusterConfig:
+          enablePrivateNodes: true
+          masterIpv4CidrBlock: 172.16.0.0/28
+        masterAuthorizedNetworksConfig:
+          enabled: true
+        networkConfig:
+          datapathProvider: ADVANCED_DATAPATH
+  - name: ds
+    type: bigquery.v2.dataset
+    properties:
+      access:
+        - role: READER
+          groupByEmail: analysts@example.com
+  - name: zone
+    type: dns.v1.managedZone
+    properties:
+      dnsName: example.com.
+      dnssecConfig:
+        state: "on"
+        defaultKeySpecs:
+          - keyType: keySigning
+            algorithm: rsasha256
+  - name: net
+    type: compute.v1.network
+    properties:
+      autoCreateSubnetworks: false

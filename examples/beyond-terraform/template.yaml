@@ -1,0 +1,17 @@
+# Intentionally weak CloudFormation template.
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  Data:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+  Db:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: "20"
+      MasterUsername: admin
+      MasterUserPassword: hunter2hunter2
+      PubliclyAccessible: true
+      StorageEncrypted: false

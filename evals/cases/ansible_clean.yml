@@ -1,0 +1,15 @@
+# forbid: TG-ANS-SHELL-001, TG-ANS-TLS-001, TG-ANS-SG-001
+- hosts: all
+  tasks:
+    - name: fetch
+      ansible.builtin.get_url:
+        url: https://example.com/x.tgz
+        dest: /tmp/x.tgz
+        checksum: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        mode: "0644"
+    - name: sg
+      amazon.aws.ec2_security_group:
+        name: web
+        description: web
+        rules:
+          - { proto: tcp, ports: [443], cidr_ip: 10.0.0.0/8 }

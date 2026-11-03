@@ -240,6 +240,25 @@
       "type": "integer",
       "minimum": 1,
       "description": "Waivers with no expiry, or one further out than this many days, are not applied."
+    },
+    "rules_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Pin the gating rule set (for example \"2.0\"); findings from rules added later are reported but do not fail the gate."
+    },
+    "unwaivable": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Rule IDs or globs that inline ignores and waivers cannot silence."
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array"
+      },
+      "description": "Named lists (for example approved regions) that custom rules reference with in_data and not_in_data."
     }
   }
 }

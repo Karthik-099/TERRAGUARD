@@ -9,7 +9,7 @@
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Linters"],
   "keywords": ["terraform", "security", "iac", "devsecops", "opentofu"],
-  "activationEvents": ["workspaceContains:**/*.tf"],
+  "activationEvents": ["workspaceContains:**/*.tf", "workspaceContains:**/*.tofu", "workspaceContains:**/Dockerfile", "workspaceContains:**/.github/workflows/*.yml", "workspaceContains:**/Chart.yaml", "workspaceContains:**/kustomization.yaml", "workspaceContains:**/serverless.yml"],
   "main": "./extension.js",
   "scripts": { "test": "node --test test/*.test.js" },
   "contributes": {
@@ -21,7 +21,7 @@
       "title": "TerraGuard",
       "properties": {
         "terraguard.path": { "type": "string", "default": "terraguard", "description": "Path to the terraguard binary (go install github.com/Karthik-099/TERRAGUARD/cmd/terraguard@latest)." },
-        "terraguard.scanOnSave": { "type": "boolean", "default": true, "description": "Re-scan when a .tf or .tfvars file is saved." },
+        "terraguard.scanOnSave": { "type": "boolean", "default": true, "description": "Re-scan when an infrastructure file (Terraform, YAML, JSON, Dockerfile) is saved." },
         "terraguard.minSeverity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"], "default": "LOW", "description": "Hide findings below this severity." }
       }
     }

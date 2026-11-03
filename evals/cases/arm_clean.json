@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "adminPassword": {"type": "secureString"},
+    "storageName": {"type": "string", "defaultValue": "goodstore01"}
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[parameters('storageName')]",
+      "location": "eastus",
+      "sku": {"name": "Standard_ZRS"},
+      "kind": "StorageV2",
+      "properties": {
+        "supportsHttpsTrafficOnly": true,
+        "minimumTlsVersion": "TLS1_2",
+        "publicNetworkAccess": "Disabled",
+        "networkAcls": {"defaultAction": "Deny", "bypass": "AzureServices"}
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2023-04-01",
+      "name": "web-nsg",
+      "location": "eastus",
+      "properties": {
+        "securityRules": [
+          {"name": "https", "properties": {"access": "Allow", "direction": "Inbound", "protocol": "Tcp", "priority": 100,
+            "sourceAddressPrefix": "*", "sourcePortRange": "*", "destinationAddressPrefix": "*", "destinationPortRange": "443"}},
+          {"name": "ssh", "properties": {"access": "Allow", "direction": "Inbound", "protocol": "Tcp", "priority": 110,
+            "sourceAddressPrefix": "10.0.0.0/8", "sourcePortRange": "*", "destinationAddressPrefix": "*", "destinationPortRange": "22"}}
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.ContainerService/managedClusters",
+      "apiVersion": "2024-02-01",
+      "name": "aks1",
+      "location": "eastus",
+      "properties": {
+        "apiServerAccessProfile": {"authorizedIPRanges": ["203.0.113.0/24"]},
+        "networkProfile": {"networkPlugin": "azure", "networkPolicy": "calico"},
+        "agentPoolProfiles": [{"name": "pool", "count": 2, "vmSize": "Standard_D4s_v5", "mode": "System", "enableEncryptionAtHost": true, "maxPods": 60}]
+      }
+    }
+  ]
+}

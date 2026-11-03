@@ -1,8 +1,11 @@
 package engine
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -65,10 +68,18 @@ func TestInsecureExample(t *testing.T) {
 	}
 }
 
+var ruleNumRE = regexp.MustCompile(`-(\d{3})$`)
+
 func TestSecureExampleIsClean(t *testing.T) {
 	r := Scan(load(t, "../examples/secure"))
 	for _, f := range r.Findings {
-		if f.Severity != Info {
+		// Rules numbered 101 and up cover Checkov's catalogue and include
+		// hardening advice, so they may raise LOW on a secure setup.
+		limit := Info
+		if m := ruleNumRE.FindStringSubmatch(f.RuleID); m != nil && m[1] >= "101" {
+			limit = Low
+		}
+		if f.Severity.Rank() > limit.Rank() {
 			t.Errorf("unexpected finding %s %s:%d %s", f.RuleID, f.File, f.Line, f.Message)
 		}
 	}
@@ -564,5 +575,444 @@ func TestPolicyWeakening(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in %q", want, got)
 		}
+	}
+}
+
+func TestOpenTofuAndTerragrunt(t *testing.T) {
+	r := Scan(Input{Files: map[string]string{
+		// OpenTofu prefers main.tofu over main.tf in the same folder.
+		"main.tf":   `resource "aws_s3_bucket" "b" { bucket = "tf-version" }`,
+		"main.tofu": "variable \"acl\" {}\nresource \"aws_s3_bucket\" \"b\" {\n  bucket = \"tofu-version\"\n  acl    = var.acl\n}\n",
+		"terragrunt.hcl": `inputs = { acl = "public-read" }
+remote_state {
+  backend = "s3"
+  config = {
+    bucket = "state"
+    key    = "app.tfstate"
+  }
+}
+terraform {
+  source = "."
+}`,
+	}})
+	got := ids(r)
+	if got["TG-AWS-S3-001"] != 1 {
+		t.Errorf("Terragrunt inputs must feed variables of the .tofu code: %v", got)
+	}
+	if got["TG-STATE-001"] != 2 {
+		t.Errorf("Terragrunt remote_state without encryption and locking: %v", got)
+	}
+	if got["TG-STATE-003"] != 0 || got["TG-TF-003"] != 0 {
+		t.Errorf("Terragrunt's own blocks are not Terraform code: %v", got)
+	}
+	for _, f := range r.Findings {
+		if f.File == "main.tf" {
+			t.Errorf("main.tf is shadowed by main.tofu: %+v", f)
+		}
+	}
+}
+
+func TestRulesVersionPinning(t *testing.T) {
+	// TG-AWS-EFS-001 arrived in 2.1; TG-AWS-S3-001 was in 2.0.
+	files := map[string]string{"main.tf": "resource \"aws_efs_file_system\" \"f\" {}\nresource \"aws_s3_bucket\" \"b\" {\n  bucket = \"pin-bucket\"\n  acl    = \"public-read\"\n}\n"}
+	state := func(cfg string) map[string]bool {
+		out := map[string]bool{}
+		for _, f := range Scan(Input{Files: files, Config: cfg}).Findings {
+			out[f.RuleID] = !f.Waived
+		}
+		return out
+	}
+	if s := state(""); !s["TG-AWS-EFS-001"] || !s["TG-AWS-S3-001"] {
+		t.Errorf("unpinned: every rule gates: %v", s)
+	}
+	s := state("rules_version: \"2.0\"\n")
+	if !s["TG-AWS-S3-001"] {
+		t.Error("a 2.0 rule must still gate under rules_version 2.0")
+	}
+	if active, seen := s["TG-AWS-EFS-001"]; !seen || active {
+		t.Errorf("a 2.1 rule must be reported but not gate under 2.0: seen=%v active=%v", seen, active)
+	}
+	if _, err := ParseConfig("rules_version: \"9.9\"\n"); err == nil {
+		t.Error("a rules_version newer than the build must be rejected")
+	}
+	if got := strings.Join(PolicyWeakening("", "rules_version: \"2.0\"\n"), ";"); !strings.Contains(got, "pins rules_version") {
+		t.Errorf("pinning to an older set loosens the gate: %q", got)
+	}
+}
+
+func TestGraphExports(t *testing.T) {
+	r := load(t, "../examples/insecure")
+	rep := Scan(r)
+	m := GraphMermaid(rep)
+	if !strings.HasPrefix(m, "flowchart LR") || !strings.Contains(m, "-->") || !strings.Contains(m, "class ") {
+		t.Errorf("mermaid output looks wrong:\n%.400s", m)
+	}
+	d := GraphDOT(rep)
+	if !strings.HasPrefix(d, "digraph terraform {") || !strings.Contains(d, "->") || !strings.HasSuffix(d, "}\n") {
+		t.Errorf("dot output looks wrong:\n%.400s", d)
+	}
+}
+
+func TestPlanImportsMovesOutputsAndDrift(t *testing.T) {
+	plan := `{"format_version":"1.2",
+ "resource_changes":[
+  {"address":"aws_s3_bucket.imported","mode":"managed","type":"aws_s3_bucket","name":"imported","change":{"actions":["no-op"],"importing":{"id":"legacy-bucket"},"after":{"bucket":"legacy-bucket"}}},
+  {"address":"aws_iam_role.app","previous_address":"aws_iam_role.old","mode":"managed","type":"aws_iam_role","name":"app","change":{"actions":["no-op"],"after":{}}}],
+ "resource_drift":[
+  {"address":"aws_security_group.web","mode":"managed","type":"aws_security_group","change":{"actions":["update"],"before":{"description":"web","ingress":[{"from_port":443}]},"after":{"description":"web","ingress":[{"from_port":22}]}}},
+  {"address":"aws_db_instance.main","mode":"managed","type":"aws_db_instance","change":{"actions":["delete"],"before":{"identifier":"main"},"after":null}}],
+ "output_changes":{"url":{"actions":["update"]},"same":{"actions":["no-op"]}}}`
+	r := Scan(Input{Plan: plan})
+	p := r.Plan
+	if p == nil || p.Import != 1 || p.Moved != 1 || len(p.Outputs) != 1 || len(p.Drift) != 2 {
+		t.Fatalf("plan summary = %+v errors=%v", p, r.Errors)
+	}
+	if got := strings.Join(p.Drift[0].Reasons, ","); got != "ingress" {
+		t.Errorf("drift should name the changed attribute, got %q", got)
+	}
+	msgs := ""
+	for _, f := range r.Findings {
+		if f.RuleID == "TG-PLAN-003" {
+			msgs += f.Message + "\n"
+		}
+	}
+	if !strings.Contains(msgs, "aws_security_group.web was changed outside Terraform (ingress)") || !strings.Contains(msgs, "aws_db_instance.main was deleted outside Terraform") {
+		t.Errorf("drift findings:\n%s", msgs)
+	}
+	if md := Markdown(r); !strings.Contains(md, "1 to import, 1 moved") || !strings.Contains(md, "2 resource(s) drifted") {
+		t.Errorf("markdown summary misses imports, moves or drift:\n%.600s", md)
+	}
+}
+
+func TestCIAnnotationFormats(t *testing.T) {
+	r := &Report{Findings: []Finding{{RuleID: "TG-X-1", Title: "a, b: c", Severity: High, File: "dir,1/main.tf", Line: 3, Message: "line one\nline two 100%", Remediation: "fix"}}}
+	gh := GitHubAnnotations(r)
+	if gh != "::error file=dir%2C1/main.tf,line=3,title=TG-X-1 a%2C b%3A c::line one%0Aline two 100%25 Fix: fix\n" {
+		t.Errorf("github annotation escaping: %q", gh)
+	}
+	if az := AzureDevOps(r); !strings.HasPrefix(az, "##vso[task.logissue type=error;sourcepath=dir,1/main.tf;linenumber=3;code=TG-X-1]") || strings.Count(az, "\n") != 1 {
+		t.Errorf("azure logging command: %q", az)
+	}
+	if cs, err := Checkstyle(r); err != nil || !strings.Contains(string(cs), `source="terraguard.TG-X-1"`) {
+		t.Errorf("checkstyle: %v %s", err, cs)
+	}
+}
+
+func TestUnwaivableAndFileIgnores(t *testing.T) {
+	src := "# terraguard:ignore-file TG-AWS-S3-003\n# terraguard:ignore TG-AWS-S3-001\nresource \"aws_s3_bucket\" \"b\" {\n  bucket = \"lock-bucket\"\n  acl    = \"public-read\"\n}\n"
+	active := func(cfg string) map[string]bool {
+		out := map[string]bool{}
+		for _, f := range Scan(Input{Files: map[string]string{"main.tf": src}, Config: cfg}).Findings {
+			out[f.RuleID] = out[f.RuleID] || !f.Waived
+		}
+		return out
+	}
+	a := active("")
+	if a["TG-AWS-S3-001"] || a["TG-AWS-S3-003"] {
+		t.Errorf("inline and file-level ignores apply by default: %v", a)
+	}
+	a = active("unwaivable: [\"TG-AWS-S3-00*\"]\nwaivers:\n  - {rule: TG-AWS-S3-001, reason: x, expires: 2099-01-01}\n")
+	if !a["TG-AWS-S3-001"] || !a["TG-AWS-S3-003"] {
+		t.Errorf("unwaivable rules ignore comments and waivers: %v", a)
+	}
+	late := "resource \"aws_s3_bucket\" \"b\" {\n  bucket = \"late-bucket\"\n}\n# terraguard:ignore-file TG-AWS-S3-003\n"
+	for _, f := range Scan(Input{Files: map[string]string{"main.tf": late}}).Findings {
+		if f.RuleID == "TG-AWS-S3-003" && f.Waived {
+			t.Error("ignore-file below code must not apply")
+		}
+	}
+	if got := strings.Join(PolicyWeakening("unwaivable: [TG-SEC-*]\n", ""), ";"); !strings.Contains(got, "TG-SEC-* be waived again") {
+		t.Errorf("dropping an unwaivable rule loosens the policy: %q", got)
+	}
+}
+
+func TestForeignAndExpiringIgnores(t *testing.T) {
+	waived := func(src string) map[string]bool {
+		out := map[string]bool{}
+		for _, f := range Scan(Input{Files: map[string]string{"main.tf": src}}).Findings {
+			out[f.RuleID] = f.Waived
+		}
+		return out
+	}
+	snap := "resource \"aws_db_snapshot\" \"s\" {\n  %s\n  db_instance_identifier = \"db\"\n  db_snapshot_identifier = \"s\"\n  shared_accounts        = [\"all\"]\n}\n"
+	if w := waived(fmt.Sprintf(snap, "#checkov:skip=CKV_AWS_302:shared on purpose for the DR account")); !w["TG-AWS-RDS-005"] {
+		t.Error("checkov:skip with a mapped ID must waive the equivalent rule")
+	}
+	if w := waived(fmt.Sprintf(snap, "#checkov:skip=CKV_AWS_999")); w["TG-AWS-RDS-005"] {
+		t.Error("an unrelated checkov ID must not waive anything")
+	}
+	if w := waived(fmt.Sprintf(snap, "# terraguard:ignore TG-AWS-RDS-005 exp:2020-01-01")); w["TG-AWS-RDS-005"] {
+		t.Error("an expired inline ignore must not apply")
+	}
+	if w := waived(fmt.Sprintf(snap, "# terraguard:ignore TG-AWS-RDS-005 exp:2099-01-01")); !w["TG-AWS-RDS-005"] {
+		t.Error("an inline ignore before its expiry applies")
+	}
+}
+
+func TestTrivyIgnoreMapping(t *testing.T) {
+	src := "#trivy:ignore:AVD-AWS-0013:exp:2099-01-01\nresource \"aws_cloudfront_distribution\" \"cdn\" {\n  enabled = true\n  origin {\n    domain_name = \"o.example.com\"\n    origin_id   = \"o\"\n    custom_origin_config {\n      origin_protocol_policy = \"http-only\"\n    }\n  }\n}\n"
+	for _, f := range Scan(Input{Files: map[string]string{"main.tf": src}}).Findings {
+		if f.RuleID == "TG-AWS-CDN-002" && !f.Waived {
+			t.Error("trivy:ignore with a mapped AVD ID must waive the equivalent rule")
+		}
+	}
+}
+
+func TestSARIFFingerprintIgnoresLines(t *testing.T) {
+	fp := func(prefix string) string {
+		r := Scan(Input{Files: map[string]string{"main.tf": prefix + "resource \"aws_s3_bucket\" \"b\" {\n  bucket = \"fp-bucket\"\n  acl    = \"public-read\"\n}\n"}})
+		b, _ := SARIF(r)
+		var doc struct {
+			Runs []struct {
+				Results []struct {
+					RuleID string            `json:"ruleId"`
+					FP     map[string]string `json:"partialFingerprints"`
+				} `json:"results"`
+			} `json:"runs"`
+		}
+		json.Unmarshal(b, &doc)
+		for _, res := range doc.Runs[0].Results {
+			if res.RuleID == "TG-AWS-S3-001" {
+				return res.FP["terraguardFindingKey/v1"]
+			}
+		}
+		return ""
+	}
+	a, b := fp(""), fp("\n\n# moved down\n")
+	if a == "" || a != b {
+		t.Errorf("fingerprint must survive line moves: %q vs %q", a, b)
+	}
+}
+
+func TestExtendsKeepsAllSettingsAndDataLists(t *testing.T) {
+	base := "unwaivable: [TG-SEC-*]\nmax_waiver_days: 90\ndata:\n  regions: [eu-west-1, eu-central-1]\n"
+	child := "extends: [base.yml]\ninline_ignores: false\nrules_version: \"2.0\"\ncustom_rules:\n  - id: ORG-REGION-001\n    title: Only approved regions\n    resource_types: [aws_s3_bucket]\n    attribute: region\n    in_data: regions\n"
+	merged, err := ResolveExtends(child, func(string) (string, error) { return base, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := ParseConfig(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.InlineIgnores == nil || *cfg.InlineIgnores || cfg.MaxWaiverDays != 90 || cfg.RulesVersion != "2.0" || len(cfg.Unwaivable) != 1 {
+		t.Errorf("settings lost through extends: %+v", cfg)
+	}
+	r := Scan(Input{Config: merged, Files: map[string]string{"main.tf": "resource \"aws_s3_bucket\" \"ok\" {\n  bucket = \"a-bucket\"\n  region = \"eu-west-1\"\n}\nresource \"aws_s3_bucket\" \"bad\" {\n  bucket = \"b-bucket\"\n  region = \"us-east-1\"\n}\n"}})
+	var flagged []string
+	for _, f := range r.Findings {
+		if f.RuleID == "ORG-REGION-001" {
+			flagged = append(flagged, f.Resource)
+		}
+	}
+	if len(flagged) != 1 || flagged[0] != "aws_s3_bucket.bad" {
+		t.Errorf("in_data must use the inherited list: %v (errors %v)", flagged, r.Errors)
+	}
+	if _, err := ParseConfig("custom_rules:\n  - {id: ORG-X-001, resource_types: [aws_*], attribute: region, in_data: nope}\n"); err == nil {
+		t.Error("an unknown data list must be an error")
+	}
+}
+
+// Regressions from the code review of 2.1.
+func TestReviewRegressions(t *testing.T) {
+	// Terragrunt inputs that are not a map must not panic.
+	Scan(Input{Files: map[string]string{"terragrunt.hcl": "inputs = [\"a\"]\n", "main.tf": "variable \"x\" {}\n"}})
+
+	// Variables set by --var-file or Terragrunt inputs have a value.
+	vars := map[string]string{"main.tf": "variable \"a\" {}\nvariable \"b\" {}\nvariable \"c\" {}\n", "terraform.tfvars": "c = 1\n", "terragrunt.hcl": "inputs = { b = 2 }\n"}
+	got := ids(Scan(Input{Files: vars, VarFiles: []VarFile{{Dir: ".", Source: "a = 1\n"}}}))
+	if got["TG-VAL-008"] != 0 {
+		t.Errorf("var-file and Terragrunt inputs set the variables: %v", got)
+	}
+
+	// Two identical findings in one file get distinct SARIF fingerprints.
+	two := "resource \"aws_s3_bucket\" \"b\" {\n  bucket = \"x-bucket\"\n  acl    = \"public-read\"\n}\nresource \"aws_s3_bucket\" \"b\" {\n  bucket = \"x-bucket\"\n  acl    = \"public-read\"\n}\n"
+	b, _ := SARIF(Scan(Input{Files: map[string]string{"main.tf": two}}))
+	seen := map[string]bool{}
+	for _, m := range regexp.MustCompile(`"terraguardFindingKey/v1": ?"([^"]+)"`).FindAllStringSubmatch(string(b), -1) {
+		if seen[m[1]] {
+			t.Errorf("duplicate fingerprint %s", m[1])
+		}
+		seen[m[1]] = true
+	}
+	if len(seen) < 2 {
+		t.Errorf("expected a fingerprint per finding, got %d", len(seen))
+	}
+
+	// A reason after a colon still waives.
+	bucket := "resource \"aws_s3_bucket\" \"b\" {\n  bucket = \"r-bucket\"\n  acl    = \"public-read\" # terraguard:ignore TG-AWS-S3-001: public website\n}\n"
+	for _, f := range Scan(Input{Files: map[string]string{"main.tf": bucket}}).Findings {
+		if f.RuleID == "TG-AWS-S3-001" && !f.Waived {
+			t.Error("ignore with a reason after a colon must apply")
+		}
+	}
+
+	// Unwaivable rules survive disable and --skip-check.
+	public := map[string]string{"main.tf": "resource \"aws_s3_bucket\" \"b\" {\n  bucket = \"u-bucket\"\n  acl    = \"public-read\"\n}\n"}
+	if got := ids(Scan(Input{Files: public, Config: "unwaivable: [TG-AWS-S3-001]\ndisable: [TG-AWS-S3-001]\n", Skip: []string{"TG-AWS-S3-001"}})); got["TG-AWS-S3-001"] != 1 {
+		t.Errorf("unwaivable must not be disabled or skipped: %v", got)
+	}
+
+	// A data source used only in a lifecycle block is used.
+	lc := "data \"aws_ami\" \"a\" {}\nresource \"aws_instance\" \"i\" {\n  ami = \"ami-1\"\n  lifecycle {\n    precondition {\n      condition     = data.aws_ami.a.id != \"\"\n      error_message = \"x\"\n    }\n  }\n}\n"
+	if got := ids(Scan(Input{Files: map[string]string{"main.tf": lc}})); got["TG-TF-008"] != 0 {
+		t.Errorf("lifecycle references count as use: %v", got)
+	}
+
+	// Drift the plan leaves alone is informational.
+	plan := `{"format_version":"1.2","resource_changes":[{"address":"aws_security_group.web","mode":"managed","type":"aws_security_group","change":{"actions":["no-op"],"after":{}}}],
+ "resource_drift":[{"address":"aws_security_group.web","mode":"managed","type":"aws_security_group","change":{"actions":["update"],"before":{"description":"a"},"after":{"description":"b"}}}]}`
+	for _, f := range Scan(Input{Plan: plan}).Findings {
+		if f.RuleID == "TG-PLAN-003" && f.Severity != Info {
+			t.Errorf("no-op drift should be Info, got %s", f.Severity)
+		}
+	}
+}
+
+func TestBundledSchemasAndVersionGating(t *testing.T) {
+	code := "resource \"aws_s3_bucket\" \"b\" {\n  bukcet = \"gate-bucket\"\n}\n"
+	schemaHits := func(in Input) int {
+		return ids(Scan(in))["TG-SCHEMA-001"]
+	}
+	if n := schemaHits(Input{Files: map[string]string{"main.tf": code}}); n != 1 {
+		t.Errorf("bundled schema should catch the misspelt argument, got %d", n)
+	}
+	pinned := "terraform {\n  required_providers {\n    aws = { source = \"hashicorp/aws\", version = \"~> 4.0\" }\n  }\n}\n"
+	if n := schemaHits(Input{Files: map[string]string{"main.tf": code, "versions.tf": pinned}}); n != 0 {
+		t.Errorf("an older pinned major must not be checked against the bundled schema, got %d", n)
+	}
+	lock := "provider \"registry.terraform.io/hashicorp/aws\" {\n  version = \"5.31.0\"\n  hashes = []\n}\n"
+	if n := schemaHits(Input{Files: map[string]string{"main.tf": code, ".terraform.lock.hcl": lock}}); n != 0 {
+		t.Errorf("a lock file on another major must turn the bundled schema off, got %d", n)
+	}
+	if n := schemaHits(Input{Files: map[string]string{"main.tf": code}, NoBuiltinSchema: true}); n != 0 {
+		t.Errorf("NoBuiltinSchema must turn it off, got %d", n)
+	}
+	for _, c := range []struct {
+		constraint, v string
+		ok            bool
+	}{{"~> 6.0", "6.71.0", true}, {"~> 6.2.0", "6.71.0", false}, {">= 5.0, < 7.0", "6.71.0", true}, {"< 6.0", "6.71.0", false}, {"~> 5", "6.1.0", false}, {"6.71.0", "6.71.0", true}} {
+		if got := versionAllowed(c.constraint, c.v); got != c.ok {
+			t.Errorf("versionAllowed(%q, %q) = %v", c.constraint, c.v, got)
+		}
+	}
+}
+
+func TestTerraformJSONSyntax(t *testing.T) {
+	src := `{
+  "variable": {"acl": {"type": "string", "default": "public-read"}},
+  "resource": {
+    "aws_s3_bucket": {
+      "logs": {
+        "bucket": "Bad_Bucket",
+        "acl": "${var.acl}",
+        "lifecycle": {"prevent_destroy": true}
+      }
+    }
+  }
+}`
+	r := Scan(Input{Files: map[string]string{"cdktf.tf.json": src}})
+	lines := map[string]int{}
+	for _, f := range r.Findings {
+		lines[f.RuleID] = f.Line
+		if f.Fix != nil {
+			t.Errorf("%s: JSON files must not get an auto-fix", f.RuleID)
+		}
+	}
+	if lines["TG-VAL-005"] != 6 {
+		t.Errorf("invalid bucket name should point at JSON line 6, got %d (%v)", lines["TG-VAL-005"], r.Errors)
+	}
+	if _, ok := lines["TG-AWS-S3-001"]; !ok {
+		t.Errorf("the public ACL from the variable default should be found: %v", lines)
+	}
+	if r := Scan(Input{Files: map[string]string{"bad.tf.json": "{"}}); ids(r)["TG-VAL-001"] != 1 {
+		t.Error("broken JSON is a syntax error")
+	}
+}
+
+func TestSecretVariableHeuristic(t *testing.T) {
+	src := "variable \"secret_rotation_interval\" {\n  type    = string\n  default = \"2m\"\n}\nvariable \"db_password\" {\n  type    = string\n  default = \"hunter2hunter2\"\n}\noutput \"o\" { value = [var.secret_rotation_interval, var.db_password] }\n"
+	hits := map[string]int{}
+	for _, f := range Scan(Input{Files: map[string]string{"main.tf": src}}).Findings {
+		if f.RuleID == "TG-SEC-001" || f.RuleID == "TG-SEC-003" {
+			hits[f.Resource]++
+		}
+	}
+	if hits["var.secret_rotation_interval"] != 0 || hits["var.db_password"] != 2 {
+		t.Errorf("a setting about a secret is not a secret: %v", hits)
+	}
+}
+
+func TestTerraformJSONDepthLimit(t *testing.T) {
+	deep := strings.Repeat(`{"a":`, 100000) + "1" + strings.Repeat("}", 100000)
+	if r := Scan(Input{Files: map[string]string{"x.tf.json": deep}}); ids(r)["TG-VAL-001"] != 1 {
+		t.Error("a deeply nested .tf.json must be rejected, not recursed into")
+	}
+}
+
+func TestLiteralSecretsOutsideTerraform(t *testing.T) {
+	r := &Resource{Type: "AWS::RDS::DBInstance", Address: "AWS::RDS::DBInstance.db", Format: FormatCloudFormation, Attrs: map[string]any{"Properties": map[string]any{
+		"MasterUserPassword": "hunter2hunter2", "MasterUsername": "admin",
+		"DBPassword":   "{{resolve:secretsmanager:db:SecretString:password}}",
+		"ClientSecret": "${env.CLIENT_SECRET}", "TokenTTL": "3600",
+	}}}
+	fs := literalSecrets(r)
+	if len(fs) != 1 || !strings.Contains(fs[0].Message, "MasterUserPassword") {
+		t.Errorf("only the literal password is a secret: %+v", fs)
+	}
+}
+
+func TestCoverageReport(t *testing.T) {
+	src := "resource \"aws_s3_bucket\" \"b\" {\n  bucket = \"cov-bucket\"\n  acl    = \"public-read\"\n}\nresource \"null_resource\" \"n\" {}\n"
+	r := Scan(Input{Files: map[string]string{"main.tf": src}, Coverage: true})
+	c := r.Coverage
+	if c == nil || c.Resources != 2 || c.Covered != 1 || len(c.Uncovered) != 1 || c.Uncovered[0] != "null_resource" {
+		t.Fatalf("coverage = %+v", c)
+	}
+	if c.Failed == 0 || c.Passed == 0 || c.Passed+c.Failed != c.Checks || len(c.Items) != 2 {
+		t.Errorf("passed/failed must split the checks: %+v", c)
+	}
+	off := Scan(Input{Files: map[string]string{"main.tf": src}, Config: "disable: [\"TG-AWS-S3-*\"]\n"}).Coverage
+	if off.Checks >= c.Checks || off.Items != nil {
+		t.Errorf("disabled rules are not checks, and items need Coverage: %+v", off)
+	}
+}
+
+func TestPolicyPacks(t *testing.T) {
+	src := map[string]string{"main.tf": "resource \"aws_s3_bucket\" \"b\" {\n  bucket = \"pack-bucket\"\n}\n"}
+	min := Scan(Input{Files: src, Config: "extends: [terraguard:minimal]\n"})
+	strict := Scan(Input{Files: src, Config: "extends: [terraguard:strict]\nmax_waiver_days: 60\n"})
+	if min.FailOn != Critical || strict.FailOn != Medium {
+		t.Errorf("packs set the gate: minimal %s, strict %s", min.FailOn, strict.FailOn)
+	}
+	if _, err := ResolveExtends("extends: [terraguard:nope]\n", nil); err == nil {
+		t.Error("an unknown pack is an error")
+	}
+	merged, _ := ResolveExtends("extends: [terraguard:strict]\nmax_waiver_days: 60\n", nil)
+	if !strings.Contains(merged, "max_waiver_days: 60") || !strings.Contains(merged, "TG-SEC-*") {
+		t.Errorf("own settings override the pack, the rest is kept:\n%s", merged)
+	}
+}
+
+func TestModuleInputsFlowIntoLocalModules(t *testing.T) {
+	files := map[string]string{
+		"main.tf":                 "module \"data\" {\n  source = \"./modules/bucket\"\n  acl    = \"public-read\"\n}\nmodule \"logs\" {\n  source = \"./modules/private\"\n  acl    = \"private\"\n}\n",
+		"modules/bucket/main.tf":  "variable \"acl\" {\n  type    = string\n  default = \"private\"\n}\nresource \"aws_s3_bucket\" \"b\" {\n  bucket = \"mod-bucket\"\n  acl    = var.acl\n}\n",
+		"modules/private/main.tf": "variable \"acl\" {\n  type = string\n}\nresource \"aws_s3_bucket\" \"p\" {\n  bucket = \"mod-private\"\n  acl    = var.acl\n}\n",
+		// called twice with different values: unknown, so silent
+		"two.tf":                "module \"a\" {\n  source = \"./modules/twice\"\n  acl    = \"public-read\"\n}\nmodule \"b\" {\n  source = \"./modules/twice\"\n  acl    = \"private\"\n}\n",
+		"modules/twice/main.tf": "variable \"acl\" {\n  type = string\n}\nresource \"aws_s3_bucket\" \"t\" {\n  bucket = \"mod-twice\"\n  acl    = var.acl\n}\n",
+	}
+	got := map[string]bool{}
+	for _, f := range Scan(Input{Files: files}).Findings {
+		if f.RuleID == "TG-AWS-S3-001" {
+			got[f.Resource] = true
+		}
+	}
+	if !got["aws_s3_bucket.b"] {
+		t.Error("the caller's public-read must reach the module's bucket")
+	}
+	if got["aws_s3_bucket.p"] || got["aws_s3_bucket.t"] {
+		t.Errorf("private input, and disagreeing callers, must stay silent: %v", got)
 	}
 }

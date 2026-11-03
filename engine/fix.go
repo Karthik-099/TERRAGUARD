@@ -22,7 +22,16 @@ func ApplyFixes(files map[string]string, fixes []*Fix) (map[string]string, []err
 			errs = append(errs, fmt.Errorf("%s: file not found", fx.File))
 			continue
 		}
-		out, err := applyFix(src, fx)
+		var out string
+		var err error
+		switch fx.Format {
+		case FormatKubernetes:
+			out, err = applyYAMLFix(src, fx)
+		case FormatDockerfile:
+			out, err = applyLineEdit(src, fx)
+		default:
+			out, err = applyFix(src, fx)
+		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s %s: %w", fx.File, fx.Block, err))
 			continue

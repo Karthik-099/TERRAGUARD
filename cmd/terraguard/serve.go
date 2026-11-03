@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,8 +28,18 @@ func runServe(args []string) error {
 	fset := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fset.String("addr", "127.0.0.1:8080", "listen address (use 0.0.0.0:8080 in containers)")
 	auditPath := fset.String("audit-log", os.Getenv("TERRAGUARD_AUDIT_LOG"), "append a JSON line per API call (metadata only, never code)")
+	policyPath := fset.String("admission-policy", "", "policy file for the Kubernetes admission webhook at /api/k8s/validate")
+	tlsCert := fset.String("tls-cert", "", "serve HTTPS with this certificate (the Kubernetes API server calls webhooks over HTTPS only)")
+	tlsKey := fset.String("tls-key", "", "private key for --tls-cert")
 	if err := fset.Parse(args); err != nil {
 		return err
+	}
+	if *policyPath != "" {
+		text, err := resolvePolicyFile(*policyPath)
+		if err != nil {
+			return fmt.Errorf("admission policy: %w", err)
+		}
+		admissionPolicy = text
 	}
 	token := os.Getenv("TERRAGUARD_SERVER_TOKEN")
 	if host, _, _ := net.SplitHostPort(*addr); host != "127.0.0.1" && host != "localhost" && host != "::1" && token == "" {
@@ -49,7 +60,26 @@ func runServe(args []string) error {
 	srv := &http.Server{Addr: *addr, Handler: newServerWith(token, audit), ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout: 30 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 64 << 10}
 	log.Printf("TerraGuard %s on http://%s  (AI route: %d step(s)%s)", engine.Version, *addr, len(ai.Route()), map[bool]string{true: ", local-only"}[ai.LocalOnly()])
+	if *tlsCert != "" || *tlsKey != "" {
+		return srv.ListenAndServeTLS(*tlsCert, *tlsKey)
+	}
 	return srv.ListenAndServe()
+}
+
+// admissionPolicy is the policy text the admission webhook applies.
+var admissionPolicy string
+
+func resolvePolicyFile(p string) (string, error) {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return "", err
+	}
+	text, err := resolvePolicy(string(b), filepath.Dir(p))
+	if err != nil {
+		return "", err
+	}
+	_, err = engine.ParseConfig(text)
+	return text, err
 }
 
 func newServer(token string) http.Handler { return newServerWith(token, nil) }
@@ -160,6 +190,7 @@ func newServerWith(token string, audit io.Writer) http.Handler {
 		mux.Handle("POST /api/run-task", observe("/api/run-task", apiLimit, met, audit, rt.ServeHTTP))
 	}
 
+	mux.HandleFunc("POST /api/k8s/validate", api("/api/k8s/validate", apiLimit, admissionHandler(admissionPolicy)))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") })
 	// Metrics need the token when one is set (Prometheus: authorization.credentials).
 	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {

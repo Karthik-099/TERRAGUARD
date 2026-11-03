@@ -1,0 +1,23 @@
+# forbid: TG-SLS-IAM-201, TG-SLS-LAMBDA-201, TG-CFN-S3-102
+# path: sls_clean/serverless.yml
+service: orders
+provider:
+  name: aws
+  runtime: python3.12
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource: arn:aws:dynamodb:us-east-1:123456789012:table/orders
+functions:
+  create:
+    handler: orders.create
+    environment:
+      TABLE: orders
+      AWS_ACCESS_KEY_ID: ${env:AWS_ACCESS_KEY_ID}
+resources:
+  Resources:
+    Uploads:
+      Type: AWS::S3::Bucket
+      Properties:
+        AccessControl: Private

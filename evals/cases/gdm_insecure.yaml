@@ -1,0 +1,84 @@
+# expect: TG-GDM-STORAGE-001, TG-GDM-STORAGE-002, TG-GDM-STORAGE-003, TG-GDM-STORAGE-004, TG-GDM-SQL-001, TG-GDM-SQL-002, TG-GDM-SQL-003, TG-GDM-SQL-004, TG-GDM-COMPUTE-001, TG-GDM-COMPUTE-002, TG-GDM-COMPUTE-003, TG-GDM-COMPUTE-004, TG-GDM-COMPUTE-005, TG-GDM-COMPUTE-006, TG-GDM-COMPUTE-101, TG-GDM-COMPUTE-201, TG-GDM-GKE-001, TG-GDM-GKE-002, TG-GDM-GKE-003, TG-GDM-GKE-004, TG-GDM-GKE-005, TG-GDM-BIGQUERY-001, TG-GDM-DNS-002
+resources:
+  - name: public-bucket
+    type: storage.v1.bucket
+    properties:
+      acl:
+        - entity: allUsers
+          role: READER
+  - name: db
+    type: sqladmin.v1beta4.instance
+    properties:
+      databaseVersion: MYSQL_8_0
+      settings:
+        tier: db-n1-standard-1
+        ipConfiguration:
+          requireSsl: false
+          authorizedNetworks:
+            - name: anywhere
+              value: 0.0.0.0/0
+        databaseFlags:
+          - name: local_infile
+            value: "on"
+  - name: vm
+    type: compute.v1.instance
+    properties:
+      zone: us-central1-a
+      machineType: zones/us-central1-a/machineTypes/e2-small
+      canIpForward: true
+      metadata:
+        items:
+          - key: serial-port-enable
+            value: "TRUE"
+          - key: enable-oslogin
+            value: "FALSE"
+      networkInterfaces:
+        - network: global/networks/default
+          accessConfigs:
+            - name: External NAT
+              type: ONE_TO_ONE_NAT
+      serviceAccounts:
+        - email: default
+          scopes:
+            - https://www.googleapis.com/auth/cloud-platform
+  - name: open-ssh
+    type: compute.v1.firewall
+    properties:
+      network: global/networks/default
+      sourceRanges: ["0.0.0.0/0"]
+      allowed:
+        - IPProtocol: tcp
+          ports: ["22", "3389"]
+  - name: data-disk
+    type: compute.v1.disk
+    properties:
+      zone: us-central1-a
+      sizeGb: 100
+  - name: gke
+    type: container.v1.cluster
+    properties:
+      zone: us-central1-a
+      cluster:
+        initialNodeCount: 1
+        legacyAbac:
+          enabled: true
+        masterAuth:
+          clientCertificateConfig:
+            issueClientCertificate: true
+  - name: ds
+    type: bigquery.v2.dataset
+    properties:
+      datasetReference:
+        datasetId: open
+      access:
+        - role: READER
+          specialGroup: allAuthenticatedUsers
+  - name: zone
+    type: dns.v1.managedZone
+    properties:
+      dnsName: example.com.
+      dnssecConfig:
+        state: "on"
+        defaultKeySpecs:
+          - keyType: keySigning
+            algorithm: rsasha1

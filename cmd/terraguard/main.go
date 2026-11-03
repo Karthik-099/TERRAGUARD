@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +24,8 @@ Usage:
   terraguard review --base REV [paths] Review a change: new findings only, risk tier, resolved issues
   terraguard fix  [paths...]           Apply safe auto-fixes in place
   terraguard docs [path]               Generate module README (inputs, outputs, resources)
+  terraguard graph [paths] [--format mermaid|dot|json]
+                                       Resource graph with attack paths highlighted
   terraguard agents-md [path]          Generate AGENTS.md so AI coding agents follow your guardrails
   terraguard ask "question" [paths]    Ask the AI assistant about your Terraform (optional)
   terraguard agent [paths] [--write]   Fix findings: deterministic fixes, then AI proposals the engine verifies
@@ -30,6 +33,14 @@ Usage:
                                        Control adoption, waivers and trend across many modules
   terraguard preflight --plan plan.json --live
                                        Check the plan against live cloud quotas before apply
+  terraguard drift [dir] --state FILE | --live   Code vs state inventory; read-only refresh for drift
+  terraguard cost --plan plan.json [--fail-above 500]    offline monthly cost estimate of a plan
+  terraguard vuln [paths] | image IMAGE.tar | update   offline OSV scan of lockfiles and container images
+  terraguard ui [path]                 Open the workspace on this machine with a folder loaded from disk
+  terraguard lsp                       Language server for any editor (diagnostics and quick fixes over stdio)
+  terraguard init [path] [--pack recommended|strict|minimal]   Policy, CI workflow and pre-commit in one step
+  terraguard explain RULE-ID           Everything about one rule: why, fix, compliance, aliases
+  terraguard doctor [path]             Check the installation, the policy and optional tools
   terraguard ai                        Show the AI fallback route built from .env
   terraguard serve [--addr host:port]  Self-host the web app + API (keys stay server-side)
   terraguard policy validate|test      Validate a policy (with extends) or run policy test fixtures
@@ -81,6 +92,8 @@ func main() {
 		err = runFix(os.Args[2:])
 	case "rules":
 		err = runRules(os.Args[2:])
+	case "graph":
+		err = runGraph(os.Args[2:])
 	case "docs":
 		err = runDocs(os.Args[2:])
 	case "agents-md":
@@ -93,6 +106,22 @@ func main() {
 		code, err = runPulse(os.Args[2:])
 	case "preflight":
 		code, err = runPreflight(os.Args[2:])
+	case "cost":
+		code, err = runCost(os.Args[2:])
+	case "vuln":
+		code, err = runVuln(os.Args[2:])
+	case "drift":
+		code, err = runDrift(os.Args[2:])
+	case "ui":
+		err = runUI(os.Args[2:])
+	case "lsp":
+		err = runLSP()
+	case "init":
+		err = runInit(os.Args[2:])
+	case "explain":
+		err = runExplain(os.Args[2:])
+	case "doctor":
+		err = runDoctor(os.Args[2:])
 	case "policy":
 		code, err = runPolicy(os.Args[2:])
 	case "review":
@@ -142,6 +171,9 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 }
 
 // loadFiles reads .tf/.tfvars under paths, keyed by slash path relative to cwd.
+// includeModules makes loadFiles also read modules terraform init downloaded.
+var includeModules bool
+
 func loadFiles(paths []string) (map[string]string, error) {
 	files := map[string]string{}
 	cwd, _ := os.Getwd()
@@ -172,10 +204,20 @@ func loadFiles(paths []string) (map[string]string, error) {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() && p != root && (d.Name() == ".terraform" || strings.HasPrefix(d.Name(), ".")) {
-				return filepath.SkipDir
+			if d.IsDir() && p != root {
+				switch {
+				case includeModules && d.Name() == ".terraform":
+					return nil // only its modules folder is read, below
+				case includeModules && filepath.Base(filepath.Dir(p)) == ".terraform":
+					if d.Name() != "modules" {
+						return filepath.SkipDir // providers and other init output
+					}
+				case strings.HasPrefix(d.Name(), ".") && d.Name() != ".github" && d.Name() != ".circleci",
+					d.Name() == "node_modules", d.Name() == "vendor":
+					return filepath.SkipDir
+				}
 			}
-			if !d.IsDir() && (strings.HasSuffix(p, ".tf") || strings.HasSuffix(p, ".tfvars")) {
+			if !d.IsDir() && engine.IsScannable(p) {
 				return add(p)
 			}
 			if !d.IsDir() && strings.Contains(d.Name(), ".tfstate") {
@@ -213,6 +255,27 @@ func findConfig(explicit string, paths []string) (string, error) {
 	return "", nil
 }
 
+// readPolicyDirs reads every .yaml/.yml file with a definition block.
+func readPolicyDirs(dirs []string) ([]string, error) {
+	var out []string
+	for _, d := range dirs {
+		err := filepath.WalkDir(d, func(p string, e fs.DirEntry, err error) error {
+			if err != nil || e.IsDir() || !(strings.HasSuffix(p, ".yaml") || strings.HasSuffix(p, ".yml")) {
+				return err
+			}
+			b, err := os.ReadFile(p)
+			if err == nil && strings.Contains(string(b), "definition:") {
+				out = append(out, string(b))
+			}
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // readOptional returns the file's contents, or "" when no path is given.
 func readOptional(path string) (string, error) {
 	if path == "" {
@@ -247,8 +310,11 @@ func buildInput(paths []string, planPath, configPath, failOn string) (engine.Inp
 }
 
 func runScan(args []string) (int, error) {
+	if rest, ok := cutFlag(args, "--watch"); ok {
+		return watchScan(rest)
+	}
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
-	format := fs.String("format", "text", "stdout format: text, json, sarif, junit, codequality or markdown")
+	format := fs.String("format", "text", "stdout format: text, json, sarif, junit, codequality, checkstyle, github (annotations), azure (Azure DevOps) or markdown")
 	plan := fs.String("plan", "", "also analyze a plan: the output of terraform show -json")
 	config := fs.String("config", "", "policy file (default: .terraguard.yml, found automatically)")
 	failOn := fs.String("fail-on", "", "override the policy threshold: CRITICAL, HIGH, MEDIUM, LOW or NONE")
@@ -261,6 +327,21 @@ func runScan(args []string) (int, error) {
 	writeBaseline := fs.String("write-baseline", "", "write today's findings to this file as the baseline")
 	cqOut := fs.String("codequality", "", "also write a GitLab Code Quality report to this file")
 	schema := fs.String("schema", "", "check every argument against terraform providers schema -json output")
+	renderHelm := fs.Bool("helm", false, "render Helm charts (Chart.yaml) with helm template and scan the manifests")
+	renderBicep := fs.Bool("bicep", false, "compile .bicep files with bicep build (or az bicep build) and scan the ARM templates")
+	renderKustomize := fs.Bool("kustomize", false, "render Kustomize overlays with kustomize build (or kubectl kustomize) and scan the manifests")
+	fs.BoolVar(&includeModules, "include-modules", false, "also scan modules that terraform init downloaded into .terraform/modules")
+	coverage := fs.Bool("coverage", false, "list every resource with the number of rules that checked it and which failed")
+	noBuiltinSchema := fs.Bool("no-builtin-schema", false, "do not check arguments against the bundled aws, azurerm and google schemas")
+	var varFiles, skipPaths, only, skip, policyDirs, regoDirs, frameworks listFlag
+	fs.Var(&frameworks, "framework", "scan only these formats: terraform, kubernetes, cloudformation, arm, dockerfile, docker-compose, github-actions, gitlab-ci, azure-pipelines, circleci, bitbucket-pipelines, serverless, ansible, openapi (repeatable or comma-separated)")
+	fs.Var(&regoDirs, "rego", "folder of Rego policies (Conftest style: deny, violation and warn rules) to run as well (repeatable)")
+	fs.Var(&policyDirs, "policy-dir", "folder of graph policies in Checkov's YAML format to run as well (repeatable; --external-checks-dir works too)")
+	fs.Var(&policyDirs, "external-checks-dir", "same as --policy-dir")
+	fs.Var(&varFiles, "var-file", "tfvars file to use like terraform -var-file (repeatable, later wins)")
+	fs.Var(&skipPaths, "skip-path", "glob of paths not to scan, e.g. 'test/**' or '*/examples/*' (repeatable)")
+	fs.Var(&only, "check", "run only these rule IDs or globs, e.g. TG-AWS-* (repeatable)")
+	fs.Var(&skip, "skip-check", "skip these rule IDs or globs (repeatable)")
 	paths, err := parseInterspersed(fs, args)
 	if err != nil {
 		return 2, err
@@ -280,7 +361,41 @@ func runScan(args []string) (int, error) {
 	if in.Schema, err = readOptional(*schema); err != nil {
 		return 2, err
 	}
+	in.NoBuiltinSchema, in.Coverage = *noBuiltinSchema, *coverage
+	if in.GraphPolicies, err = readPolicyDirs(policyDirs); err != nil {
+		return 2, err
+	}
+	for name := range in.Files {
+		if matchesAny(skipPaths, name) {
+			delete(in.Files, name)
+		}
+	}
+	for _, vf := range varFiles {
+		b, err := os.ReadFile(vf)
+		if err != nil {
+			return 2, err
+		}
+		for _, p := range paths { // a var file belongs to the root module being scanned
+			in.VarFiles = append(in.VarFiles, engine.VarFile{Dir: rootKey(p), Source: string(b)})
+		}
+	}
+	if *renderHelm || *renderKustomize || *renderBicep {
+		rendered, err := renderManifests(paths, *renderHelm, *renderKustomize, *renderBicep)
+		if err != nil {
+			return 2, err
+		}
+		for name, src := range rendered {
+			in.Files[name] = src
+		}
+	}
+	in.Only, in.Skip = only, skip
+	for _, f := range frameworks {
+		in.Frameworks = append(in.Frameworks, strings.Split(f, ",")...)
+	}
 	t0 := time.Now()
+	if in.Extra, err = regoFindings(regoDirs, in.Files, in.Plan); err != nil {
+		return 2, err
+	}
 	rep := engine.Scan(in)
 	if *writeBaseline != "" {
 		if err := writeBaselineFile(*writeBaseline, rep); err != nil {
@@ -313,6 +428,13 @@ func runScan(args []string) (int, error) {
 		case "codequality":
 			b, err := engine.CodeQuality(rep)
 			return string(b) + "\n", err
+		case "checkstyle":
+			b, err := engine.Checkstyle(rep)
+			return string(b) + "\n", err
+		case "github":
+			return engine.GitHubAnnotations(rep), nil
+		case "azure":
+			return engine.AzureDevOps(rep), nil
 		case "text":
 			return engine.Text(rep), nil
 		}
@@ -344,6 +466,8 @@ func runScan(args []string) (int, error) {
 func runFix(args []string) error {
 	fs := flag.NewFlagSet("fix", flag.ContinueOnError)
 	config := fs.String("config", "", "policy file (default: .terraguard.yml, found automatically)")
+	pr := fs.Bool("pr", false, "commit the fixes on a new branch, push it and open a pull request (gh)")
+	base := fs.String("base", "", "with --pr: the branch the pull request targets (default: current branch)")
 	paths, err := parseInterspersed(fs, args)
 	if err != nil {
 		return err
@@ -356,14 +480,19 @@ func runFix(args []string) error {
 	for _, e := range errs {
 		fmt.Fprintln(os.Stderr, "skipped:", e)
 	}
+	var written []string
 	for name, src := range changed {
 		if err := os.WriteFile(filepath.FromSlash(name), []byte(src), 0o644); err != nil {
 			return err
 		}
 		fmt.Println("fixed", name)
+		written = append(written, filepath.FromSlash(name))
 	}
 	if len(changed) == 0 {
 		fmt.Println("nothing to fix")
+	}
+	if *pr {
+		return openFixPR(written, *base)
 	}
 	return nil
 }
@@ -381,13 +510,13 @@ func runRules(args []string) error {
 		fmt.Println(string(b))
 		return err
 	case "markdown":
-		fmt.Println("| ID | Severity | Category | Title | Blocks apply |\n|---|---|---|---|---|")
+		fmt.Println("| ID | Severity | Category | Title | Blocks apply | Since |\n|---|---|---|---|---|---|")
 		for _, r := range rules {
 			blk := ""
 			if r.Blocking {
 				blk = "yes"
 			}
-			fmt.Printf("| `%s` | %s | %s | %s | %s |\n", r.ID, r.Severity, r.Category, r.Title, blk)
+			fmt.Printf("| `%s` | %s | %s | %s | %s | %s |\n", r.ID, r.Severity, r.Category, r.Title, blk, r.Since)
 		}
 	default:
 		for _, r := range rules {
@@ -421,4 +550,69 @@ func runAgentsMD(args []string) error {
 	}
 	fmt.Print(engine.AgentsMD(in.Files, in.Config))
 	return nil
+}
+
+func runGraph(args []string) error {
+	fs := flag.NewFlagSet("graph", flag.ContinueOnError)
+	format := fs.String("format", "mermaid", "output format: mermaid (GitHub renders it), dot (Graphviz) or json")
+	plan := fs.String("plan", "", "also include resources from terraform show -json output")
+	paths, err := parseInterspersed(fs, args)
+	if err != nil {
+		return err
+	}
+	in, err := buildInput(paths, *plan, "", "")
+	if err != nil {
+		return err
+	}
+	rep := engine.Scan(in)
+	switch *format {
+	case "dot":
+		fmt.Print(engine.GraphDOT(rep))
+	case "json":
+		b, err := json.MarshalIndent(rep.Graph, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(b))
+	case "mermaid":
+		fmt.Print(engine.GraphMermaid(rep))
+	default:
+		return fmt.Errorf("unknown format %q (mermaid, dot or json)", *format)
+	}
+	return nil
+}
+
+// listFlag collects a repeatable string flag.
+type listFlag []string
+
+func (l *listFlag) String() string     { return strings.Join(*l, ",") }
+func (l *listFlag) Set(v string) error { *l = append(*l, v); return nil }
+
+// matchesAny reports whether name, or any of its parent directories, matches a glob.
+func matchesAny(globs []string, name string) bool {
+	for _, g := range globs {
+		g = strings.TrimSuffix(strings.TrimSuffix(g, "/**"), "/")
+		for p := name; p != "." && p != "/" && p != ""; p = path.Dir(p) {
+			if ok, _ := path.Match(g, p); ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// rootKey is how loadFiles names a scanned directory, so var files and files line up.
+func rootKey(p string) string {
+	key := p
+	if cwd, err := os.Getwd(); err == nil {
+		if abs, err := filepath.Abs(p); err == nil {
+			if rel, err := filepath.Rel(cwd, abs); err == nil && !strings.HasPrefix(rel, "..") {
+				key = rel
+			}
+		}
+	}
+	if info, err := os.Stat(p); err == nil && !info.IsDir() {
+		key = filepath.Dir(key)
+	}
+	return path.Clean(filepath.ToSlash(key))
 }

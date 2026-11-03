@@ -93,14 +93,14 @@ func reviewSection(f Finding) string {
 	case f.Category == CatSecurity || f.Category == CatAttackPath:
 		return "Security"
 	case f.Category == CatPolicy || f.Category == CatBestPrac:
-		return "Codex compliance"
+		return "Policy and best practice"
 	case f.Category == CatCost:
 		return "Cost"
 	}
 	return "Release impact" // validate, plan, reliability
 }
 
-var sectionOrder = []string{"Security", "Release impact", "Codex compliance", "Cost", "Documentation"}
+var sectionOrder = []string{"Security", "Release impact", "Policy and best practice", "Cost", "Documentation"}
 
 func (r *Review) Markdown() string {
 	var b strings.Builder
@@ -172,7 +172,7 @@ func (r *Review) Markdown() string {
 func ChangedTerraform(paths []string) []string {
 	var out []string
 	for _, p := range paths {
-		if strings.HasSuffix(p, ".tf") || strings.HasSuffix(p, ".tfvars") || strings.HasSuffix(p, ".terraguard.yml") || strings.HasSuffix(p, ".terraguard.yaml") {
+		if IsScannable(p) || strings.HasSuffix(p, ".terraguard.yml") || strings.HasSuffix(p, ".terraguard.yaml") {
 			out = append(out, p)
 		}
 	}

@@ -1,0 +1,31 @@
+# path: .github/workflows/release.yml
+# forbid: TG-GHA-001, TG-GHA-002, TG-GHA-003, TG-GHA-004, TG-GHA-005, TG-GHA-006, TG-GHA-007, TG-GHA-008, TG-GHA-009, TG-GHA-010
+# forbid: TG-GHA-011, TG-GHA-012, TG-GHA-013, TG-GHA-014, TG-GHA-015, TG-GHA-016, TG-GHA-017, TG-GHA-018, TG-SEC-001
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Greet
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          echo "Title: $TITLE"
+          echo "::add-mask::${{ secrets.TOKEN }}"
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        with:
+          sbom: true
+      - run: cosign sign --yes example/app@sha256:4444444444444444444444444444444444444444444444444444444444444444

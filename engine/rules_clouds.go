@@ -7,7 +7,7 @@ import (
 )
 
 // Rules is the full resource-rule catalog.
-var Rules = concatRules(coreRules, moreAWSRules, gcpAzureRules, otherCloudRules, kubernetesRules, dnsCDNRules, costRules, extraRules, moreRules, tableRules())
+var Rules = concatRules(coreRules, moreAWSRules, gcpAzureRules, otherCloudRules, kubernetesRules, dnsCDNRules, costRules, extraRules, moreRules, tableRules(), portedAWS, portedAzure, portedGCP, portedOther, k8sManifestRules, k8sFlagRuleSet(), cfnRules, valueRules, cloudValueRules, dockerRules, composeRules, ciRuleSet(), armRuleSet(), ansibleRules, openapiRules, cloudflareRules, gdmRules)
 
 func concatRules(sets ...[]Rule) []Rule {
 	var out []Rule
@@ -460,7 +460,12 @@ var kubernetesRules = []Rule{
 			walkMaps(r.Attrs, "", func(p string, m map[string]any) {
 				for _, k := range []string{"privileged", "allow_privilege_escalation", "host_network", "host_pid", "host_ipc"} {
 					if is(m[k], true) {
-						hits = append(hits, Hit{Path: join(p, k), Msg: k + " = true lets a compromised container escape to the node."})
+						h := Hit{Path: join(p, k), Msg: k + " = true lets a compromised container escape to the node."}
+						// Host namespaces are pod-level switches with a safe false; privileged containers may need rework.
+						if (strings.HasPrefix(k, "host_") || k == "allow_privilege_escalation") && p != "" {
+							h.Fix = fix(false, "Set "+k+" = false", append(strings.Split(gcppStripIdx(p), "."), k)...)
+						}
+						hits = append(hits, h)
 					}
 				}
 			})

@@ -1,0 +1,43 @@
+# path: docker-compose.yml
+# expect: TG-COMPOSE-001, TG-COMPOSE-002, TG-COMPOSE-003, TG-COMPOSE-004, TG-COMPOSE-005, TG-COMPOSE-006, TG-COMPOSE-007, TG-COMPOSE-008, TG-COMPOSE-009
+# expect: TG-COMPOSE-010, TG-COMPOSE-011, TG-COMPOSE-012, TG-COMPOSE-013, TG-COMPOSE-014, TG-COMPOSE-015, TG-COMPOSE-016, TG-COMPOSE-017, TG-COMPOSE-018
+# expect: TG-COMPOSE-019, TG-COMPOSE-020, TG-COMPOSE-021, TG-COMPOSE-022, TG-COMPOSE-023, TG-COMPOSE-024, TG-COMPOSE-025, TG-SEC-001
+services:
+  web:
+    image: nginx:latest
+    privileged: true
+    network_mode: host
+    pid: host
+    ipc: host
+    userns_mode: host
+    user: root
+    cap_add: [SYS_ADMIN]
+    security_opt: ["seccomp:unconfined"]
+    cgroup_parent: custom
+    restart: "on-failure:10"
+    pids_limit: -1
+    healthcheck:
+      disable: true
+    ports:
+      - "80:80"
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc:/host-etc
+      - type: bind
+        source: /srv/data
+        target: /data
+        bind:
+          propagation: rshared
+      - shared:/shared
+    environment:
+      - DB_PASSWORD=hunter2hunter2
+  worker:
+    image: example/worker:1.2.3
+    volumes:
+      - shared:/in
+    environment:
+      API_TOKEN: abcdef123456
+volumes:
+  shared: {}

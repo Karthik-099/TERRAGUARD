@@ -1,0 +1,2 @@
+arm:CKV_AZURE_58 drop
+arm:CKV_AZURE_80 missing_ok want=v8.0|v9.0|v10.0

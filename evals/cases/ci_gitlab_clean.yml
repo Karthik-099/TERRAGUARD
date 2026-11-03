@@ -1,0 +1,18 @@
+# path: .gitlab-ci.yml
+# forbid: TG-GITLAB-001, TG-GITLAB-002, TG-GITLAB-003, TG-GITLAB-004, TG-GITLAB-005, TG-GITLAB-006, TG-GITLAB-007, TG-GITLAB-008, TG-GITLAB-009, TG-GITLAB-010, TG-SEC-001
+include:
+  - project: group/templates
+    ref: v1.4.0
+    file: /build.yml
+  - local: /ci/test.yml
+image: alpine:3.20@sha256:5555555555555555555555555555555555555555555555555555555555555555
+variables:
+  DOCKER_TLS_CERTDIR: "/certs"
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+build:
+  script:
+    - make build

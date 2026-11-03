@@ -1,0 +1,194 @@
+CKV_AZURE_73	Automation account variable is not encrypted	Variable values are stored in plaintext and readable by anyone with access to the account.	Medium
+CKV_AZURE_74	Data Explorer cluster disk encryption is off	Cluster disks hold query data and caches that stay readable if the storage is exposed.	Medium
+CKV_AZURE_75	Data Explorer cluster has no double encryption	Data is protected by only one encryption layer, so a single key or platform failure exposes it.	Low
+CKV_AZURE_76	Batch account does not use a customer key from Key Vault	Account data is encrypted only with platform keys you cannot rotate or revoke.	Low
+CKV_AZURE_78	App Service allows plain FTP deployment	Unencrypted FTP sends deployment credentials and code in cleartext.	Medium
+CKV_AZURE_81	App Service does not pin the expected PHP version	An outdated PHP runtime misses security patches.	Low
+CKV_AZURE_82	App Service does not pin the expected Python version	An outdated Python runtime misses security patches.	Low
+CKV_AZURE_83	App Service does not pin the expected Java version	An outdated Java runtime misses security patches.	Low
+CKV_AZURE_88	App Service has no Azure Files storage mount	Content stored on the local instance disk is lost on restart and not shared across instances.	Info
+CKV_AZURE_89	Redis cache is reachable from the public internet	Anyone on the internet can attempt to connect to the cache endpoint.	High
+CKV_AZURE_93	Managed disk does not use a customer-managed key	Disk data is encrypted only with platform keys you cannot rotate or revoke.	Low
+CKV_AZURE_94	MySQL server has no geo-redundant backups	A regional outage can leave you with no restorable backup.	Info
+CKV_AZURE_96	MySQL server infrastructure encryption is off	Data at rest has only one encryption layer.	Low
+CKV_AZURE_98	Container group is not deployed into a virtual network	Containers get a public address instead of private network isolation.	Medium
+CKV_AZURE_100	Cosmos DB account does not use a customer-managed key	Database contents are encrypted only with keys you cannot rotate or revoke.	Low
+CKV_AZURE_101	Cosmos DB account is reachable from the public internet	Anyone on the internet can reach the database endpoint and try its keys.	High
+CKV_AZURE_102	PostgreSQL server has no geo-redundant backups	A regional outage can leave you with no restorable backup.	Info
+CKV_AZURE_105	Data Lake Store encryption is off	Stored analytics data stays readable if the underlying storage is exposed.	Medium
+CKV_AZURE_106	Event Grid domain is reachable from the public internet	Anyone on the internet can try to publish events to the domain.	High
+CKV_AZURE_107	API Management is not deployed into a virtual network	Gateway and backends are reachable without private network isolation.	Medium
+CKV_AZURE_108	IoT Hub is reachable from the public internet	Any internet host can try to connect as a device or call the service API.	High
+CKV_AZURE_110	Key Vault purge protection is off	A deleted vault or key can be purged at once, destroying data that depends on it.	Medium
+CKV_AZURE_111	Key Vault soft delete is off	Deleted secrets and keys cannot be recovered after a mistake or attack.	Low
+CKV_AZURE_114	Key Vault secret has no content type	Without a content type it is hard to tell what a secret is and how to rotate it.	Low
+CKV_AZURE_115	AKS cluster API server is public	The Kubernetes API is reachable from the internet and exposed to credential attacks.	High
+CKV_AZURE_117	AKS cluster disks do not use a customer-managed key	Node and volume disks are encrypted only with keys you cannot rotate or revoke.	Low
+CKV_AZURE_118	Network interface has IP forwarding enabled	The VM can route traffic for other hosts and bypass network controls.	Medium
+CKV_AZURE_121	Front Door endpoint has no web application firewall	Common web attacks reach the backend without filtering.	Medium
+CKV_AZURE_124	Search service is reachable from the public internet	Any internet host can query the index if it obtains a key.	High
+CKV_AZURE_126	Service Fabric cluster does not use Entra ID sign-in	Cluster management relies on certificates alone with no central identity control.	Medium
+CKV_AZURE_127	MySQL server threat detection is off	Suspicious queries and access patterns go unnoticed.	Low
+CKV_AZURE_128	PostgreSQL server threat detection is off	Suspicious queries and access patterns go unnoticed.	Low
+CKV_AZURE_129	MariaDB server has no geo-redundant backups	A regional outage can leave you with no restorable backup.	Info
+CKV_AZURE_130	PostgreSQL server infrastructure encryption is off	Data at rest has only one encryption layer.	Low
+CKV_AZURE_131	Security Center contact has no email address	Security alerts have nowhere to go and may be missed.	Low
+CKV_AZURE_132	Cosmos DB account lets account keys change metadata	Anyone with a key can alter databases and containers outside your deployment process.	Medium
+CKV_AZURE_134	Cognitive Services account is reachable from the public internet	Any internet host can call the model endpoint with a leaked key.	High
+CKV_AZURE_139	Container registry is reachable from the public internet	Images can be pulled or pushed from anywhere with valid credentials.	High
+CKV_AZURE_147	PostgreSQL server allows TLS older than 1.2	Older TLS versions have known weaknesses that allow traffic to be decrypted.	Medium
+CKV_AZURE_148	Redis cache allows TLS older than 1.2	Older TLS versions have known weaknesses that allow traffic to be decrypted.	Medium
+CKV_AZURE_150	Machine Learning compute cluster does not scale to zero	Idle nodes keep running and cost money when no jobs are queued.	Info
+CKV_AZURE_153	App Service slot accepts plain HTTP	Requests and cookies can be read or altered in transit.	Medium
+CKV_AZURE_154	App Service slot allows TLS older than 1.2	Older TLS versions have known weaknesses that allow traffic to be decrypted.	Medium
+CKV_AZURE_155	App Service slot has remote debugging enabled	An open debugger port gives a direct way into the running app.	Medium
+CKV_AZURE_156	SQL database auditing does not send to Azure Monitor	Audit records are not available for central alerting and retention.	Low
+CKV_AZURE_157	Synapse workspace has no data exfiltration protection	Data can be copied out to any outside tenant or endpoint.	Medium
+CKV_AZURE_158	Databricks workspace is reachable from the public internet	The workspace UI and API can be reached from any network.	High
+CKV_AZURE_159	Function app built-in logging is off	Invocations and errors are not recorded for troubleshooting or investigation.	Low
+CKV_AZURE_161	Spring Cloud API portal accepts plain HTTP	Portal traffic, including tokens, can be read in transit.	Medium
+CKV_AZURE_162	Spring Cloud API portal is publicly reachable	The API portal is exposed to anyone on the internet.	High
+CKV_AZURE_166	Container registry has no image quarantine	Images can be pulled before they are scanned for vulnerabilities.	Low
+CKV_AZURE_169	AKS default node pool uses availability sets	Availability set pools lack scale sets features such as autoscaling and zone spread.	Info
+CKV_AZURE_170	AKS cluster uses the free control plane tier	The free tier has no uptime SLA for the Kubernetes API.	Info
+CKV_AZURE_172	AKS secrets store driver does not rotate secrets	Pods keep using old secret values after they are rotated in Key Vault.	Low
+CKV_AZURE_174	API Management is reachable from the public internet	Gateway management and APIs are exposed to any network.	High
+CKV_AZURE_175	Web PubSub uses the free tier	The free tier has no SLA and limited capacity for production use.	Info
+CKV_AZURE_176	Web PubSub service has no managed identity	The service must use stored secrets to reach other resources.	Low
+CKV_AZURE_177	Windows VM automatic updates are off	Security patches are not applied unless someone installs them by hand.	Medium
+CKV_AZURE_178	Linux VM has no SSH public key	The VM relies on password sign-in, which is open to guessing attacks.	Medium
+CKV_AZURE_179	VM agent is not provisioned	Extensions for monitoring, backup and patching cannot be installed.	Low
+CKV_AZURE_180	Data Explorer cluster uses a dev SKU with no SLA	Dev SKUs have no uptime guarantee and are not meant for production data.	Info
+CKV_AZURE_184	App Configuration allows access keys	Shared keys bypass Entra ID and are hard to audit or revoke.	High
+CKV_AZURE_185	App Configuration is reachable from the public internet	Configuration and secrets references can be read from any network with a key.	High
+CKV_AZURE_186	App Configuration does not use a customer-managed key	Stored settings are encrypted only with keys you cannot rotate or revoke.	Low
+CKV_AZURE_187	App Configuration purge protection is off	Deleted stores can be purged at once with no way to recover settings.	Low
+CKV_AZURE_188	App Configuration uses the free tier	The free tier has no SLA, no private endpoints and no purge protection.	Info
+CKV_AZURE_190	Storage account allows public blob containers	Containers can be made readable by anyone on the internet without sign-in.	High
+CKV_AZURE_191	Event Grid topic has no managed identity	Event delivery must use stored secrets to reach destinations.	Low
+CKV_AZURE_192	Event Grid topic allows access keys	Shared keys bypass Entra ID and are hard to audit or revoke.	Medium
+CKV_AZURE_193	Event Grid topic is reachable from the public internet	Any internet host can try to publish events to the topic.	High
+CKV_AZURE_194	Event Grid domain has no managed identity	Event delivery must use stored secrets to reach destinations.	Low
+CKV_AZURE_195	Event Grid domain allows access keys	Shared keys bypass Entra ID and are hard to audit or revoke.	Medium
+CKV_AZURE_196	SignalR service uses the free tier	The free tier has no SLA and limited capacity for production use.	Info
+CKV_AZURE_199	Service Bus namespace has no infrastructure encryption	Messages at rest have only one encryption layer.	Low
+CKV_AZURE_201	Service Bus namespace does not use a customer-managed key	Messages are encrypted only with keys you cannot rotate or revoke.	Low
+CKV_AZURE_205	Service Bus namespace allows TLS older than 1.2	Older TLS versions have known weaknesses that allow traffic to be decrypted.	Medium
+CKV_AZURE_206	Storage account data is not replicated to another region	A regional outage can make the data unavailable or lose it.	Info
+CKV_AZURE_210	Search service allows every IP address	The IP allow list permits the whole internet, so it gives no protection.	High
+CKV_AZURE_211	App Service plan uses a basic or free tier	These tiers lack scaling, slots and SLA guarantees for production workloads.	Info
+CKV_AZURE_214	Web app does not keep the site always on	The app unloads when idle, so the first request after a pause is slow.	Info
+CKV_AZURE_217	Application Gateway listener uses plain HTTP	Traffic between clients and the gateway can be read or altered in transit.	Medium
+CKV_AZURE_219	Azure Firewall has no firewall policy	Rules cannot be managed centrally and threat intelligence is not applied.	Low
+CKV_AZURE_220	Firewall policy intrusion detection does not block	Detected attacks are only logged, or not inspected, instead of being stopped.	Medium
+CKV_AZURE_221	Function app is reachable from the public internet	Functions can be invoked from any network.	High
+CKV_AZURE_222	Web app is reachable from the public internet	The app can be reached from any network, not only private ones.	High
+CKV_AZURE_223	Event Hubs namespace allows TLS older than 1.2	Older TLS versions have known weaknesses that allow traffic to be decrypted.	Medium
+CKV_AZURE_224	SQL database ledger is off	Tampering with table history cannot be detected.	Low
+CKV_AZURE_225	App Service plan is not spread across zones	A single zone outage can take every instance down.	Info
+CKV_AZURE_226	AKS default node pool uses managed OS disks	Managed OS disks are slower and cost more than ephemeral disks for stateless nodes.	Info
+CKV_AZURE_229	SQL database is not zone redundant	A single zone outage can make the database unavailable.	Info
+CKV_AZURE_230	Redis cache has no replica	The basic tier runs one node, so a failure loses the cache and causes downtime.	Info
+CKV_AZURE_231	App Service environment is not zone redundant	A single zone outage can take the environment down.	Info
+CKV_AZURE_232	AKS system node pool also runs app workloads	App pods can starve system components and destabilize the cluster.	Low
+CKV_AZURE_236	Cognitive Services account allows access keys	Shared keys bypass Entra ID and are hard to audit or revoke.	Medium
+CKV_AZURE_237	Container registry has no dedicated data endpoints	Firewall rules must allow broad storage wildcards to pull image layers.	Low
+CKV_AZURE_238	Cognitive Services account has no managed identity	The account must use stored secrets to reach other resources.	Low
+CKV_AZURE_240	Synapse workspace does not use a customer-managed key	Workspace data is encrypted only with keys you cannot rotate or revoke.	Low
+CKV_AZURE_242	Synapse Spark pool does not use isolated compute	Jobs share physical hosts with other tenants.	Low
+CKV_AZURE_245	Container group has a public IP address	Containers are directly reachable from the internet.	High
+CKV_AZURE_246	AKS HTTP application routing add-on is enabled	The add-on is not meant for production and exposes apps through public DNS.	Medium
+CKV_GCP_7	GKE cluster has legacy ABAC enabled	Legacy ABAC grants broad static permissions that bypass Kubernetes RBAC.	High
+CKV_GCP_8	GKE cluster monitoring is turned off	Cluster health and security events are not collected.	Low
+CKV_GCP_9	GKE node pool auto-repair is off	Unhealthy nodes stay in service until someone replaces them by hand.	Low
+CKV_GCP_10	GKE node pool auto-upgrade is off	Nodes fall behind on Kubernetes security patches.	Medium
+CKV_GCP_20	GKE cluster has no authorized networks for the control plane	The Kubernetes API accepts connections from any address.	Medium
+CKV_GCP_23	GKE cluster does not use alias IP ranges	Pods share route-based networking that cannot be filtered by firewall rules per pod.	Low
+CKV_GCP_25	GKE cluster is not private	Nodes get public IP addresses and are reachable from the internet.	Medium
+CKV_GCP_27	Project creates the default network automatically	The default network ships with broad firewall rules that allow SSH and RDP.	Medium
+CKV_GCP_33	Project metadata does not enable OS Login	SSH access relies on metadata keys instead of IAM-controlled sign-in.	Medium
+CKV_GCP_37	Compute disk does not use a customer-supplied key	Disk data is encrypted only with keys you cannot rotate or revoke.	Low
+CKV_GCP_61	GKE cluster intranode visibility is off	Pod-to-pod traffic on the same node is not visible to flow logs or firewall rules.	Low
+CKV_GCP_65	GKE cluster has no Google Groups for RBAC	Access must be granted to individual users, which is hard to manage and review.	Low
+CKV_GCP_70	GKE cluster has no release channel	The cluster does not receive managed version updates and security patches.	Low
+CKV_GCP_78	Storage bucket versioning is off	Overwritten or deleted objects cannot be recovered.	Low
+CKV_GCP_79	Cloud SQL instance runs an older database version	Older engine versions miss security fixes and reach end of support sooner.	Low
+CKV_GCP_80	BigQuery table does not use a customer-managed key	Table data is encrypted only with keys you cannot rotate or revoke.	Low
+CKV_GCP_82	KMS key is not protected from destroy	A plan can delete the key and make everything it encrypts unreadable.	Medium
+CKV_GCP_85	Bigtable instance does not use a customer-managed key	Table data is encrypted only with keys you cannot rotate or revoke.	Low
+CKV_GCP_86	Cloud Build worker pool has external IP addresses	Build workers are reachable from and can reach the internet directly.	Medium
+CKV_GCP_87	Data Fusion instance is not private	The instance is reachable over public IP addresses.	Medium
+CKV_GCP_90	Dataflow job does not use a customer-managed key	Job state and data are encrypted only with keys you cannot rotate or revoke.	Low
+CKV_GCP_92	Vertex AI dataset does not use a customer-managed key	Training data is encrypted only with keys you cannot rotate or revoke.	Low
+CKV_GCP_96	Vertex AI metadata store does not use a customer-managed key	Metadata is encrypted only with keys you cannot rotate or revoke.	Low
+CKV_GCP_104	Data Fusion instance logging is off	Pipeline activity is not recorded for troubleshooting or investigation.	Low
+CKV_GCP_105	Data Fusion instance monitoring is off	Pipeline health and failures are not tracked.	Low
+CKV_GCP_119	Spanner database has no deletion protection	A mistaken plan or command can drop the database and its data.	Low
+CKV_GCP_121	BigQuery table has no deletion protection	A mistaken plan or command can drop the table and its data.	Low
+CKV_GCP_126	Notebook instance has virtual TPM disabled	Boot integrity cannot be measured, so tampered boot code goes unnoticed.	Low
+CKV_GCP_127	Notebook instance integrity monitoring is off	Changes to the boot sequence are not detected or reported.	Low
+CKV_GIT_2	GitHub webhook skips TLS certificate checks	Payloads and secrets can be intercepted by anyone who can impersonate the endpoint.	Medium
+CKV_GIT_6	Branch protection does not require signed commits	Commits can be pushed under someone else's name without proof of authorship.	Low
+CKV_GLB_2	GitLab protected branch allows force push	History on the branch can be rewritten or erased.	Medium
+CKV_GLB_3	GitLab project does not block pushed secrets	Credentials and keys committed by mistake reach the repository.	High
+CKV_GLB_4	GitLab project accepts unsigned commits	Commits can be pushed under someone else's name without proof of authorship.	Low
+CKV_K8S_1	Pod security policy allows the host PID namespace	Pods can see and signal every process on the node.	High
+CKV_K8S_3	Pod security policy allows the host IPC namespace	Pods can read shared memory of other processes on the node.	High
+CKV_K8S_4	Pod security policy allows the host network	Pods can sniff node traffic and reach services bound to localhost.	High
+CKV_K8S_5	Pod security policy allows privilege escalation	Processes in a container can gain more privileges than their parent.	High
+CKV_K8S_24	Pod security policy allows extra Linux capabilities	Added capabilities give containers powers that can lead to node compromise.	Medium
+CKV_LIN_2	Linode instance has no SSH authorized keys	Access relies on the root password, which is open to guessing attacks.	Medium
+CKV_LIN_3	Linode user has no email address	Account notices and recovery mail have nowhere to go.	Low
+CKV_LIN_4	Linode user has no username	The account cannot be clearly identified in audits.	Low
+CKV_LIN_5	Linode firewall allows inbound traffic by default	Any port not covered by a rule is open to the internet.	High
+CKV_LIN_6	Linode firewall allows outbound traffic by default	A compromised host can send data anywhere.	Low
+CKV_NCP_6	NCP server base storage is not encrypted	Boot volume data stays readable if the storage is exposed.	Medium
+CKV_NCP_7	NCP launch configuration volumes are not encrypted	Servers it launches get disks that stay readable if the storage is exposed.	Medium
+CKV_NCP_14	NCP NAS volume is not encrypted	Shared file data stays readable if the storage is exposed.	Medium
+CKV_NCP_16	NCP load balancer is internet facing	Backends behind the load balancer are exposed to the public internet.	Medium
+CKV_NCP_19	NCP Kubernetes cluster is on a public network	Cluster nodes are reachable from the internet.	High
+CKV_NCP_22	NCP Kubernetes cluster audit logging is off	API calls to the cluster are not recorded for investigation.	Low
+CKV_NCP_24	NCP load balancer listener does not use HTTPS	Traffic between clients and the load balancer can be read in transit.	Medium
+CKV_OCI_2	OCI block volume has no backup policy	Volume data cannot be restored after deletion or corruption.	Low
+CKV_OCI_3	OCI block volume does not use a customer-managed key	Volume data is encrypted only with keys you cannot rotate or revoke.	Low
+CKV_OCI_4	OCI instance does not encrypt volume traffic in transit	Data between the instance and its volumes moves unencrypted.	Medium
+CKV_OCI_6	OCI instance monitoring is disabled	Instance health and metrics are not collected.	Low
+CKV_OCI_7	OCI bucket object events are off	Object changes do not emit events for alerting or audit.	Low
+CKV_OCI_8	OCI bucket versioning is off	Overwritten or deleted objects cannot be recovered.	Low
+CKV_OCI_9	OCI bucket does not use a customer-managed key	Objects are encrypted only with keys you cannot rotate or revoke.	Low
+CKV_OCI_11	OCI password policy does not require lowercase letters	Simpler passwords are easier to guess or crack.	Medium
+CKV_OCI_12	OCI password policy does not require numbers	Simpler passwords are easier to guess or crack.	Medium
+CKV_OCI_13	OCI password policy does not require special characters	Simpler passwords are easier to guess or crack.	Medium
+CKV_OCI_14	OCI password policy does not require uppercase letters	Simpler passwords are easier to guess or crack.	Medium
+CKV_OCI_15	OCI file system does not use a customer-managed key	File data is encrypted only with keys you cannot rotate or revoke.	Low
+CKV_OCI_16	OCI security list has no inbound rule protocol	Without inbound rules the network relies on defaults that may not match intent.	Low
+CKV_PAN_2	PAN-OS management profile allows HTTP	Admin sessions and passwords cross the network in cleartext.	High
+CKV_PAN_3	PAN-OS management profile allows Telnet	Admin sessions and passwords cross the network in cleartext.	High
+CKV_PAN_13	PAN-OS IPsec profile uses AH without encryption	AH authenticates packets but leaves their contents readable.	Medium
+CKV_TC_1	Tencent Cloud block storage is not encrypted	Disk data stays readable if the storage is exposed.	Medium
+CKV_TC_2	Tencent Cloud instance has a public IP address	The instance is directly reachable from the internet.	High
+CKV_TC_3	Tencent Cloud instance monitoring is disabled	Instance health and metrics are not collected.	Low
+CKV_TC_6	Tencent Cloud Kubernetes cluster log agent is off	Container and node logs are not collected for investigation.	Low
+CKV_TC_9	Tencent Cloud MySQL instance is open to the internet	Anyone on the internet can attempt to connect to the database.	High
+CKV_TC_10	Tencent Cloud MySQL instance uses the default port 3306	Automated scanners target the default port first.	Low
+CKV_TC_12	Tencent Cloud load balancer listener is unencrypted	Traffic between clients and the load balancer can be read in transit.	Medium
+CKV_TC_14	Tencent Cloud VPC flow log is disabled	Network traffic is not recorded for investigation.	Low
+CKV_YC_1	Yandex managed database cluster has no security group	Network access to the database is not restricted by rules you control.	Medium
+CKV_YC_2	Yandex compute instance has a public IP address	The instance is directly reachable from the internet.	High
+CKV_YC_3	Yandex storage bucket does not use a KMS key	Objects are not encrypted with a key you control.	Medium
+CKV_YC_4	Yandex compute instance has the serial console enabled	The serial port gives another way into the VM that skips network controls.	Medium
+CKV_YC_5	Yandex Kubernetes cluster API has a public IP	The Kubernetes API is reachable from the internet.	High
+CKV_YC_6	Yandex Kubernetes nodes have public IP addresses	Worker nodes are directly reachable from the internet.	High
+CKV_YC_7	Yandex Kubernetes cluster auto-upgrade is off	The control plane falls behind on security patches.	Medium
+CKV_YC_8	Yandex Kubernetes node group auto-upgrade is off	Nodes fall behind on security patches.	Medium
+CKV_YC_9	Yandex KMS key has no rotation period	The same key material is used forever, widening the impact of a leak.	Medium
+CKV_YC_10	Yandex Kubernetes cluster does not encrypt secrets with KMS	Kubernetes secrets are stored without a key you control.	Medium
+CKV_YC_11	Yandex compute instance has no security group	Network access to the instance is not restricted by rules you control.	Medium
+CKV_YC_13	Yandex cloud IAM grants admin or editor	A broad role lets the member change or delete every resource in the cloud.	High
+CKV_YC_14	Yandex Kubernetes cluster API has no security group	Access to the control plane is not restricted by rules you control.	Medium
+CKV_YC_15	Yandex Kubernetes nodes have no security group	Network access to worker nodes is not restricted by rules you control.	Medium
+CKV_YC_16	Yandex Kubernetes cluster has no network policy provider	Pods can talk to every other pod with no way to restrict traffic.	Medium
+CKV_YC_18	Yandex instance group VMs have public IP addresses	Every VM in the group is directly reachable from the internet.	High
+CKV_YC_21	Yandex organization IAM grants an admin or owner role	A broad role lets the member control every cloud in the organization.	Critical
+CKV_YC_22	Yandex instance group VMs have no security group	Network access to the group's VMs is not restricted by rules you control.	Medium
+CKV_YC_23	Yandex folder IAM grants admin or editor	A broad role lets the member change or delete every resource in the folder.	High

@@ -36,6 +36,7 @@ resource "aws_sqs_queue" "q" {
 `
 
 const bad = `resource "aws_db_instance" "db" {
+  instance_class      = "db.t3.micro"
   password            = "hunter2hunter2"
   publicly_accessible = true
 }

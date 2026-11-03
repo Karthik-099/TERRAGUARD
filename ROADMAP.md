@@ -6,7 +6,7 @@ The roadmap is a direction, not a promise. Proposals and help are welcome in
 ## Now (v2.x)
 
 - [x] Deterministic engine compiled to WebAssembly, CLI, GitHub Action, MCP server, self-hosted server
-- [x] 271 rules across 14 providers, plan risk, attack paths, auto-fix
+- [x] 1,688 rules across 23 providers, plan risk, attack paths, auto-fix
 - [x] Policy-as-code: `extends`, conditional rules, budgets, baselines, expiring waivers, policy tests, JSON Schema
 - [x] Diff-aware review, verified AI agent, Pulse adoption reports, AGENTS.md generation
 - [x] VS Code extension, pre-commit, GitLab CI and Jenkins templates, JUnit and GitLab Code Quality output

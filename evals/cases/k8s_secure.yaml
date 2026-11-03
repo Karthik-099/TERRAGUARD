@@ -1,0 +1,93 @@
+# forbid: TG-K8S-001, TG-K8S-004, TG-K8S-005, TG-K8S-006, TG-K8S-009, TG-K8S-012, TG-K8S-014, TG-K8S-017, TG-K8S-POD-401, TG-K8S-POD-402, TG-K8S-POD-403, TG-K8S-API-401, TG-K8S-API-407, TG-K8S-API-409, TG-K8S-API-418, TG-K8S-API-426, TG-K8S-ING-401, TG-K8S-ING-402, TG-K8S-RBAC-403, TG-K8S-RBAC-404, TG-K8S-008, TG-K8S-003
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: shop
+spec:
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: web
+        image: registry.example.com/web:1.4.2@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: 500m, memory: 256Mi}
+        readinessProbe:
+          httpGet: {path: /ready, port: 8080}
+        livenessProbe:
+          httpGet: {path: /live, port: 8080}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-apiserver
+  namespace: kube-system
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+  - name: kube-apiserver
+    image: registry.k8s.io/kube-apiserver:v1.30.0@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    command:
+    - kube-apiserver
+    - --anonymous-auth=false
+    - --authorization-mode=Node,RBAC
+    - --audit-log-path=/var/log/audit.log
+    - --audit-log-maxage=30
+    - --audit-log-maxbackup=10
+    - --audit-log-maxsize=100
+    - --encryption-provider-config=/etc/kubernetes/enc.yaml
+    securityContext:
+      readOnlyRootFilesystem: true
+    resources:
+      limits: {memory: 1Gi}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: reader, namespace: shop}
+rules:
+- apiGroups: [""]
+  resources: [configmaps]
+  verbs: [get]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: shop
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+  - hosts: [shop.example.com]
+    secretName: web-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: shop
+spec:
+  type: LoadBalancer
+  loadBalancerSourceRanges: [203.0.113.0/24]
+  ports:
+  - port: 443

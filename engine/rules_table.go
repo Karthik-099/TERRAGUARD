@@ -14,8 +14,12 @@ type check struct {
 	Sev       Severity
 	CWE       string
 	Types     []string
-	Kind      string // eq, missing, missing_or_eq, lt, lt_or_missing, gt
+	Kind      string // eq, missing, missing_or_eq, lt, lt_or_missing, gt, want, set, present
 	Path      string
+	Cat       string  // defaults to security
+	Why       string  // impact, appended to the generated message
+	Want      []any   // want: the allowed values
+	MissingOK bool    // want, set: an absent value passes
 	Bad       []any   // eq kinds
 	Num       float64 // lt and gt kinds
 	Good      any     // a safe value; also used as the fix when Fixable
@@ -24,19 +28,40 @@ type check struct {
 }
 
 func (c check) rule() Rule {
-	remedy := fmt.Sprintf("Set %s = %s.", c.Path, literal(c.Good))
-	if c.Kind == "missing" {
-		remedy = fmt.Sprintf("Configure %s.", c.Path)
+	shown := strings.ReplaceAll(c.Path, ".0", "")
+	remedy := fmt.Sprintf("Set %s = %s.", shown, literal(c.Good))
+	switch {
+	case c.Kind == "missing" || c.Kind == "set":
+		remedy = fmt.Sprintf("Configure %s.", shown)
+	case c.Kind == "present":
+		remedy = fmt.Sprintf("Remove %s.", shown)
+	case c.Kind == "want" && len(c.Want) > 1:
+		remedy = fmt.Sprintf("Set %s to one of %s.", shown, literals(c.Want))
 	}
-	return Rule{ID: c.ID, Title: c.Title, Severity: c.Sev, Category: CatSecurity, CWE: c.CWE, Types: c.Types, Remediation: remedy,
+	cat := c.Cat
+	if cat == "" {
+		cat = CatSecurity
+	}
+	return Rule{ID: c.ID, Title: c.Title, Severity: c.Sev, Category: cat, CWE: c.CWE, Types: c.Types, Remediation: remedy,
 		Check: func(r *Resource) []Hit {
 			v := r.get(c.Path)
-			if isUnknown(v) || !c.violated(v) {
+			if isUnknown(v) || containsUnknown(v) || unknownAlong(r.Attrs, c.Path) || !c.violated(v) {
 				return nil
 			}
-			h := Hit{Path: strings.Split(c.Path, ".")[0], Msg: c.Msg}
+			msg := c.Msg
+			if msg == "" {
+				if empty(v) {
+					msg = shown + " is not set."
+				} else {
+					msg = fmt.Sprintf("%s is %s.", shown, literal(v))
+				}
+				if c.Why != "" {
+					msg += " " + c.Why
+				}
+			}
+			h := Hit{Path: strings.Split(c.Path, ".")[0], Msg: msg}
 			if c.Fixable {
-				h.Fix = fix(c.Good, fmt.Sprintf("Set %s = %s", c.Path, literal(c.Good)), strings.Split(c.Path, ".")...)
+				h.Fix = fix(c.Good, fmt.Sprintf("Set %s = %s", shown, literal(c.Good)), strings.Split(shown, ".")...)
 			}
 			return []Hit{h}
 		}}
@@ -45,6 +70,15 @@ func (c check) rule() Rule {
 func (c check) violated(v any) bool {
 	n, isNum := asFloat(v)
 	switch c.Kind {
+	case "want":
+		if empty(v) {
+			return !c.MissingOK
+		}
+		return !oneOf(v, c.Want)
+	case "set":
+		return empty(v) && !c.MissingOK
+	case "present":
+		return !empty(v)
 	case "missing":
 		return v == nil
 	case "missing_or_eq":
@@ -61,7 +95,47 @@ func (c check) violated(v any) bool {
 	return false
 }
 
+// empty is true for an absent value, an empty string and an empty list.
+func empty(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return true
+	case string:
+		return t == ""
+	case []any:
+		return len(t) == 0
+	}
+	return false
+}
+
+func containsUnknown(v any) bool {
+	if l, ok := v.([]any); ok {
+		for _, e := range l {
+			if isUnknown(e) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func literals(vs []any) string {
+	out := make([]string, len(vs))
+	for i, v := range vs {
+		out[i] = literal(v)
+	}
+	return strings.Join(out, ", ")
+}
+
 func oneOf(v any, set []any) bool {
+	if l, ok := v.([]any); ok && len(l) > 1 { // a list matches when any element does
+		for _, e := range l {
+			if oneOf(e, set) {
+				return true
+			}
+		}
+		return false
+	}
 	for _, b := range set {
 		if strings.EqualFold(scalar(v), scalar(b)) {
 			return true
@@ -91,12 +165,11 @@ func literal(v any) string {
 }
 
 var k8sWorkloads = []string{"kubernetes_pod", "kubernetes_pod_v1", "kubernetes_deployment", "kubernetes_deployment_v1", "kubernetes_daemon_set_v1", "kubernetes_daemonset",
-	"kubernetes_stateful_set", "kubernetes_stateful_set_v1", "kubernetes_job", "kubernetes_job_v1", "kubernetes_cron_job", "kubernetes_cron_job_v1"}
+	"kubernetes_stateful_set", "kubernetes_stateful_set_v1", "kubernetes_job", "kubernetes_job_v1", "kubernetes_cron_job", "kubernetes_cron_job_v1",
+	"kubernetes_replication_controller", "kubernetes_replication_controller_v1"}
 
 var appServices = []string{"azurerm_linux_web_app", "azurerm_windows_web_app", "azurerm_linux_function_app", "azurerm_windows_function_app"}
 
-// Cross-references to Checkov/Trivy IDs are in the research notes; the checks
-// themselves are written from the provider docs.
 var tableChecks = []check{
 	// AWS
 	{ID: "TG-AWS-EMR-001", Sev: Medium, CWE: "CWE-311", Title: "EMR cluster has no security configuration", Types: []string{"aws_emr_cluster"}, Kind: "missing", Path: "security_configuration", Msg: "Without a security configuration, EMR does not encrypt data at rest, local disks or traffic between nodes."},
@@ -371,8 +444,10 @@ var customChecks = []Rule{
 				return "gets a secret through env, which leaks into crash dumps and child processes"
 			}
 		}
-		if get(c, "env_from.secret_ref") != nil {
-			return "gets secrets through env_from, which leak into crash dumps and child processes"
+		for _, e := range blocksAt(c, "env_from") {
+			if e["secret_ref"] != nil {
+				return "gets secrets through env_from, which leak into crash dumps and child processes"
+			}
 		}
 		return ""
 	}),
@@ -414,10 +489,12 @@ func k8sContainerRule(id, title, cwe, remedy string, problem func(c map[string]a
 			}
 			var hits []Hit
 			forEachPodSpec(r.Attrs, func(p string, spec map[string]any) {
-				for i, c := range blocksAt(spec, "container") {
-					if why := problem(c); why != "" {
-						name, _ := asString(c["name"])
-						hits = append(hits, Hit{Path: join(p, "container."+strconv.Itoa(i)), Msg: "Container " + name + " " + why + "."})
+				for _, kind := range []string{"container", "init_container"} {
+					for i, c := range blocksAt(spec, kind) {
+						if why := problem(c); why != "" {
+							name, _ := asString(c["name"])
+							hits = append(hits, Hit{Path: join(p, kind+"."+strconv.Itoa(i)), Msg: "Container " + name + " " + why + "."})
+						}
 					}
 				}
 			})
@@ -430,5 +507,42 @@ func tableRules() []Rule {
 	for _, c := range tableChecks {
 		out = append(out, c.rule())
 	}
+	for _, list := range [][]check{parityChecks, cfnParityChecks, armParityChecks} {
+		for _, c := range list {
+			out = append(out, c.rule())
+		}
+	}
 	return append(out, customChecks...)
+}
+
+// unknownAlong is true when an object on the way to path is unresolved, so the
+// setting may well be there once the expression is known.
+func unknownAlong(v any, path string) bool {
+	for _, seg := range strings.Split(path, ".") {
+		if isUnknown(v) {
+			return true
+		}
+		switch t := v.(type) {
+		case []any:
+			if len(t) == 0 {
+				return false
+			}
+			if i, err := strconv.Atoi(seg); err == nil && i < len(t) {
+				v = t[i]
+			} else {
+				v = t[0]
+			}
+			if m, ok := v.(map[string]any); ok && seg != "0" {
+				v = m[seg]
+			}
+		case map[string]any:
+			if seg == "0" && t["0"] == nil {
+				continue
+			}
+			v = t[seg]
+		default:
+			return false
+		}
+	}
+	return isUnknown(v)
 }

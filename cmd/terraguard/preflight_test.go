@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Karthik-099/TERRAGUARD/engine"
 )
 
 const preflightPlan = `{"format_version":"1.2",
@@ -44,6 +46,12 @@ func TestPreflightLiveQuotas(t *testing.T) {
 			return []byte("10000\n"), nil
 		case strings.Contains(call, "list-buckets"):
 			return []byte("3\n"), nil
+		case strings.Contains(call, "get-caller-identity"):
+			return []byte("arn:aws:sts::123456789012:assumed-role/ci-deploy/run-42\n"), nil
+		case strings.Contains(call, "iam get-role --role-name ci-deploy"):
+			return []byte("arn:aws:iam::123456789012:role/platform/ci-deploy\n"), nil
+		case strings.Contains(call, "simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/platform/ci-deploy"):
+			return []byte(`{"EvaluationResults":[{"EvalActionName":"ec2:RunInstances","EvalDecision":"allowed"},{"EvalActionName":"ec2:CreateVpc","EvalDecision":"implicitDeny"},{"EvalActionName":"s3:CreateBucket","EvalDecision":"allowed"}]}`), nil
 		}
 		t.Fatalf("unexpected call: %s", call)
 		return nil, nil
@@ -59,13 +67,13 @@ func TestPreflightLiveQuotas(t *testing.T) {
 		t.Fatalf("exit code %d, want 1 when a quota would be exceeded", code)
 	}
 	md, _ := os.ReadFile(out)
-	for _, want := range []string{"| EXCEEDS | Running On-Demand Standard instances (vCPUs)", "| OK | VPCs per Region", "| TAKEN | logs |", "| FREE | acme-unique-7f3a |"} {
+	for _, want := range []string{"| EXCEEDS | Running On-Demand Standard instances (vCPUs)", "| OK | VPCs per Region", "| TAKEN | logs |", "| FREE | acme-unique-7f3a |", "| ec2:CreateVpc | implicitDeny | aws_vpc.main |", "| ec2:RunInstances | allowed |"} {
 		if !strings.Contains(string(md), want) {
 			t.Errorf("report misses %q:\n%s", want, md)
 		}
 	}
 	for _, c := range calls {
-		if strings.Contains(c, "create") || strings.Contains(c, "delete") || strings.Contains(c, "modify") || strings.Contains(c, "put-") {
+		if verb := strings.Fields(c); len(verb) > 2 && (strings.HasPrefix(verb[2], "create") || strings.HasPrefix(verb[2], "delete") || strings.HasPrefix(verb[2], "modify") || strings.HasPrefix(verb[2], "put-")) {
 			t.Errorf("preflight made a non-read call: %s", c)
 		}
 	}
@@ -79,5 +87,59 @@ func TestPreflightQuotasFile(t *testing.T) {
 	os.WriteFile(quotas, []byte(`{"aws/ec2/L-1216C47A@eu-west-1":{"limit":64,"used":10},"aws/vpc/L-F678F1CE@eu-west-1":{"limit":5,"used":1}}`), 0o644)
 	if code, err := runPreflight([]string{"--plan", plan, "--quotas", quotas, "--format", "json"}); err != nil || code != 0 {
 		t.Fatalf("enough quota left: code %d, err %v", code, err)
+	}
+}
+
+func TestPreflightImplicitDenyNeedsStrict(t *testing.T) {
+	dir := t.TempDir()
+	plan := filepath.Join(dir, "plan.json")
+	os.WriteFile(plan, []byte(`{"format_version":"1.2",
+ "configuration":{"provider_config":{"aws":{"name":"aws","expressions":{"region":{"constant_value":"eu-west-1"}}}}},
+ "resource_changes":[{"address":"aws_vpc.main","mode":"managed","type":"aws_vpc","change":{"actions":["create"],"after":{}}}]}`), 0o644)
+	decision := "implicitDeny"
+	runCLI = func(name string, args ...string) ([]byte, error) {
+		call := name + " " + strings.Join(args, " ")
+		switch {
+		case strings.Contains(call, "get-service-quota"):
+			return []byte("5\n"), nil
+		case strings.Contains(call, "describe-vpcs"):
+			return []byte("1\n"), nil
+		case strings.Contains(call, "get-caller-identity"):
+			return []byte("arn:aws:iam::123456789012:user/ci\n"), nil
+		case strings.Contains(call, "simulate-principal-policy"):
+			return []byte(`{"EvaluationResults":[{"EvalActionName":"ec2:CreateVpc","EvalDecision":"` + decision + `"}]}`), nil
+		}
+		t.Fatalf("unexpected call: %s", call)
+		return nil, nil
+	}
+	t.Cleanup(func() { runCLI = nil })
+
+	for _, c := range []struct {
+		decision string
+		strict   bool
+		want     int
+	}{{"implicitDeny", false, 0}, {"implicitDeny", true, 1}, {"explicitDeny", false, 1}} {
+		decision = c.decision
+		args := []string{"--plan", plan, "--live", "--format", "json"}
+		if c.strict {
+			args = append(args, "--strict-permissions")
+		}
+		if code, err := runPreflight(args); err != nil || code != c.want {
+			t.Errorf("%s strict=%v: code %d err %v, want %d", c.decision, c.strict, code, err, c.want)
+		}
+	}
+}
+
+func TestPreflightRejectsFlagLikePlanValues(t *testing.T) {
+	runCLI = func(name string, args ...string) ([]byte, error) {
+		t.Fatalf("must not call the CLI with %v", args)
+		return nil, nil
+	}
+	t.Cleanup(func() { runCLI = nil })
+	if s := bucketStatus("--endpoint-url=http://evil"); s != "unknown" {
+		t.Errorf("status %q", s)
+	}
+	if _, err := liveUsage(engine.QuotaDemand{Cloud: "aws", Region: "--endpoint-url=x", Quota: "ec2/L-1216C47A"}); err == nil {
+		t.Error("flag-like region must be rejected")
 	}
 }

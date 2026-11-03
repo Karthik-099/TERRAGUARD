@@ -1,0 +1,49 @@
+# expect: TG-AWS-RDS-001, TG-AWS-RDS-002, TG-AWS-SG-001, TG-GCP-GCS-001, TG-GCP-CONTAINER-101
+apiVersion: rds.aws.upbound.io/v1beta1
+kind: Instance
+metadata:
+  name: db
+spec:
+  forProvider:
+    region: us-east-1
+    engine: postgres
+    instanceClass: db.t3.micro
+    allocatedStorage: 20
+    publiclyAccessible: true
+    storageEncrypted: false
+    passwordSecretRef:
+      name: db-pass
+      key: password
+---
+apiVersion: ec2.aws.upbound.io/v1beta1
+kind: SecurityGroupRule
+metadata:
+  name: ssh
+spec:
+  forProvider:
+    region: us-east-1
+    type: ingress
+    protocol: tcp
+    fromPort: 22
+    toPort: 22
+    cidrBlocks: ["0.0.0.0/0"]
+    securityGroupIdRef:
+      name: web
+---
+apiVersion: storage.gcp.upbound.io/v1beta1
+kind: Bucket
+metadata:
+  name: logs
+spec:
+  forProvider:
+    location: US
+    uniformBucketLevelAccess: false
+---
+apiVersion: container.gcp.upbound.io/v1beta2
+kind: Cluster
+metadata:
+  name: gke
+spec:
+  forProvider:
+    location: us-central1
+    enableLegacyAbac: true

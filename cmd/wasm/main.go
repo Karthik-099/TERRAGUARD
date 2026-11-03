@@ -73,6 +73,9 @@ func main() {
 			case "codequality":
 				b, _ := engine.CodeQuality(rep)
 				return string(b)
+			case "checkstyle":
+				b, _ := engine.Checkstyle(rep)
+				return string(b)
 			}
 			b, _ := json.MarshalIndent(rep, "", "  ")
 			return string(b)
