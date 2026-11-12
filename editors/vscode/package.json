@@ -1,10 +1,11 @@
 {
   "name": "terraguard",
   "displayName": "TerraGuard",
-  "description": "Terraform security, apply-time validation and auto-fix, inline in the editor.",
+  "description": "Infrastructure-as-code security, secrets and apply-time checks with auto-fix: Terraform, Kubernetes, OpenShift, CloudFormation, Dockerfiles and more.",
   "version": "0.1.0",
   "publisher": "karthik-099",
   "license": "MIT",
+  "icon": "icon.png",
   "repository": { "type": "git", "url": "https://github.com/Karthik-099/TERRAGUARD" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Linters"],

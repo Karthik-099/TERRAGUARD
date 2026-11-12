@@ -420,7 +420,7 @@ never call a public AI service.
 | Neovim, JetBrains, any LSP editor | `terraguard lsp`; [editors/nvim](editors/nvim), [editors/jetbrains](editors/jetbrains) |
 | Plugins | `terraguard-<name>` executables, see [docs/PLUGINS.md](docs/PLUGINS.md) |
 | pre-commit | `.pre-commit-hooks.yaml`: hooks `terraguard` and `terraguard-fix` |
-| GitHub Actions | `uses: Karthik-099/TERRAGUARD@v3.0.0` with `command: scan`, `review` or `pulse` |
+| GitHub Actions | `uses: Karthik-099/TERRAGUARD@v3.0.1` with `command: scan`, `review` or `pulse` |
 | GitLab CI | [templates/gitlab-ci.yml](templates/gitlab-ci.yml): Code Quality and JUnit in the merge request |
 | Jenkins | [templates/Jenkinsfile](templates/Jenkinsfile) |
 | Any CI | JSON, SARIF, JUnit or Markdown output; exit codes |

@@ -1,7 +1,7 @@
 // Generates a GitOps pipeline for the user's own repository.
 const CICD = (() => {
   const REPO = "Karthik-099/TERRAGUARD";
-  const RELEASE = "v3.0.0"; // bump on each release so generated workflows use a fixed version
+  const RELEASE = "v3.0.1"; // bump on each release so generated workflows use a fixed version
 
   function workflow(o) {
     const dir = o.dir || ".";
@@ -132,7 +132,7 @@ terraguard pulse ./infra                 # adoption, waivers and trend across ma
 
 # pre-commit (.pre-commit-config.yaml)
 - repo: https://github.com/${REPO}
-  rev: v3.0.0
+  rev: v3.0.1
   hooks: [{ id: terraguard }]
 
 # Docker, no Go needed

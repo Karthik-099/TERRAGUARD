@@ -4,6 +4,12 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [3.0.1] - 2026-11-13
+
+### Changed
+- New TerraGuard logo across the site (light and dark versions), the favicon (follows the system theme), the README and social banner, the VS Code extension icon and the Helm chart icon.
+- The VS Code extension description lists every supported format, not only Terraform.
+
 ## [3.0.0] - 2026-11-13
 
 A major release: private clouds and Red Hat, secret scanning, team features,

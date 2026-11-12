@@ -113,7 +113,10 @@ textarea.tall { min-height: 320px; }
 .nav { display: flex; align-items: center; gap: 28px; height: 64px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: -.01em; color: var(--text); text-decoration: none; }
 .brand:hover { text-decoration: none; }
-.logo { border-radius: 7px; }
+.logo { border-radius: 0; }
+:root[data-theme="dark"] img.logo { content: url(assets/logo-dark.svg); }
+.wm-accent { color: #1F1365; }
+:root[data-theme="dark"] .wm-accent { color: #A99DFF; }
 .nav-links { display: flex; gap: 4px; flex: 1; }
 .nav-links a { color: var(--text-2); font-size: 14px; font-weight: 500; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
 .nav-links a:hover, .nav-links a.on { color: var(--text); background: var(--bg-3); text-decoration: none; }

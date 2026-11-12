@@ -140,7 +140,7 @@ terraguard review --base origin/main .
 GitHub Actions:
 
 ```yaml
-- uses: Karthik-099/TERRAGUARD@v3.0.0
+- uses: Karthik-099/TERRAGUARD@v3.0.1
   with:
     command: review          # scan | review | pulse
     path: infra
