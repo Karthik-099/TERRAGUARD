@@ -15,9 +15,11 @@ import (
 
 const (
 	maxImageFile  = 32 << 20  // one file kept from a layer
+	maxImageRPMDB = 256 << 20 // an rpm database of a large RHEL image is bigger than any lockfile
 	maxImageTotal = 512 << 20 // all files kept from all layers
 	maxImageFiles = 5000
 	maxManifest   = 4 << 20
+	maxLayers     = 256 // docker allows 127; a manifest listing one layer thousands of times is an attack
 )
 
 // Image is what an offline image scan found.
@@ -45,6 +47,9 @@ func ScanImage(r io.ReaderAt, size int64) (*Image, error) {
 	layers, err := layerPaths(open, entries)
 	if err != nil {
 		return nil, err
+	}
+	if len(layers) > maxLayers {
+		return nil, fmt.Errorf("image lists %d layers, more than the scan limit of %d", len(layers), maxLayers)
 	}
 	files := map[string][]byte{}
 	for _, l := range layers {
@@ -173,6 +178,9 @@ func wantedFile(name string) bool {
 	case "etc/os-release", "usr/lib/os-release", "var/lib/dpkg/status", "lib/apk/db/installed":
 		return true
 	}
+	if isRPMDB(name) {
+		return true
+	}
 	if strings.HasPrefix(name, "var/lib/dpkg/status.d/") {
 		return !strings.HasSuffix(name, ".md5sums")
 	}
@@ -196,6 +204,7 @@ func applyLayer(sr *io.SectionReader, files map[string][]byte) error {
 	}
 	var removed, opaque []string
 	added := map[string][]byte{}
+	addedBytes := 0
 	tr := tar.NewReader(lr)
 	for {
 		h, err := tr.Next()
@@ -216,14 +225,19 @@ func applyLayer(sr *io.SectionReader, files map[string][]byte) error {
 			removed = append(removed, name) // a link now replaces any file here
 		case h.Typeflag != tar.TypeReg:
 		case wantedFile(name):
-			if h.Size > maxImageFile {
-				return fmt.Errorf("%s is larger than %d bytes", name, maxImageFile)
+			if limit := fileLimit(name); h.Size > limit {
+				return fmt.Errorf("%s is larger than %d bytes", name, limit)
 			}
 			b, err := io.ReadAll(tr)
 			if err != nil {
 				return err
 			}
+			addedBytes += len(b) - len(added[name])
 			added[name] = b
+			// Checked while reading too: one layer full of lockfiles must not exhaust memory first.
+			if addedBytes > maxImageTotal || len(added) > maxImageFiles {
+				return errors.New("image holds more package metadata than the scan limit")
+			}
 		}
 	}
 	for _, d := range opaque {
@@ -263,7 +277,7 @@ func inventory(files map[string][]byte) *Image {
 	}
 	img.OS = osEcosystem(osr)
 	if img.OS == "" && osr != nil {
-		img.Notes = append(img.Notes, "operating system not supported for OS package matching (Debian, Ubuntu and Alpine are)")
+		img.Notes = append(img.Notes, "operating system not supported for OS package matching (Debian, Ubuntu, Alpine, RHEL, Rocky, AlmaLinux, Mageia and Azure Linux are)")
 	}
 	for name, b := range files {
 		switch {
@@ -271,6 +285,12 @@ func inventory(files map[string][]byte) *Image {
 			img.Packages = append(img.Packages, parseDpkgStatus(b, img.OS, name)...)
 		case name == "lib/apk/db/installed":
 			img.Packages = append(img.Packages, parseApkInstalled(b, img.OS, name)...)
+		case isRPMDB(name):
+			pkgs, err := parseRPMDB(name, b, img.OS)
+			if err != nil {
+				img.Notes = append(img.Notes, err.Error())
+			}
+			img.Packages = append(img.Packages, pkgs...)
 		case IsLockfile(name) && !shadowedGoSum(name, files):
 			pkgs, err := ParseLockfile(name, b)
 			if err != nil {
@@ -330,7 +350,7 @@ func osEcosystem(b []byte) string {
 			return "Alpine:v" + parts[0] + "." + parts[1]
 		}
 	}
-	return ""
+	return rpmEcosystem(kv)
 }
 
 // stanzas splits RFC 822 style records (dpkg status, apk installed) by blank lines.
@@ -393,4 +413,11 @@ func parseApkInstalled(b []byte, eco, file string) []Package {
 		out = append(out, Package{Ecosystem: eco, Name: name, Version: f["V"], File: file, Line: line})
 	})
 	return out
+}
+
+func fileLimit(name string) int64 {
+	if isRPMDB(name) {
+		return maxImageRPMDB
+	}
+	return maxImageFile
 }

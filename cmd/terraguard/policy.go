@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/Karthik-099/TERRAGUARD/internal/ai"
@@ -16,36 +17,77 @@ import (
 	"time"
 
 	"github.com/Karthik-099/TERRAGUARD/engine"
+	"gopkg.in/yaml.v3"
 )
 
-// resolvePolicy expands extends: local paths are relative to the policy file, or https URLs.
+// resolvePolicy expands extends. Local references must stay inside the
+// working folder (a scanned repository must not make the CLI read
+// /proc/self/environ into a CI log); remote ones must be https, never
+// redirect to http, and are refused when TERRAGUARD_OFFLINE=true.
 func resolvePolicy(text, dir string) (string, error) {
 	if !strings.Contains(text, "extends") {
 		return text, nil
 	}
 	return engine.ResolveExtends(text, func(ref string) (string, error) {
-		if strings.HasPrefix(ref, "https://") {
-			client := &http.Client{Timeout: 10 * time.Second}
-			resp, err := client.Get(ref)
-			if err != nil {
-				return "", err
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				return "", fmt.Errorf("HTTP %d", resp.StatusCode)
-			}
-			b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-			return string(b), err
+		src, err := fetchPolicyRef(ref, dir)
+		if err != nil {
+			return "", fmt.Errorf("extends %s: %w", ref, err)
 		}
-		if strings.Contains(ref, "://") {
-			return "", fmt.Errorf("only local paths and https URLs are supported")
+		var probe map[string]any
+		if yaml.Unmarshal([]byte(src), &probe) != nil {
+			return "", fmt.Errorf("extends %s: not a valid policy", ref) // never echo the content
 		}
-		if !filepath.IsAbs(ref) {
-			ref = filepath.Join(dir, ref)
-		}
-		b, err := os.ReadFile(ref)
-		return string(b), err
+		return src, nil
 	})
+}
+
+func fetchPolicyRef(ref, dir string) (string, error) {
+	if strings.HasPrefix(ref, "https://") {
+		if os.Getenv("TERRAGUARD_OFFLINE") == "true" {
+			return "", errors.New("remote policy refused: TERRAGUARD_OFFLINE=true")
+		}
+		client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if req.URL.Scheme != "https" || len(via) >= 5 {
+				return errors.New("redirect refused")
+			}
+			return nil
+		}}
+		resp, err := client.Get(ref)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+		b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return string(b), err
+	}
+	if strings.Contains(ref, "://") || filepath.IsAbs(ref) {
+		return "", errors.New("only https URLs and relative paths inside the working folder are allowed")
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(filepath.Join(dir, ref))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(cwd, abs)
+	if err != nil {
+		return "", errors.New("outside the working folder")
+	}
+	root, err := os.OpenRoot(cwd)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	b, err := root.ReadFile(rel) // os.Root refuses .. and symlinks that leave cwd
+	if err != nil {
+		return "", errors.New("cannot read a policy file inside the working folder")
+	}
+	return string(b), nil
 }
 
 func readBaseline(path string) ([]string, error) {

@@ -1,7 +1,7 @@
 // Generates a GitOps pipeline for the user's own repository.
 const CICD = (() => {
   const REPO = "Karthik-099/TERRAGUARD";
-  const RELEASE = "v2.1.0"; // bump on each release so generated workflows use a fixed version
+  const RELEASE = "v3.0.0"; // bump on each release so generated workflows use a fixed version
 
   function workflow(o) {
     const dir = o.dir || ".";
@@ -132,7 +132,7 @@ terraguard pulse ./infra                 # adoption, waivers and trend across ma
 
 # pre-commit (.pre-commit-config.yaml)
 - repo: https://github.com/${REPO}
-  rev: v2.1.0
+  rev: v3.0.0
   hooks: [{ id: terraguard }]
 
 # Docker, no Go needed
@@ -148,5 +148,5 @@ docker compose --profile local-llm up -d
 docker compose exec ollama ollama pull llama3.2
 # open http://localhost:8080, then AI settings > Self-hosted TerraGuard server`;
 
-  return { workflow, mcpClaude, mcpJson, cli, selfHost };
+  return { workflow, mcpClaude, mcpJson, cli, selfHost, release: RELEASE };
 })();

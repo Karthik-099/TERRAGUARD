@@ -42,7 +42,7 @@ func runServe(args []string) error {
 		admissionPolicy = text
 	}
 	token := os.Getenv("TERRAGUARD_SERVER_TOKEN")
-	if host, _, _ := net.SplitHostPort(*addr); host != "127.0.0.1" && host != "localhost" && host != "::1" && token == "" {
+	if !loopbackHost(*addr) && token == "" {
 		log.Printf("warning: listening on %s without TERRAGUARD_SERVER_TOKEN; anyone who can reach it can use your AI keys", *addr)
 	}
 	if _, err := fs.Stat(web.FS, "terraguard.wasm"); err != nil {
@@ -57,7 +57,11 @@ func runServe(args []string) error {
 		defer f.Close()
 		audit = f
 	}
-	srv := &http.Server{Addr: *addr, Handler: newServerWith(token, audit), ReadHeaderTimeout: 10 * time.Second,
+	handler := newServerWith(token, audit)
+	if loopbackHost(*addr) && token == "" && os.Getenv("TERRAGUARD_TRUST_PROXY") != "true" {
+		handler = loopbackOnly(handler) // no token: a rebound DNS name must not reach the API from a web page
+	}
+	srv := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout: 30 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 64 << 10}
 	log.Printf("TerraGuard %s on http://%s  (AI route: %d step(s)%s)", engine.Version, *addr, len(ai.Route()), map[bool]string{true: ", local-only"}[ai.LocalOnly()])
 	if *tlsCert != "" || *tlsKey != "" {
@@ -200,7 +204,35 @@ func newServerWith(token string, audit io.Writer) http.Handler {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		writeMetrics(w, met, st)
 	})
-	return secureHeaders(mux)
+	// Browsers send Sec-Fetch-Site/Origin: a cross-site page cannot POST to the API (CSRF);
+	// curl, agents, Kubernetes and run tasks send neither and pass.
+	return secureHeaders(http.NewCrossOriginProtection().Handler(mux))
+}
+
+// loopbackHost reports whether host[:port] names this machine by a loopback
+// name or address. DNS rebinding arrives with the attacker's host name instead.
+func loopbackHost(hostport string) bool {
+	h := hostport
+	if host, _, err := net.SplitHostPort(hostport); err == nil {
+		h = host
+	}
+	h = strings.Trim(h, "[]")
+	if strings.EqualFold(h, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// loopbackOnly refuses requests whose Host header is not a loopback name.
+func loopbackOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !loopbackHost(r.Host) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden host; set TERRAGUARD_SERVER_TOKEN to serve other host names"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // staticFiles: no directory listings, no Go source.
@@ -236,7 +268,7 @@ func scanHit(surface string, rep *engine.Report, ms int) stats.Hit {
 // reportUsage is opt-in and fire-and-forget, so it never slows CI.
 func reportUsage(rep *engine.Report, ms int) {
 	url := os.Getenv("TERRAGUARD_TELEMETRY_URL")
-	if url == "" {
+	if url == "" || os.Getenv("TERRAGUARD_OFFLINE") == "true" {
 		return
 	}
 	surface := "cli"

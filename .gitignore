@@ -30,3 +30,4 @@ stats-worker/.wrangler/
 # original brand artwork stays local; the site uses derived assets in web/assets
 docs/brand/
 web/vendor/
+/terraguard

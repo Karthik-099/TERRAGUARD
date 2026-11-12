@@ -13,11 +13,11 @@ var PolicyPacks = map[string]string{
 	// minimal: block only critical risk and changes that will not apply.
 	"minimal": "fail_on: CRITICAL\n",
 	// recommended: block high risk; exceptions expire; leaked secrets and committed state cannot be waived.
-	"recommended": "fail_on: HIGH\nmax_waiver_days: 90\nunwaivable: [TG-SEC-001, TG-SEC-002, TG-STATE-002]\n",
+	"recommended": "fail_on: HIGH\nmax_waiver_days: 90\nunwaivable: [TG-SEC-001, TG-SEC-002, TG-SECRET-*, TG-STATE-002]\n",
 	// strict: block medium risk; short-lived exceptions only in the policy file; public data,
 	// wildcard IAM, privileged workloads and script injection cannot be waived.
 	"strict": "fail_on: MEDIUM\nmax_waiver_days: 30\ninline_ignores: false\n" +
-		"unwaivable: [TG-SEC-*, TG-STATE-002, TG-AWS-S3-001, TG-AWS-RDS-001, TG-AWS-IAM-001, TG-GCP-GCS-001, TG-K8S-001, TG-GHA-002]\n",
+		"unwaivable: [TG-SEC-*, TG-SECRET-*, TG-STATE-002, TG-AWS-S3-001, TG-AWS-RDS-001, TG-AWS-IAM-001, TG-GCP-GCS-001, TG-K8S-001, TG-GHA-002]\n",
 }
 
 const packPrefix = "terraguard:"

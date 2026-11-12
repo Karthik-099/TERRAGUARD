@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const Version = "2.1.0"
+const Version = "3.0.0"
 
 type Severity string
 
@@ -59,6 +59,9 @@ type Finding struct {
 	Blocking     bool   `json:"blocking,omitempty"`
 	Waived       bool   `json:"waived,omitempty"`
 	WaiverReason string `json:"waiver_reason,omitempty"`
+	// CodeOwners own the finding's file, from Input.CodeOwners (CODEOWNERS
+	// semantics); Owner above is the team that owns the standard.
+	CodeOwners []string `json:"code_owners,omitempty"`
 }
 
 // Fix is a machine-applicable edit: set attribute Path inside Block to Value.

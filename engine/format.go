@@ -42,6 +42,9 @@ func SARIF(r *Report) ([]byte, error) {
 			"message": obj{"text": f.Message}, "locations": []obj{loc},
 			// Line-independent, so moving code does not turn a finding into a new alert.
 			"partialFingerprints": obj{"terraguardFindingKey/v1": fingerprint(key)}}
+		if len(f.CodeOwners) > 0 {
+			res["properties"] = obj{"code_owners": f.CodeOwners}
+		}
 		if f.Waived {
 			res["suppressions"] = []obj{{"kind": "external", "justification": f.WaiverReason}}
 		}
@@ -60,7 +63,39 @@ func SARIF(r *Report) ([]byte, error) {
 }
 
 // Markdown renders a PR-comment report.
-func Markdown(r *Report) string {
+func Markdown(r *Report) string { return markdown(r, false) }
+
+// MarkdownByOwner is Markdown with findings in one section per code owner, unowned last.
+func MarkdownByOwner(r *Report) string { return markdown(r, true) }
+
+func markdownTable(b *strings.Builder, fs []Finding) {
+	owners := false
+	for _, f := range fs {
+		owners = owners || len(f.CodeOwners) > 0
+	}
+	if owners {
+		b.WriteString("| Severity | Rule | Location | Owners | Finding |\n|---|---|---|---|---|\n")
+	} else {
+		b.WriteString("| Severity | Rule | Location | Finding |\n|---|---|---|---|\n")
+	}
+	for i, f := range fs {
+		if i == 50 {
+			fmt.Fprintf(b, "\n…and %d more. See the SARIF results in the Security tab.\n", len(fs)-50)
+			break
+		}
+		loc := f.File
+		if f.Line > 0 {
+			loc = fmt.Sprintf("%s:%d", f.File, f.Line)
+		}
+		own := ""
+		if owners {
+			own = orDash(strings.Join(f.CodeOwners, " ")) + " | "
+		}
+		fmt.Fprintf(b, "| %s | `%s` | `%s` | %s**%s**: %s |\n", f.Severity, f.RuleID, loc, own, f.Title, strings.ReplaceAll(f.Message, "|", "\\|"))
+	}
+}
+
+func markdown(r *Report, byOwner bool) string {
 	var b strings.Builder
 	status := "Passed"
 	if !r.Passed {
@@ -100,21 +135,17 @@ func Markdown(r *Report) string {
 			active = append(active, f)
 		}
 	}
-	if len(active) == 0 {
+	switch {
+	case len(active) == 0:
 		b.WriteString("No active findings.\n")
-	} else {
-		b.WriteString("| Severity | Rule | Location | Finding |\n|---|---|---|---|\n")
-		for i, f := range active {
-			if i == 50 {
-				fmt.Fprintf(&b, "\n…and %d more. See the SARIF results in the Security tab.\n", len(active)-50)
-				break
-			}
-			loc := f.File
-			if f.Line > 0 {
-				loc = fmt.Sprintf("%s:%d", f.File, f.Line)
-			}
-			fmt.Fprintf(&b, "| %s | `%s` | `%s` | **%s**: %s |\n", f.Severity, f.RuleID, loc, f.Title, strings.ReplaceAll(f.Message, "|", "\\|"))
+	case byOwner:
+		for _, g := range GroupByOwner(active) {
+			fmt.Fprintf(&b, "### %s (%d)\n\n", g.Owner, len(g.Findings))
+			markdownTable(&b, g.Findings)
+			b.WriteString("\n")
 		}
+	default:
+		markdownTable(&b, active)
 	}
 	if r.Fixable > 0 {
 		fmt.Fprintf(&b, "\n%d finding(s) can be fixed automatically: `terraguard fix .`\n", r.Fixable)
@@ -129,21 +160,43 @@ func Markdown(r *Report) string {
 }
 
 // Text renders a terminal report.
-func Text(r *Report) string {
+func Text(r *Report) string { return text(r, false) }
+
+// TextByOwner is Text with findings in one section per code owner, unowned last.
+func TextByOwner(r *Report) string { return text(r, true) }
+
+func textFinding(b *strings.Builder, f Finding) {
+	loc := f.File
+	if f.Line > 0 {
+		loc = fmt.Sprintf("%s:%d", f.File, f.Line)
+	}
+	block := ""
+	if f.Blocking {
+		block = " [blocks apply]"
+	}
+	fmt.Fprintf(b, "%-8s %-15s %s%s\n         %s\n         %s\n", f.Severity, f.RuleID, loc, block, f.Title+": "+f.Message, "fix: "+f.Remediation)
+}
+
+func text(r *Report, byOwner bool) string {
 	var b strings.Builder
+	var active []Finding
 	for _, f := range r.Findings {
-		if f.Waived {
-			continue
+		if !f.Waived {
+			active = append(active, f)
 		}
-		loc := f.File
-		if f.Line > 0 {
-			loc = fmt.Sprintf("%s:%d", f.File, f.Line)
+	}
+	if byOwner {
+		for _, g := range GroupByOwner(active) {
+			fmt.Fprintf(&b, "== %s: %d finding(s) ==\n", g.Owner, len(g.Findings))
+			for _, f := range g.Findings {
+				textFinding(&b, f)
+			}
+			b.WriteString("\n")
 		}
-		block := ""
-		if f.Blocking {
-			block = " [blocks apply]"
+	} else {
+		for _, f := range active {
+			textFinding(&b, f)
 		}
-		fmt.Fprintf(&b, "%-8s %-15s %s%s\n         %s\n         %s\n", f.Severity, f.RuleID, loc, block, f.Title+": "+f.Message, "fix: "+f.Remediation)
 	}
 	fmt.Fprintf(&b, "\n%s\nScore %d/100 (%s) · %d critical · %d high · %d medium · %d low · %d info · %d waived · %d auto-fixable\n",
 		r.Verdict.Message, r.Score, r.Grade, r.Summary[Critical], r.Summary[High], r.Summary[Medium], r.Summary[Low], r.Summary[Info], r.Waived, r.Fixable)

@@ -143,3 +143,28 @@ func TestCustomHeadersAreSentAndRedacted(t *testing.T) {
 		t.Fatalf("header value leaked in error: %v", err)
 	}
 }
+
+func TestRedirectNeverForwardsKeys(t *testing.T) {
+	clearEnv(t)
+	var leaked atomic.Int32
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("api-key") != "" || r.Header.Get("Authorization") != "" {
+			leaked.Add(1)
+		}
+		w.Write([]byte(`{"choices":[{"message":{"content":"hi"}}]}`))
+	}))
+	defer other.Close()
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/chat/completions", http.StatusTemporaryRedirect)
+	}))
+	defer gw.Close()
+	t.Setenv("TERRAGUARD_AI_BASE_URL", gw.URL)
+	t.Setenv("TERRAGUARD_AI_KEY", "custom-key-123456")
+	t.Setenv("TERRAGUARD_AI_HEADERS", "api-key: azure-secret-123")
+	if _, err := Chat(context.Background(), []Message{{Role: "user", Content: "x"}}); err == nil {
+		t.Error("a redirect must fail the call, not follow it")
+	}
+	if leaked.Load() != 0 {
+		t.Fatal("credentials were forwarded to the redirect target")
+	}
+}

@@ -761,6 +761,10 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-AZ-APP-208` | INFO | reliability | App Service plan runs a single instance |  | 2.1 |
 | `TG-AZ-APPLICATIO-101` | MEDIUM | security | Application Gateway listener uses plain HTTP |  | 2.1 |
 | `TG-AZ-APPLICATIO-301` | MEDIUM | security | Application Gateway has no WAF enabled |  | 2.1 |
+| `TG-AZ-ARO-001` | MEDIUM | security | ARO API server is public |  | 3.0 |
+| `TG-AZ-ARO-002` | LOW | security | ARO default ingress is public |  | 3.0 |
+| `TG-AZ-ARO-003` | LOW | security | ARO cluster does not use FIPS cryptography |  | 3.0 |
+| `TG-AZ-ARO-004` | MEDIUM | security | ARO nodes do not use encryption at host |  | 3.0 |
 | `TG-AZ-AUTOMATION-101` | MEDIUM | security | Automation account variable is not encrypted |  | 2.1 |
 | `TG-AZ-AUTOMATION-301` | MEDIUM | security | Automation account allows public network access |  | 2.1 |
 | `TG-AZ-BASTION-001` | MEDIUM | security | Bastion shareable links are enabled |  | 2.1 |
@@ -1562,6 +1566,20 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-NCP-NKS-102` | LOW | security | NCP Kubernetes cluster audit logging is off |  | 2.1 |
 | `TG-NCP-ROUTE-301` | LOW | security | NCP Kubernetes cluster audit logging is off |  | 2.1 |
 | `TG-NCP-SERVER-101` | MEDIUM | security | NCP server base storage is not encrypted |  | 2.1 |
+| `TG-NTX-CAPX-001` | MEDIUM | security | CAPX skips Prism Central certificate checks |  | 3.0 |
+| `TG-NTX-CAPX-002` | HIGH | security | Prism Central credentials are written in a manifest |  | 3.0 |
+| `TG-NTX-CAPX-003` | MEDIUM | reliability | Nutanix cluster runs fewer than three control plane nodes |  | 3.0 |
+| `TG-NTX-CAPX-004` | LOW | reliability | NutanixCluster has no failure domains |  | 3.0 |
+| `TG-NTX-FLOW-001` | MEDIUM | security | Flow security policy allows inbound traffic from any source |  | 3.0 |
+| `TG-NTX-IAM-001` | MEDIUM | security | Directory service binds over plain LDAP |  | 3.0 |
+| `TG-NTX-IMG-001` | MEDIUM | security | Image is downloaded without an integrity check |  | 3.0 |
+| `TG-NTX-NKE-001` | MEDIUM | reliability | NKE cluster has a single control plane |  | 3.0 |
+| `TG-NTX-PRV-001` | MEDIUM | security | Nutanix provider skips TLS certificate checks |  | 3.0 |
+| `TG-NTX-SNMP-001` | MEDIUM | security | SNMPv3 user uses MD5 or DES |  | 3.0 |
+| `TG-NTX-SNMP-002` | LOW | security | SNMP trap uses a v2c community string |  | 3.0 |
+| `TG-NTX-ST-001` | MEDIUM | reliability | Storage container keeps a single copy of data |  | 3.0 |
+| `TG-NTX-VM-001` | HIGH | security | Guest customization sets a plaintext password |  | 3.0 |
+| `TG-NTX-VM-002` | LOW | security | UEFI VM boots without Secure Boot |  | 3.0 |
 | `TG-OAS-001` | MEDIUM | security | Operation has no authentication |  | 2.1 |
 | `TG-OAS-002` | HIGH | security | Write operation turns authentication off |  | 2.1 |
 | `TG-OAS-003` | MEDIUM | security | API is served over plain HTTP |  | 2.1 |
@@ -1595,6 +1613,20 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-OCI-OKE-001` | MEDIUM | security | OKE API endpoint has a public IP |  | 2.1 |
 | `TG-OCI-OS-001` | HIGH | security | OCI Object Storage bucket is public |  | 2.0 |
 | `TG-OCI-VM-001` | MEDIUM | security | OCI instance allows legacy IMDS v1 |  | 2.1 |
+| `TG-OCP-BUILD-001` | LOW | security | Docker build does not pull a fresh base image |  | 3.0 |
+| `TG-OCP-BUILD-002` | HIGH | security | BuildConfig holds a credential inline |  | 3.0 |
+| `TG-OCP-DC-001` | LOW | best-practice | DeploymentConfig is deprecated |  | 3.0 |
+| `TG-OCP-IS-001` | MEDIUM | security | ImageStream imports from an insecure registry |  | 3.0 |
+| `TG-OCP-OAUTH-001` | HIGH | security | OAuth identity provider uses plain HTTP |  | 3.0 |
+| `TG-OCP-RBAC-001` | MEDIUM | security | Cluster role bound to every authenticated user |  | 3.0 |
+| `TG-OCP-ROUTE-001` | MEDIUM | security | OpenShift route serves plain HTTP |  | 3.0 |
+| `TG-OCP-ROUTE-002` | MEDIUM | security | OpenShift route allows HTTP next to HTTPS |  | 3.0 |
+| `TG-OCP-ROUTE-003` | MEDIUM | security | OpenShift route claims a wildcard subdomain |  | 3.0 |
+| `TG-OCP-SCC-001` | HIGH | security | SecurityContextConstraints allow privileged containers |  | 3.0 |
+| `TG-OCP-SCC-002` | HIGH | security | SecurityContextConstraints allow host namespaces |  | 3.0 |
+| `TG-OCP-SCC-003` | MEDIUM | security | SecurityContextConstraints let pods run as any user |  | 3.0 |
+| `TG-OCP-SCC-004` | HIGH | security | SecurityContextConstraints allow hostPath or every volume type |  | 3.0 |
+| `TG-OCP-SCC-005` | HIGH | security | SecurityContextConstraints allow every capability |  | 3.0 |
 | `TG-OKTA-SIGNON-201` | HIGH | security | Okta sign-on policy rule allows single-factor login |  | 2.1 |
 | `TG-OS-COMPUTE-201` | HIGH | security | Compute instance sets an admin password |  | 2.1 |
 | `TG-OS-FW-201` | MEDIUM | security | Firewall allow rule has no destination restriction |  | 2.1 |
@@ -1622,12 +1654,33 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-PLAN-003` | LOW | plan | Resource drifted from its code |  | 2.1 |
 | `TG-POL-001` | MEDIUM | policy | Waiver has expired |  | 2.0 |
 | `TG-POL-002` | MEDIUM | policy | Waiver exceeds the allowed duration |  | 2.1 |
+| `TG-RHCS-001` | MEDIUM | security | ROSA cluster API and routes are public |  | 3.0 |
+| `TG-RHCS-002` | MEDIUM | security | ROSA classic cluster does not encrypt etcd |  | 3.0 |
+| `TG-RHCS-003` | LOW | security | ROSA cluster does not use FIPS cryptography |  | 3.0 |
+| `TG-RHCS-004` | LOW | reliability | Production ROSA cluster runs in one availability zone |  | 3.0 |
+| `TG-RHCS-005` | HIGH | security | OpenShift user password is written in the configuration |  | 3.0 |
+| `TG-RHCS-006` | LOW | reliability | ROSA cluster disables user workload monitoring |  | 3.0 |
 | `TG-SCHEMA-001` | HIGH | validate | Argument or block not supported by the provider | yes | 2.1 |
 | `TG-SCHEMA-002` | HIGH | validate | Required argument or block is missing | yes | 2.1 |
 | `TG-SCHEMA-003` | LOW | validate | Deprecated argument |  | 2.1 |
 | `TG-SEC-001` | HIGH | security | Hardcoded secret in configuration |  | 2.0 |
 | `TG-SEC-002` | CRITICAL | security | Credential pattern found in file |  | 2.0 |
 | `TG-SEC-003` | MEDIUM | security | Secret variable not marked sensitive |  | 2.0 |
+| `TG-SECRET-001` | CRITICAL | security | AWS access key pair committed |  | 3.0 |
+| `TG-SECRET-002` | CRITICAL | security | GitHub token committed |  | 3.0 |
+| `TG-SECRET-003` | CRITICAL | security | GitLab token committed |  | 3.0 |
+| `TG-SECRET-004` | CRITICAL | security | Slack token committed |  | 3.0 |
+| `TG-SECRET-005` | HIGH | security | Slack webhook URL committed |  | 3.0 |
+| `TG-SECRET-006` | CRITICAL | security | Stripe live key committed |  | 3.0 |
+| `TG-SECRET-007` | HIGH | security | Google API key committed |  | 3.0 |
+| `TG-SECRET-008` | CRITICAL | security | Google service account key committed |  | 3.0 |
+| `TG-SECRET-009` | CRITICAL | security | Azure storage or service account key committed |  | 3.0 |
+| `TG-SECRET-010` | HIGH | security | Azure SAS token committed |  | 3.0 |
+| `TG-SECRET-011` | CRITICAL | security | Private key committed |  | 3.0 |
+| `TG-SECRET-012` | HIGH | security | JSON Web Token committed |  | 3.0 |
+| `TG-SECRET-013` | HIGH | security | Nutanix Prism credential committed |  | 3.0 |
+| `TG-SECRET-014` | HIGH | security | Hardcoded password or secret value |  | 3.0 |
+| `TG-SECRET-015` | HIGH | security | Secret-bearing file committed |  | 3.0 |
 | `TG-SLS-IAM-201` | HIGH | security | Function role allows every action |  | 2.1 |
 | `TG-SLS-LAMBDA-201` | HIGH | security | Function environment holds AWS credentials |  | 2.1 |
 | `TG-STATE-001` | MEDIUM | reliability | Remote state is unencrypted or unlocked |  | 2.0 |
@@ -1670,6 +1723,15 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-VAL-020` | HIGH | validate | Value the AWS API rejects | yes | 2.1 |
 | `TG-VAL-021` | HIGH | validate | Value Azure rejects | yes | 2.1 |
 | `TG-VAL-022` | HIGH | validate | Value Google Cloud rejects | yes | 2.1 |
+| `TG-VAL-023` | HIGH | validate | Value the Nutanix provider rejects | yes | 3.0 |
+| `TG-VAL-024` | HIGH | validate | Value the vSphere provider rejects | yes | 3.0 |
+| `TG-VS-CL-001` | MEDIUM | reliability | Compute cluster has vSphere HA off |  | 3.0 |
+| `TG-VS-DS-001` | LOW | reliability | Datastore cluster has Storage DRS off |  | 3.0 |
+| `TG-VS-HOST-001` | LOW | security | ESXi host is not in lockdown mode |  | 3.0 |
+| `TG-VS-NET-001` | MEDIUM | security | Port group or switch weakens Layer 2 security |  | 3.0 |
+| `TG-VS-PRV-001` | MEDIUM | security | vSphere provider skips TLS certificate checks |  | 3.0 |
+| `TG-VS-VM-001` | LOW | security | EFI virtual machine boots without Secure Boot |  | 3.0 |
+| `TG-VS-VM-002` | HIGH | security | Guest customization sets a plaintext password |  | 3.0 |
 | `TG-VULTR-001` | HIGH | security | Vultr firewall rule open to the internet |  | 2.0 |
 | `TG-YC-COMPUTE-101` | HIGH | security | Yandex compute instance has a public IP address |  | 2.1 |
 | `TG-YC-COMPUTE-102` | MEDIUM | security | Yandex compute instance has the serial console enabled |  | 2.1 |

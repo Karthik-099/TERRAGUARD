@@ -79,7 +79,10 @@ missing database or an ecosystem that was not downloaded.
   toolchain are not checked.
 - Unpinned requirements (`>=`, `~=`) have no single installed version and are
   skipped.
-- Images: Red Hat, Fedora and other rpm distributions are not matched; zstd
+- Images: RHEL (UBI), Rocky Linux, AlmaLinux, Mageia and Azure Linux are read
+  from the rpm database (SQLite, Berkeley DB and ndb). Fedora, CentOS and Oracle
+  Linux have no OSV ecosystem and are not matched; an uncommitted
+  `rpmdb.sqlite-wal` is not replayed; zstd
   layers are not supported; installed `node_modules` without a lockfile are not
   inventoried.
 - Debian advisories with no fixed version are reported with "fixed: -", even

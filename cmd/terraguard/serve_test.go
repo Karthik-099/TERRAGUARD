@@ -153,3 +153,35 @@ func TestRateLimiter(t *testing.T) {
 		t.Fatal("tokens must refill over time")
 	}
 }
+
+func TestServerRefusesCrossSiteAndRebinding(t *testing.T) {
+	h := loopbackOnly(newServer(""))
+	call := func(host, site string) int {
+		req := httptest.NewRequest("POST", "/api/scan", strings.NewReader(`{}`))
+		req.Host = host
+		if site != "" {
+			req.Header.Set("Sec-Fetch-Site", site)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if c := call("127.0.0.1:8080", ""); c != 200 {
+		t.Fatalf("curl-style call: %d", c)
+	}
+	if c := call("localhost:8080", "same-origin"); c != 200 {
+		t.Fatalf("the web app itself: %d", c)
+	}
+	if c := call("localhost:8080", "cross-site"); c != 403 {
+		t.Errorf("cross-site POST (CSRF) must be refused: %d", c)
+	}
+	if c := call("attacker.example:8080", ""); c != 403 {
+		t.Errorf("rebound host name must be refused: %d", c)
+	}
+	for in, want := range map[string]bool{"127.0.0.1:80": true, "[::1]:80": true, "localhost": true, "LOCALHOST:1": true, "127.0.0.2": true,
+		"0.0.0.0:8080": false, ":8080": false, "localhost.attacker.example": false, "10.0.0.1:80": false} {
+		if loopbackHost(in) != want {
+			t.Errorf("loopbackHost(%q) != %v", in, want)
+		}
+	}
+}

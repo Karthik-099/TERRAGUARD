@@ -69,7 +69,7 @@ flowchart TB
     P[HCL parser<br/>hashicorp/hcl] --> N[Normalized<br/>Resource model]
     PL[Plan JSON] --> N
     FP[Format parsers<br/>Kubernetes · CloudFormation · ARM<br/>Dockerfile · Compose · CI · Ansible · OpenAPI] --> N
-    N --> R[1,688 rules<br/>all formats]
+    N --> R[1,750 rules<br/>all formats]
     N --> GP[Graph policies<br/>connections between resources]
     N --> V[Schema and API value checks]
     N --> COST[Cost estimate]
@@ -263,7 +263,7 @@ sequenceDiagram
   participant S as Scan()
   participant P as Parse()
   participant MC as moduleChecks()
-  participant RR as Rules (1,688)
+  participant RR as Rules (1,750)
   participant PL as parsePlan()
   participant PO as applyPolicy()
   C->>S: Input{files, plan, config, fail_on}
@@ -302,6 +302,28 @@ mappings in `tools/ckvgen/*.txt`); and graph policies evaluated over the
 reference graph (`graphpolicy.go`). Parity tests run each rule against the
 reference fixtures for the same control, and a corpus of public modules guards
 against false "will not apply" verdicts.
+
+### 4.3a Secrets, code owners and SBOM
+
+Three passes sit beside the rules and use the same `Input`, so the CLI, the
+server and the browser get them alike:
+
+- **Secret scan** (`engine/secrets.go`). After parsing, `Scan` reads the raw
+  text of every input file, of any format, line by line. Token shapes come
+  first (AWS key pair, GitHub, GitLab, Slack, Stripe, Google, Azure, PEM, JWT),
+  then `key = value` assignments whose key ends in a secret word and whose
+  value passes a length, entropy and placeholder gate. Findings carry only a
+  4-character prefix of the value and no fix, and go through the same policy,
+  ignores and gate. File names that hold credentials (`.env`, `*.pem`,
+  `id_rsa`, ...) are passed by the CLI with empty content and reported by name.
+- **Code owners** (`engine/codeowners.go`). `Input.CodeOwners` is the CODEOWNERS
+  text; `Scan` sets `Finding.CodeOwners` from it after the policy step.
+  `GroupByOwner` backs `--group-by owner` and the per-owner counts in pulse.
+- **SBOM** (`engine/sbom.go`). `SBOMComponents` lists providers from lock files
+  and `required_providers`, remote modules, and container images from the
+  parsed Dockerfile, Kubernetes, compose and CI resources; `CycloneDX` renders
+  them. The CLI adds lockfile packages from `internal/vuln`, and `vuln --sbom`
+  reads the result back by purl.
 
 ### 4.4 Parsing details
 
@@ -343,10 +365,15 @@ comments. Fixes that force replacement say so.
 | **Oracle Cloud** | Security lists / NSG rules, public buckets |
 | **Alibaba Cloud** | Security group rules, public OSS |
 | **Vultr** | Firewall rules |
+| **Nutanix** | Provider TLS verification, Prism credentials in code, VM boot and guest tools, Flow policies allowing all, image sources over HTTP, NKE, storage containers, SNMP v1/v2, CAPX cluster manifests, API value checks (TG-VAL-023) |
+| **VMware vSphere** | Provider `allow_unverified_ssl`, port group promiscuous mode and forged transmits, VM EFI secure boot and hardware, host lockdown and SSH, HA/DRS, datastore checks, value checks (TG-VAL-024) |
+| **Red Hat** | OpenShift Routes, SecurityContextConstraints, BuildConfigs, ImageStreams, OAuth, RBAC; ROSA (`rhcs`) privacy, etcd encryption, FIPS, multi-AZ; ARO API and ingress exposure, FIPS, encryption at host |
 | **Kubernetes / Helm** | Privileged / host-namespace pods, mutable images, open LoadBalancers, plain-text secrets, unpinned charts |
+| **Any file** | 15 `TG-SECRET-*` rules: cloud keys, Git and chat tokens, private keys, JWTs, high-entropy passwords; secret-bearing files by name |
+| **Plugins** | Findings from `terraguard-<name>` executables, prefixed with the plugin name; see [PLUGINS.md](PLUGINS.md) |
 | **Any provider** | Syntax/references/duplicates, CIDRs, hardcoded secrets & key patterns, provider/module pinning, `required_version`, state backend, committed state, subdomain-takeover CNAMEs, cost |
 
-Run `terraguard rules` for the full catalog of 1,688 rules.
+Run `terraguard rules` for the full catalog of 1,750 rules.
 
 ---
 

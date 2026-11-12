@@ -2,12 +2,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -36,6 +38,9 @@ Usage:
   terraguard drift [dir] --state FILE | --live   Code vs state inventory; read-only refresh for drift
   terraguard cost --plan plan.json [--fail-above 500]    offline monthly cost estimate of a plan
   terraguard vuln [paths] | image IMAGE.tar | update   offline OSV scan of lockfiles and container images
+  terraguard vuln --sbom bom.json      offline OSV scan of the packages in a CycloneDX SBOM
+  terraguard sbom [paths] [--format cyclonedx|json] [--out FILE]
+                                       CycloneDX 1.5 inventory: providers, modules, images, packages (offline)
   terraguard ui [path]                 Open the workspace on this machine with a folder loaded from disk
   terraguard lsp                       Language server for any editor (diagnostics and quick fixes over stdio)
   terraguard init [path] [--pack recommended|strict|minimal]   Policy, CI workflow and pre-commit in one step
@@ -46,6 +51,7 @@ Usage:
   terraguard policy validate|test      Validate a policy (with extends) or run policy test fixtures
   terraguard policy suggest "standard" Draft a custom rule from plain English (AI drafts, engine validates)
   terraguard rules [--format json|markdown]
+  terraguard plugins list | test NAME [path]   Plugins (terraguard-* on PATH) that add findings; see docs/PLUGINS.md
   terraguard mcp                       Run as an MCP server over stdio
   terraguard version
 
@@ -59,6 +65,12 @@ Scan flags:
   --write-baseline FILE               accept today's findings as existing debt
   --baseline FILE                     report baselined findings as waived; gate only on new ones
   --ai                                add an advisory LLM remediation plan to markdown
+  --plugins all|NAME,...              run terraguard-* plugins from PATH (also plugins: in the policy)
+  --plugin-timeout 60s                stop each plugin after this long
+  --group-by owner                    group text and markdown output by CODEOWNERS owner (unowned last)
+
+CODEOWNERS (.github/, root or docs/ of the scanned folder) sets code_owners on every finding.
+Files such as .env, *.pem, *.key, id_rsa and kubeconfig are reported by name; their content is never read.
 
 AI is optional. Keys are read from the environment or ./.env:
   GROQ_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY   (free tiers; no paid APIs are used)
@@ -110,6 +122,8 @@ func main() {
 		code, err = runCost(os.Args[2:])
 	case "vuln":
 		code, err = runVuln(os.Args[2:])
+	case "sbom":
+		err = runSBOM(os.Args[2:])
 	case "drift":
 		code, err = runDrift(os.Args[2:])
 	case "ui":
@@ -126,6 +140,8 @@ func main() {
 		code, err = runPolicy(os.Args[2:])
 	case "review":
 		code, err = runReview(os.Args[2:])
+	case "plugins":
+		code, err = runPluginsCmd(os.Args[2:])
 	case "ai":
 		runAIStatus()
 	case "serve":
@@ -178,13 +194,19 @@ func loadFiles(paths []string) (map[string]string, error) {
 	files := map[string]string{}
 	cwd, _ := os.Getwd()
 	add := func(p string) error {
-		b, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
 		key := p
 		if rel, err := filepath.Rel(cwd, p); err == nil && !strings.HasPrefix(rel, "..") {
 			key = rel
+		}
+		if engine.IsSecretFileName(p) {
+			if !gitIgnored(p) { // a local, git-ignored .env is how it should be
+				files[filepath.ToSlash(key)] = "" // only the name matters; never read a credentials file
+			}
+			return nil
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
 		}
 		files[filepath.ToSlash(key)] = string(b)
 		return nil
@@ -217,7 +239,7 @@ func loadFiles(paths []string) (map[string]string, error) {
 					return filepath.SkipDir
 				}
 			}
-			if !d.IsDir() && engine.IsScannable(p) {
+			if !d.IsDir() && (engine.IsScannable(p) || engine.IsSecretFileName(p)) {
 				return add(p)
 			}
 			if !d.IsDir() && strings.Contains(d.Name(), ".tfstate") {
@@ -230,6 +252,12 @@ func loadFiles(paths []string) (map[string]string, error) {
 		}
 	}
 	return files, nil
+}
+
+// gitIgnored reports whether git would leave the file out of a commit. Without git it is false.
+// core.fsmonitor is off: a scanned repository's .git/config must not run a command.
+func gitIgnored(p string) bool {
+	return exec.Command("git", "-c", "core.fsmonitor=false", "-C", filepath.Dir(p), "check-ignore", "-q", filepath.Base(p)).Run() == nil
 }
 
 // findConfig returns the policy text with `extends` already resolved.
@@ -299,6 +327,7 @@ func buildInput(paths []string, planPath, configPath, failOn string) (engine.Inp
 		return engine.Input{}, err
 	}
 	in := engine.Input{Files: files, Config: cfg, FailOn: failOn}
+	in.CodeOwners, in.CodeOwnersRoot = findCodeOwners(paths)
 	if planPath != "" {
 		b, err := os.ReadFile(planPath)
 		if err != nil {
@@ -307,6 +336,23 @@ func buildInput(paths []string, planPath, configPath, failOn string) (engine.Inp
 		in.Plan = string(b)
 	}
 	return in, nil
+}
+
+// findCodeOwners reads CODEOWNERS from the first scanned directory, in
+// GitHub's order: .github/, the root, docs/. root is its Files key prefix.
+func findCodeOwners(paths []string) (text, root string) {
+	for _, p := range paths {
+		if info, err := os.Stat(p); err != nil || !info.IsDir() {
+			continue
+		}
+		for _, c := range []string{".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"} {
+			if b, err := os.ReadFile(filepath.Join(p, c)); err == nil {
+				return string(b), rootKey(p)
+			}
+		}
+		return "", ""
+	}
+	return "", ""
 }
 
 func runScan(args []string) (int, error) {
@@ -331,7 +377,10 @@ func runScan(args []string) (int, error) {
 	renderBicep := fs.Bool("bicep", false, "compile .bicep files with bicep build (or az bicep build) and scan the ARM templates")
 	renderKustomize := fs.Bool("kustomize", false, "render Kustomize overlays with kustomize build (or kubectl kustomize) and scan the manifests")
 	fs.BoolVar(&includeModules, "include-modules", false, "also scan modules that terraform init downloaded into .terraform/modules")
+	plugins := fs.String("plugins", "", "run plugins from PATH: all, or a comma list of names (terraguard-NAME); see docs/PLUGINS.md")
+	pluginTimeout := fs.Duration("plugin-timeout", 0, "stop each plugin after this long (default 60s, or plugin_timeout in the policy)")
 	coverage := fs.Bool("coverage", false, "list every resource with the number of rules that checked it and which failed")
+	groupBy := fs.String("group-by", "", "owner: group text and markdown output by CODEOWNERS owner, unowned last")
 	noBuiltinSchema := fs.Bool("no-builtin-schema", false, "do not check arguments against the bundled aws, azurerm and google schemas")
 	var varFiles, skipPaths, only, skip, policyDirs, regoDirs, frameworks listFlag
 	fs.Var(&frameworks, "framework", "scan only these formats: terraform, kubernetes, cloudformation, arm, dockerfile, docker-compose, github-actions, gitlab-ci, azure-pipelines, circleci, bitbucket-pipelines, serverless, ansible, openapi (repeatable or comma-separated)")
@@ -345,6 +394,9 @@ func runScan(args []string) (int, error) {
 	paths, err := parseInterspersed(fs, args)
 	if err != nil {
 		return 2, err
+	}
+	if *groupBy != "" && *groupBy != "owner" {
+		return 2, fmt.Errorf("--group-by %q: only owner is supported", *groupBy)
 	}
 	in, err := buildInput(paths, *plan, *config, *failOn)
 	if err != nil {
@@ -396,6 +448,17 @@ func runScan(args []string) (int, error) {
 	if in.Extra, err = regoFindings(regoDirs, in.Files, in.Plan); err != nil {
 		return 2, err
 	}
+	popts, err := pluginOptionsFrom(in.Config, *plugins, *pluginTimeout)
+	if err != nil {
+		return 2, err
+	}
+	for _, p := range paths { // before engine.Scan, so waivers, baselines and the gate apply
+		pf, err := runPlugins(context.Background(), popts, in.Config, p, in.Files)
+		if err != nil {
+			return 2, err
+		}
+		in.Extra = append(in.Extra, pf...)
+	}
 	rep := engine.Scan(in)
 	if *writeBaseline != "" {
 		if err := writeBaselineFile(*writeBaseline, rep); err != nil {
@@ -417,6 +480,9 @@ func runScan(args []string) (int, error) {
 		case "markdown", "md":
 			if md == "" {
 				md = engine.Markdown(rep)
+				if *groupBy == "owner" {
+					md = engine.MarkdownByOwner(rep)
+				}
 				if *useAI {
 					md += aiSection(rep, in)
 				}
@@ -436,6 +502,9 @@ func runScan(args []string) (int, error) {
 		case "azure":
 			return engine.AzureDevOps(rep), nil
 		case "text":
+			if *groupBy == "owner" {
+				return engine.TextByOwner(rep), nil
+			}
 			return engine.Text(rep), nil
 		}
 		return "", fmt.Errorf("unknown format %q", f)

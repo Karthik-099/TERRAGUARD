@@ -4,6 +4,43 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-11-13
+
+A major release: private clouds and Red Hat, secret scanning, team features,
+plugins and a redesigned web app. Rule set 3.0 adds 62 rules (1,750 in all,
+26 providers). Policies that pin `rules_version: "2.1"` keep their gate
+unchanged: the new rules report but do not fail CI until the pin moves.
+
+### Added
+- **Nutanix:** provider TLS verification and inline Prism credentials, VM boot and guest tools, Flow policies that allow all traffic, images fetched over HTTP, NKE, storage containers, SNMP v1/v2c, Cluster API (CAPX) manifests, and Nutanix API value checks (TG-VAL-023).
+- **VMware vSphere:** `allow_unverified_ssl`, port group promiscuous mode and forged transmits, VM secure boot and hardware settings, host lockdown and SSH, HA and DRS, datastores, and value checks (TG-VAL-024).
+- **Red Hat OpenShift:** Routes (plain HTTP, HTTP allowed next to HTTPS, wildcard), SecurityContextConstraints (privileged, host namespaces, any user, hostPath, all capabilities), BuildConfigs with inline credentials or stale base images, insecure ImageStreams, cluster roles bound to every user, OAuth over plain HTTP, and deprecated DeploymentConfigs (which also get every Kubernetes pod rule).
+- **ROSA and ARO:** public API and routes, etcd encryption, FIPS, single-zone production clusters, inline passwords, user workload monitoring (`rhcs` provider); ARO API and ingress exposure, FIPS and encryption at host.
+- **Secret scanning:** 15 `TG-SECRET-*` rules across every file of any format (AWS, GitHub, GitLab, Slack, Stripe, Google, Azure, private keys, JWTs, Nutanix Prism, high-entropy passwords) and secret-bearing files by name. Values are redacted to four characters in every output; the rules are unwaivable in the `recommended` and `strict` packs.
+- **Code owners:** CODEOWNERS (`.github/`, root or `docs/`) is applied to every finding (`code_owners` in JSON and SARIF); `scan --group-by owner`; per-owner tables in Pulse and Markdown.
+- **Plugins:** `terraguard-<name>` executables on PATH add findings in JSON or SARIF (`scan --plugins`, `plugins:` in the policy, `terraguard plugins list|test`). Waivers, baselines and the gate apply to their findings. See docs/PLUGINS.md and examples/plugins.
+- **SBOM:** `terraguard sbom` writes an offline CycloneDX 1.5 inventory of providers, modules, images and packages; `terraguard vuln --sbom` scans one.
+- **Red Hat images in `vuln`:** RHEL (UBI), Rocky Linux, AlmaLinux, Mageia and Azure Linux packages are read from the rpm database (SQLite, Berkeley DB, ndb) and matched against OSV with rpm version ordering.
+- **Offline mode:** `TERRAGUARD_OFFLINE=true` makes the CLI start no outside request: remote policies and `vuln update` are refused, telemetry is off, and AI is local only.
+- **Web app:** a redesigned, calmer interface with light and dark themes; drop a whole folder or zip (10, 15 or hundreds of files) and scan it at once, with a file tree and grouping by file or owner; an Add-ons panel to write, test, import and export custom rules; HTML report export; integration setup snippets with copy buttons; a command palette (Ctrl/Cmd+K).
+- Brand logos for Nutanix, VMware vSphere, Red Hat and OpenShift.
+
+### Changed
+- `RulesVersion` is now 3.0. A secret previously reported as TG-SEC-001 or TG-SEC-002 may now be reported under a more specific TG-SECRET ID, so it shows as new against an old baseline.
+- A `.env` file that git ignores is no longer reported.
+
+### Security
+- Go 1.26.11 (fixes GO-2026-6859 in net/http).
+- Local policy `extends` are confined to the working folder; remote ones are HTTPS only with redirect, size and time limits, and must parse as a policy. Errors never echo file content.
+- `terraguard serve` and `terraguard ui` refuse cross-site requests and, without a token on loopback, unknown `Host` names (DNS rebinding).
+- `review --base` refuses values that start with `-`; paths starting with `-` are passed to external tools as `./-name`.
+- `vuln image` streams layers with per-file, per-layer, total and layer-count caps; `vuln update` follows HTTPS redirects only; AI calls never follow redirects.
+- Git commands run with `core.fsmonitor` off, so a scanned repository's `.git/config` cannot run a command.
+- `terraguard sbom` removes `user:password@` from module sources; plugin names cannot start with `tg` or `org`, so plugins cannot report under built-in rule IDs.
+- The rpm database readers cap the bytes they copy, so a small crafted database cannot exhaust memory; a large rpm database (up to 256 MB) no longer stops an image scan.
+- `drift` with an absolute folder path no longer reports every resource as missing from the code.
+- Release workflow: no default token permissions, per-job permissions, checkout without persisted credentials; workflow inputs pass through environment variables.
+
 ## [2.1.0] - 2026-11-03
 
 ### Added (late in 2.1.0)

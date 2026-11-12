@@ -1,0 +1,38 @@
+# forbid: TG-NTX-CAPX-001, TG-NTX-CAPX-002, TG-NTX-CAPX-003, TG-NTX-CAPX-004
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: NutanixCluster
+metadata:
+  name: prod
+  namespace: clusters
+spec:
+  prismCentral:
+    address: pc.example.internal
+    port: 9440
+    insecure: false
+    credentialRef:
+      kind: Secret
+      name: prod-pc
+    additionalTrustBundle:
+      kind: ConfigMap
+      name: prod-pc-ca
+  controlPlaneEndpoint:
+    host: 10.0.0.40
+    port: 6443
+  controlPlaneFailureDomains:
+    - name: pe-a
+    - name: pe-b
+    - name: pe-c
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: prod-kcp
+  namespace: clusters
+spec:
+  replicas: 3
+  version: v1.30.4
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: NutanixMachineTemplate
+      name: prod-mt

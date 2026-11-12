@@ -39,13 +39,22 @@ func hasRule(m Module, ids ...string) bool {
 	return false
 }
 
+func hasRulePrefix(m Module, prefix string) bool {
+	for _, f := range m.Report.Findings {
+		if !f.Waived && strings.HasPrefix(f.RuleID, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 var Controls = []Control{
 	{"policy", "Policy-as-code file present", func(m Module) bool { return m.HasPolicy }},
 	{"gate", "Passes the policy gate", func(m Module) bool { return m.Report.Passed }},
 	{"applies", "No apply-blocking issues", func(m Module) bool { return m.Report.Verdict.WillApply }},
 	{"pinned", "Provider and module versions pinned", func(m Module) bool { return !hasRule(m, "TG-TF-001", "TG-TF-002") }},
 	{"state", "Remote state, encrypted and locked", func(m Module) bool { return !hasRule(m, "TG-STATE-001", "TG-STATE-002", "TG-STATE-003") }},
-	{"secrets", "No hardcoded secrets", func(m Module) bool { return !hasRule(m, "TG-SEC-001", "TG-SEC-002") }},
+	{"secrets", "No hardcoded secrets", func(m Module) bool { return !hasRule(m, "TG-SEC-001", "TG-SEC-002") && !hasRulePrefix(m, "TG-SECRET-") }},
 }
 
 type ModuleRow struct {
@@ -107,6 +116,16 @@ type Result struct {
 	TopRules    []RuleCount `json:"top_rules"`
 	Waivers     []Waiver    `json:"waivers"`
 	Delta       *Delta      `json:"delta,omitempty"`
+	// Owners counts active findings per CODEOWNERS owner, unowned last; empty without CODEOWNERS.
+	Owners []OwnerCount `json:"owners,omitempty"`
+}
+
+type OwnerCount struct {
+	Owner    string `json:"owner"`
+	Findings int    `json:"findings"`
+	Critical int    `json:"critical"`
+	High     int    `json:"high"`
+	Modules  int    `json:"modules"`
 }
 
 // ExpiringWithin is how far ahead a waiver counts as "expiring".
@@ -117,6 +136,8 @@ func Build(mods []Module, now time.Time, baseline *Result) *Result {
 	passing := map[string]int{}
 	ruleCount, ruleMods, ruleTitle := map[string]int{}, map[string]int{}, map[string]string{}
 	scoreSum := 0
+	var active []engine.Finding
+	owned := false
 	for _, m := range mods {
 		row := ModuleRow{Path: m.Path, Grade: m.Report.Grade, Score: m.Report.Score, Resources: m.Report.Stats.Resources,
 			Blocking: m.Report.Verdict.Blocking, Controls: map[string]bool{}}
@@ -126,6 +147,9 @@ func Build(mods []Module, now time.Time, baseline *Result) *Result {
 				continue
 			}
 			row.Findings++
+			f.Resource = m.Path // carries the module into the owner count below
+			active = append(active, f)
+			owned = owned || len(f.CodeOwners) > 0
 			switch f.Severity {
 			case engine.Critical:
 				row.Critical++
@@ -166,6 +190,23 @@ func Build(mods []Module, now time.Time, baseline *Result) *Result {
 			a.Percent = a.Passing * 100 / a.Total
 		}
 		r.Adoption = append(r.Adoption, a)
+	}
+	if owned {
+		for _, g := range engine.GroupByOwner(active) {
+			oc := OwnerCount{Owner: g.Owner, Findings: len(g.Findings)}
+			inMods := map[string]bool{}
+			for _, f := range g.Findings {
+				inMods[f.Resource] = true
+				switch f.Severity {
+				case engine.Critical:
+					oc.Critical++
+				case engine.High:
+					oc.High++
+				}
+			}
+			oc.Modules = len(inMods)
+			r.Owners = append(r.Owners, oc)
+		}
 	}
 	for id, n := range ruleCount {
 		r.TopRules = append(r.TopRules, RuleCount{ID: id, Title: ruleTitle[id], Count: n, Modules: ruleMods[id]})
@@ -273,6 +314,12 @@ func Markdown(r *Result) string {
 		b.WriteString("\n### Most common issues\n\n| Rule | Title | Modules | Occurrences |\n|---|---|---|---|\n")
 		for _, t := range r.TopRules {
 			fmt.Fprintf(&b, "| `%s` | %s | %d | %d |\n", t.ID, t.Title, t.Modules, t.Count)
+		}
+	}
+	if len(r.Owners) > 0 {
+		b.WriteString("\n### Findings by owner\n\n| Owner | Findings | Critical | High | Modules |\n|---|---|---|---|---|\n")
+		for _, o := range r.Owners {
+			fmt.Fprintf(&b, "| %s | %d | %d | %d | %d |\n", o.Owner, o.Findings, o.Critical, o.High, o.Modules)
 		}
 	}
 	if len(r.Waivers) > 0 {

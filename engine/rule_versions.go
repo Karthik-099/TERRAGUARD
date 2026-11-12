@@ -8,10 +8,11 @@ import (
 // RulesVersion is the rule set this build ships. A policy can pin
 // rules_version to an older set so an upgrade never fails CI overnight:
 // findings from newer rules are still reported, but they do not gate.
-const RulesVersion = "2.1"
+const RulesVersion = "3.0"
 
-// rulesV20 are the rules released in v2.0.0. When a release ships, its new
-// rules get their own list here; anything unlisted is RulesVersion.
+// rulesV20 are the rules released in v2.0.0 and rulesV30 those released in
+// v3.0.0. When a release ships, its new rules get their own list here;
+// anything unlisted arrived in 2.1.
 var rulesV20 = map[string]bool{}
 
 func init() {
@@ -35,12 +36,32 @@ func init() {
 	}
 }
 
+// rulesV30 are the rules released in v3.0.0.
+var rulesV30 = map[string]bool{
+	"TG-SECRET-001": true, "TG-SECRET-002": true, "TG-SECRET-003": true, "TG-SECRET-004": true, "TG-SECRET-005": true,
+	"TG-SECRET-006": true, "TG-SECRET-007": true, "TG-SECRET-008": true, "TG-SECRET-009": true, "TG-SECRET-010": true,
+	"TG-SECRET-011": true, "TG-SECRET-012": true, "TG-SECRET-013": true, "TG-SECRET-014": true, "TG-SECRET-015": true,
+	"TG-NTX-PRV-001": true, "TG-NTX-VM-001": true, "TG-NTX-VM-002": true, "TG-NTX-FLOW-001": true, "TG-NTX-IMG-001": true,
+	"TG-NTX-NKE-001": true, "TG-NTX-ST-001": true, "TG-NTX-IAM-001": true, "TG-NTX-SNMP-001": true, "TG-NTX-SNMP-002": true,
+	"TG-NTX-CAPX-001": true, "TG-NTX-CAPX-002": true, "TG-NTX-CAPX-003": true, "TG-NTX-CAPX-004": true, "TG-VAL-023": true,
+	"TG-VS-PRV-001": true, "TG-VS-NET-001": true, "TG-VS-VM-001": true, "TG-VS-VM-002": true, "TG-VS-HOST-001": true,
+	"TG-VS-CL-001": true, "TG-VS-DS-001": true, "TG-VAL-024": true,
+	"TG-OCP-ROUTE-001": true, "TG-OCP-ROUTE-002": true, "TG-OCP-ROUTE-003": true, "TG-OCP-SCC-001": true, "TG-OCP-SCC-002": true,
+	"TG-OCP-SCC-003": true, "TG-OCP-SCC-004": true, "TG-OCP-SCC-005": true, "TG-OCP-DC-001": true, "TG-OCP-BUILD-001": true,
+	"TG-OCP-BUILD-002": true, "TG-OCP-IS-001": true, "TG-OCP-RBAC-001": true, "TG-OCP-OAUTH-001": true, "TG-RHCS-001": true,
+	"TG-RHCS-002": true, "TG-RHCS-003": true, "TG-RHCS-004": true, "TG-RHCS-005": true, "TG-RHCS-006": true,
+	"TG-AZ-ARO-001": true, "TG-AZ-ARO-002": true, "TG-AZ-ARO-003": true, "TG-AZ-ARO-004": true,
+}
+
 // RuleSince returns the rule set version that introduced a rule.
 func RuleSince(id string) string {
+	if rulesV30[id] {
+		return "3.0"
+	}
 	if rulesV20[id] || strings.HasPrefix(id, "ORG-") || !strings.HasPrefix(id, "TG-") {
 		return "2.0"
 	}
-	return RulesVersion
+	return "2.1"
 }
 
 // newerThan compares "major.minor" versions.

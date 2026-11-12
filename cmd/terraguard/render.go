@@ -29,7 +29,7 @@ func renderManifests(paths []string, helm, kustomize, bicep bool) (map[string]st
 			if d.IsDir() {
 				return nil
 			}
-			dir := filepath.Dir(p)
+			dir, file := argPath(filepath.Dir(p)), argPath(p)
 			switch {
 			case helm && d.Name() == "Chart.yaml":
 				yaml, err := runRender("helm", "template", "terraguard", dir)
@@ -39,9 +39,9 @@ func renderManifests(paths []string, helm, kustomize, bicep bool) (map[string]st
 				out[filepath.ToSlash(filepath.Join(dir, "helm-rendered.yaml"))] = yaml
 				return filepath.SkipDir // templates are not manifests on their own
 			case bicep && strings.HasSuffix(d.Name(), ".bicep"):
-				json, err := runRender("bicep", "build", p, "--stdout")
+				json, err := runRender("bicep", "build", file, "--stdout")
 				if errors.Is(err, exec.ErrNotFound) {
-					json, err = runRender("az", "bicep", "build", "--file", p, "--stdout")
+					json, err = runRender("az", "bicep", "build", "--file", file, "--stdout")
 				}
 				if err != nil {
 					return fmt.Errorf("bicep build %s: %w", p, err)
@@ -64,6 +64,15 @@ func renderManifests(paths []string, helm, kustomize, bicep bool) (map[string]st
 		}
 	}
 	return out, nil
+}
+
+// argPath keeps a repository path that starts with "-" (a folder named
+// "--post-renderer=x" under ".") from being read as a flag by helm or kustomize.
+func argPath(p string) string {
+	if strings.HasPrefix(p, "-") {
+		return "." + string(filepath.Separator) + p
+	}
+	return p
 }
 
 // runRender is replaced in tests.

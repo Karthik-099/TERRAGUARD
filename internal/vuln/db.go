@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -55,15 +56,18 @@ func DefaultDir() string {
 	return filepath.Join(d, "terraguard", "osv")
 }
 
-var ecosystemName = regexp.MustCompile(`^[A-Za-z0-9.:_-]+$`)
+var ecosystemName = regexp.MustCompile(`^[A-Za-z0-9.:_ -]+$`) // spaces: "Red Hat", "Rocky Linux"
 
 // Update downloads and indexes each ecosystem. It is the only network access.
 func Update(ctx context.Context, dir string, ecosystems []string, log io.Writer) error {
+	if os.Getenv("TERRAGUARD_OFFLINE") == "true" {
+		return errors.New("vuln update refused: TERRAGUARD_OFFLINE=true (copy a database made on a connected machine instead)")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	meta, _ := readMeta(dir)
-	client := &http.Client{Timeout: 30 * time.Minute}
+	client := &http.Client{Timeout: 30 * time.Minute, CheckRedirect: httpsOnly}
 	for _, eco := range ecosystems {
 		if !ecosystemName.MatchString(eco) || strings.Contains(eco, "..") {
 			return fmt.Errorf("invalid ecosystem %q", eco)
@@ -81,6 +85,14 @@ func Update(ctx context.Context, dir string, ecosystems []string, log io.Writer)
 	return writeAtomic(filepath.Join(dir, "meta.json"), func(w io.Writer) error { _, err := w.Write(b); return err })
 }
 
+// httpsOnly keeps a redirect from downgrading the download to plain HTTP.
+func httpsOnly(r *http.Request, via []*http.Request) error {
+	if r.URL.Scheme != "https" || len(via) > 5 {
+		return fmt.Errorf("refusing redirect to %s", r.URL.Redacted())
+	}
+	return nil
+}
+
 func updateOne(ctx context.Context, client *http.Client, dir, eco string) (EcosystemStats, error) {
 	tmp, err := os.CreateTemp(dir, eco+"-*.zip")
 	if err != nil {
@@ -88,7 +100,7 @@ func updateOne(ctx context.Context, client *http.Client, dir, eco string) (Ecosy
 	}
 	defer os.Remove(tmp.Name())
 	defer tmp.Close()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, BaseURL+"/"+eco+"/all.zip", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, BaseURL+"/"+url.PathEscape(eco)+"/all.zip", nil)
 	if err != nil {
 		return EcosystemStats{}, err
 	}
@@ -266,8 +278,9 @@ func (e *MissingEcosystemError) Error() string {
 	return fmt.Sprintf("the database has no %s data; run terraguard vuln update --ecosystems %s", e.Ecosystem, e.Ecosystem)
 }
 
-// Lookup returns the entries for a package. Ubuntu ecosystems also match
-// their suffixed forms ("Ubuntu:22.04" matches "Ubuntu:22.04:LTS").
+// Lookup returns the entries for a package. Ubuntu and Red Hat ecosystems also
+// match their suffixed forms ("Ubuntu:22.04" matches "Ubuntu:22.04:LTS",
+// "Red Hat:enterprise_linux:9" matches "Red Hat:enterprise_linux:9::baseos").
 func (db *DB) Lookup(eco, name string) ([]Entry, error) {
 	base := baseEcosystem(eco)
 	idx, ok := db.idx[base]
@@ -287,7 +300,7 @@ func (db *DB) Lookup(eco, name string) ([]Entry, error) {
 	}
 	name = normName(eco, name)
 	out := idx[eco][name]
-	if base == "Ubuntu" {
+	if base == "Ubuntu" || base == "Red Hat" {
 		for e, pkgs := range idx {
 			if strings.HasPrefix(e, eco+":") {
 				out = append(out, pkgs[name]...)

@@ -29,7 +29,10 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Inputs go through the environment, never into the script text (no injection).
+          PROVIDER: ${{ inputs.provider }}
+          MODEL: ${{ inputs.model }}
         run: |
-          args=(--provider "${{ inputs.provider }}" --summary "$GITHUB_STEP_SUMMARY")
-          [ -n "${{ inputs.model }}" ] && args+=(--model "${{ inputs.model }}")
+          args=(--provider "$PROVIDER" --summary "$GITHUB_STEP_SUMMARY")
+          [ -n "$MODEL" ] && args+=(--model "$MODEL")
           go run ./evals/llmeval "${args[@]}"

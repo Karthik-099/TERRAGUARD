@@ -36,4 +36,12 @@ func TestUILocalFiles(t *testing.T) {
 			t.Errorf("%+v must be refused", c)
 		}
 	}
+	// The token-free rest of the server (AI chat, MCP) is refused to a rebound host name too.
+	req := httptest.NewRequest("GET", "/api/config", nil)
+	req.Host = "attacker.example:9999"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("rebound host reached the API: %d", rec.Code)
+	}
 }

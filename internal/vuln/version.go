@@ -16,6 +16,8 @@ func Compare(ecosystem, a, b string) int {
 		return compareDpkg(a, b)
 	case "Alpine":
 		return compareApk(a, b)
+	case "Red Hat", "Rocky Linux", "AlmaLinux", "Mageia", "Azure Linux", "openSUSE", "SUSE", "openEuler":
+		return compareRPM(a, b)
 	default:
 		return compareGeneric(a, b)
 	}

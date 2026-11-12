@@ -1,0 +1,16 @@
+#!/bin/sh
+# Example TerraGuard plugin: reports one finding when the scanned folder has
+# no README.md. TerraGuard runs it in the scanned folder with a JSON request
+# on stdin (read and ignored here) and reads findings as JSON on stdout.
+# Install: copy to a folder on PATH, chmod +x, then: terraguard scan --plugins example
+cat >/dev/null
+if [ -f README.md ]; then
+  echo '[]'
+  exit 0
+fi
+cat <<'JSON'
+[{"rule_id": "EXAMPLE-001", "severity": "LOW", "category": "best-practice",
+  "title": "Module has no README",
+  "message": "Add a README.md that says what this module creates and how to use it.",
+  "remediation": "Run terraguard docs to generate one."}]
+JSON

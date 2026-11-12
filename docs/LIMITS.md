@@ -129,7 +129,7 @@ Intended exceptions are recorded as waivers with a reason, an approver and an
 expiry, or as inline `terraguard:ignore` comments. Wrong findings can be
 reported from the workspace. Rules are also measured against reference
 fixtures and a corpus of public modules (see the README). The
-[rule catalog](RULES.md) lists all 1,688 rules;
+[rule catalog](RULES.md) lists all 1,750 rules;
 TerraGuard does not replace runtime monitoring of deployed infrastructure and
 does not see resources created outside Terraform.
 

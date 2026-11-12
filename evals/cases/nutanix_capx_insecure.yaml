@@ -1,0 +1,40 @@
+# expect: TG-NTX-CAPX-001, TG-NTX-CAPX-002, TG-NTX-CAPX-003, TG-NTX-CAPX-004
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: NutanixCluster
+metadata:
+  name: dev
+  namespace: clusters
+spec:
+  prismCentral:
+    address: pc.example.internal
+    port: 9440
+    insecure: true
+    credentialRef:
+      kind: Secret
+      name: dev-pc
+  controlPlaneEndpoint:
+    host: 10.0.0.30
+    port: 6443
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dev-pc
+  namespace: clusters
+stringData:
+  credentials: |
+    [{"type": "basic_auth", "data": {"prismCentral": {"username": "admin", "password": "Nutanix-pass-1"}, "prismElements": null}}]
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: dev-kcp
+  namespace: clusters
+spec:
+  replicas: 1
+  version: v1.30.4
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: NutanixMachineTemplate
+      name: dev-mt

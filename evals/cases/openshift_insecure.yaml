@@ -1,0 +1,108 @@
+# expect: TG-OCP-ROUTE-001, TG-OCP-ROUTE-002, TG-OCP-ROUTE-003, TG-OCP-SCC-001, TG-OCP-SCC-002, TG-OCP-SCC-003, TG-OCP-SCC-004, TG-OCP-SCC-005, TG-OCP-DC-001, TG-K8S-001, TG-OCP-BUILD-001, TG-OCP-BUILD-002, TG-OCP-IS-001, TG-OCP-RBAC-001, TG-OCP-OAUTH-001
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  host: shop.apps.example.com
+  to: {kind: Service, name: shop}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: api
+  namespace: shop
+spec:
+  host: api.apps.example.com
+  wildcardPolicy: Subdomain
+  to: {kind: Service, name: api}
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Allow
+---
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: team-anything
+allowPrivilegedContainer: true
+allowHostNetwork: true
+allowHostPID: true
+allowHostIPC: false
+allowedCapabilities: ["*"]
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+volumes: ["*"]
+---
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  name: legacy
+  namespace: shop
+spec:
+  replicas: 1
+  selector: {app: legacy}
+  template:
+    metadata:
+      labels: {app: legacy}
+    spec:
+      containers:
+      - name: legacy
+        image: registry.example.com/legacy:1.0
+        securityContext:
+          privileged: true
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  source:
+    git:
+      uri: https://builder:ghp_example0token@github.com/example/shop.git
+  strategy:
+    type: Docker
+    dockerStrategy:
+      env:
+      - name: NPM_TOKEN
+        value: npm_exampletoken
+  output:
+    to: {kind: ImageStreamTag, name: "shop:latest"}
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: base
+  namespace: shop
+spec:
+  tags:
+  - name: "8"
+    from: {kind: DockerImage, name: "registry.lab.local:5000/base:8"}
+    importPolicy:
+      insecure: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: everyone-can-view
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: view}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: "system:authenticated"}
+---
+apiVersion: config.openshift.io/v1
+kind: OAuth
+metadata:
+  name: cluster
+spec:
+  identityProviders:
+  - name: corp-proxy
+    mappingMethod: claim
+    type: RequestHeader
+    requestHeader:
+      challengeURL: "http://login.example.com/challenging-proxy/oauth/authorize?${query}"
+      loginURL: "https://login.example.com/login-proxy/oauth/authorize?${query}"
+      ca: {name: ca-config-map}
+      headers: [X-Remote-User]

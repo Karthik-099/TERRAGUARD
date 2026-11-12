@@ -10,8 +10,10 @@
     aws: "AWS", google: "Google Cloud", azurerm: "Azure", cloudflare: "Cloudflare", digitalocean: "DigitalOcean",
     hcloud: "Hetzner", linode: "Akamai / Linode", openstack: "OpenStack / OVH", ovh: "OVHcloud", oci: "Oracle Cloud",
     alicloud: "Alibaba Cloud", vultr: "Vultr", kubernetes: "Kubernetes", helm: "Helm",
+    nutanix: "Nutanix", vsphere: "VMware vSphere", rhcs: "Red Hat OpenShift (ROSA)",
   };
-  const BRANDS = { aws: "aws", google: "gcp", azurerm: "azure", cloudflare: "cloudflare", digitalocean: "digitalocean", oci: "oracle", kubernetes: "kubernetes", helm: "helm" };
+  const BRANDS = { aws: "aws", google: "gcp", azurerm: "azure", cloudflare: "cloudflare", digitalocean: "digitalocean", oci: "oracle", kubernetes: "kubernetes", helm: "helm",
+    nutanix: "nutanix", vsphere: "vsphere", rhcs: "openshift" };
   const brandIcon = (c) => BRANDS[c] ? `<img class="brand-ic" src="assets/brands/${BRANDS[c]}.svg" alt="" width="16" height="16">` : "";
   const CATEGORY = { security: "Security", validate: "Validation", reliability: "Reliability", "best-practice": "Best practice", "attack-path": "Attack path", plan: "Plan risk", policy: "Policy", cost: "Cost" };
   const EXAMPLES = { insecure: ["main.tf", "variables.tf", "terraform.tfvars", ".terraguard.yml"], "aws-network": ["main.tf"], multicloud: ["main.tf"], secure: ["main.tf"],
@@ -26,6 +28,8 @@
     dompurify: LOCAL ? `${LOCAL}/purify.min.js` : `${JSD}/dompurify@3.1.6/dist/purify.min.js`,
   };
   const POLICY_FILE = ".terraguard.yml";
+  // One release version for every command on the site: cicd.js RELEASE.
+  const RELEASE = (typeof CICD !== "undefined" && CICD.release) || "v3.0.0", RELEASE_N = RELEASE.replace(/^v/, "");
   const STORE = "tg.state";
 
   const $ = (s, el = document) => el.querySelector(s);
@@ -53,25 +57,59 @@
   }));
 
   const S = {
-    files: {}, active: null, config: "", plan: "", report: null, aiFindings: [], chat: [], activity: [],
-    filter: { q: "", sev: new Set(), cloud: "" }, tab: "overview",
+    files: {}, active: null, config: "", plan: "", codeOwners: "", report: null, aiFindings: [], chat: [], activity: [],
+    filter: { q: "", sev: new Set(), cloud: "", file: "", format: "", group: "" }, tab: "overview", treeClosed: new Set(),
     session: { scans: 0, files: 0, resources: 0, fixes: 0, ai: 0 },
   };
   let editor, monacoRef, models = {}, graph, appReady;
 
-  // Theme: dark by default, light is remembered.
-  const isDark = () => document.documentElement.dataset.theme !== "light";
-  function toggleTheme() {
-    const next = isDark() ? "light" : "dark";
+  // Theme: system (default), light or dark; the choice is remembered.
+  const isDark = () => document.documentElement.dataset.theme === "dark";
+  const systemDark = matchMedia("(prefers-color-scheme: dark)");
+  const THEME_MODES = ["system", "light", "dark"], THEME_ICON = { system: "monitor", light: "sun", dark: "moon" };
+  let themeMode = "system";
+  try { themeMode = THEME_MODES.includes(localStorage.getItem("tg.theme.v3")) ? localStorage.getItem("tg.theme.v3") : "system"; } catch {}
+  function applyTheme(mode, save) {
+    themeMode = mode;
+    if (save) try { mode === "system" ? localStorage.removeItem("tg.theme.v3") : localStorage.setItem("tg.theme.v3", mode); } catch {}
+    const next = mode === "system" ? (systemDark.matches ? "dark" : "light") : mode;
     document.documentElement.dataset.theme = next;
-    try { localStorage.setItem("tg.theme.v2", next); } catch {}
+    for (const b of document.querySelectorAll("[data-theme-toggle]")) {
+      b.setAttribute("aria-label", `Theme: ${mode}. Switch theme`);
+      b.title = `Theme: ${mode}`;
+      b.querySelector("use")?.setAttribute("href", `#i-${THEME_ICON[mode]}`);
+    }
     monacoRef?.editor.setTheme(next === "dark" ? "vs-dark" : "vs");
-    if (S.tab === "graph") renderGraph();
+    if (S.tab === "graph" && !$("#app").hidden) renderGraph();
+  }
+  const toggleTheme = () => applyTheme(THEME_MODES[(THEME_MODES.indexOf(themeMode) + 1) % 3], true);
+  systemDark.addEventListener?.("change", () => themeMode === "system" && applyTheme("system"));
+
+  // Add-ons: the user's own custom rules, kept in this browser and merged into the policy.
+  const ADDON_STORE = "tg.addons";
+  const ADDON_ID = /^[A-Z0-9][A-Z0-9-]{2,39}$/;
+  let addons = [];
+  try {
+    const v = JSON.parse(localStorage.getItem(ADDON_STORE) || "[]");
+    if (Array.isArray(v)) addons = v.filter((a) => a && ADDON_ID.test(a.id) && typeof a.yaml === "string" && typeof a.src === "string");
+  } catch {}
+  const saveAddons = () => { try { localStorage.setItem(ADDON_STORE, JSON.stringify(addons)); } catch {} };
+  const hasRule = (config, id) => new RegExp(`^\\s*-\\s*id:\\s*["']?${id}["']?\\s*$`, "m").test(config || "");
+  // Enabled add-ons join custom_rules; one whose ID the policy already defines is left out.
+  function withAddons(config) {
+    const on = addons.filter((a) => a.on && !hasRule(config, a.id));
+    if (!on.length) return config;
+    return addRules(config, on.map((a) => a.yaml.trimEnd()).join("\n"));
+  }
+  // Appends rule items under custom_rules, creating the key or replacing an empty inline list.
+  function addRules(config, block) {
+    const c = (config || "").trimEnd().replace(/^custom_rules:\s*\[\s*\]\s*$/m, "custom_rules:");
+    return (/^custom_rules:\s*$/m.test(c) ? c.replace(/^custom_rules:\s*$/m, () => "custom_rules:\n" + block) : `${c}${c ? "\n\n" : ""}custom_rules:\n${block}`) + "\n";
   }
 
   // Persistence & share links
   function persist() {
-    try { localStorage.setItem(STORE, JSON.stringify({ files: S.files, active: S.active, config: S.config, plan: S.plan, chat: S.chat.slice(-40) })); } catch {}
+    try { localStorage.setItem(STORE, JSON.stringify({ files: S.files, active: S.active, config: S.config, plan: S.plan, codeOwners: S.codeOwners, chat: S.chat.slice(-40) })); } catch {}
   }
   function restore() { try { return JSON.parse(localStorage.getItem(STORE)); } catch { return null; } }
   const b64 = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -79,18 +117,23 @@
     const stream = new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream("deflate-raw"));
     return b64(await new Response(stream).arrayBuffer());
   }
-  async function decodeShare(s) {
-    const bin = Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
-    const reader = new Blob([bin]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+  // Raw deflate with a cap on the expanded size, so crafted input (a share link
+  // or a zip bomb) cannot exhaust memory.
+  async function inflateRaw(bytes, max) {
+    const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
     const chunks = [];
     let size = 0;
-    for (;;) { // cap the expanded size so a crafted link cannot exhaust memory
+    for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if ((size += value.length) > SHARE_MAX) { reader.cancel(); throw new Error("share link too large"); }
+      if ((size += value.length) > max) { reader.cancel(); throw new Error("expands beyond its limit"); }
       chunks.push(value);
     }
-    const obj = JSON.parse(await new Blob(chunks).text());
+    return new Blob(chunks);
+  }
+  async function decodeShare(s) {
+    const bin = Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    const obj = JSON.parse(await (await inflateRaw(bin, SHARE_MAX)).text());
     const files = obj?.files;
     if (!files || typeof files !== "object" || Array.isArray(files) || Object.keys(files).length > 500
       || Object.entries(files).some(([k, v]) => typeof v !== "string" || k.length > 300 || /(^|\/)\.\.(\/|$)/.test(k))
@@ -138,7 +181,7 @@
   }
 
   // Routing: product page <-> workspace
-  const PAGES = ["home", "product", "ai", "policy", "compare", "integrations", "docs", "architecture", "open-source"];
+  const PAGES = ["home", "whats-new", "product", "ai", "policy", "compare", "integrations", "docs", "architecture", "open-source"];
   const inApp = () => location.hash.startsWith("#/app") || location.hash.startsWith("#s=");
   function route() {
     const app = inApp();
@@ -157,8 +200,13 @@
     const page = PAGES.includes(name) ? name : "home";
     $$("#landing .page").forEach((p) => (p.hidden = p.dataset.page !== page));
     $$(".nav-links a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#/${page}`));
-    document.title = page === "home" ? "TerraGuard: open-source Terraform security scanner and validator" : `${$(`.nav-links a[href="#/${page}"]`)?.textContent || "TerraGuard"} · TerraGuard`;
+    $(".site-header").classList.remove("open");
+    $("#menu-btn").setAttribute("aria-expanded", "false");
+    const TITLES = { architecture: "Architecture" };
+    document.title = page === "home" ? "TerraGuard: open-source infrastructure-as-code checker" : `${TITLES[page] || $(`.nav-links a[href="#/${page}"]`)?.textContent || "TerraGuard"} · TerraGuard`;
     if (page === "docs") renderDoc((location.hash.match(/^#\/docs\/([\w-]+)/) || [])[1] || "guide");
+    // GitHub counts are fetched only on the page that shows them, and never when air-gapped.
+    if (page === "open-source" && !LOCAL) renderGitHub();
     const target = anchor && document.getElementById(anchor);
     if (target) requestAnimationFrame(() => target.scrollIntoView({ behavior: "instant" }));
     else scrollTo({ top: 0, behavior: "instant" });
@@ -166,7 +214,7 @@
 
   // Documentation: the repository's Markdown, rendered in the site
   const DOCS = {
-    guide: "GUIDE.md", reference: "REFERENCE.md", limits: "LIMITS.md", rules: "RULES.md", "self-hosting": "SELF_HOSTING.md",
+    guide: "GUIDE.md", reference: "REFERENCE.md", plugins: "PLUGINS.md", vuln: "VULN.md", limits: "LIMITS.md", rules: "RULES.md", "self-hosting": "SELF_HOSTING.md",
     security: "SECURITY.md", academy: "ACADEMY.md", architecture: "ARCHITECTURE.md", contributing: "CONTRIBUTING.md",
   };
   const DOC_SLUG = Object.fromEntries(Object.entries(DOCS).map(([k, v]) => [v, k]));
@@ -220,7 +268,7 @@
       require(["vs/editor/editor.main"], (monaco) => {
         monacoRef = monaco;
         editor = monaco.editor.create($("#editor"), {
-          theme: isDark() ? "vs-dark" : "vs", automaticLayout: true, fontSize: 13, fontFamily: "JetBrains Mono, monospace",
+          theme: isDark() ? "vs-dark" : "vs", automaticLayout: true, fontSize: 13, fontFamily: "Geist Mono, JetBrains Mono, monospace",
           minimap: { enabled: false }, scrollBeyondLastLine: false, tabSize: 2, renderLineHighlight: "all",
         });
         resolve();
@@ -248,23 +296,30 @@
     let tried = null;
     try { tried = JSON.parse(sessionStorage.getItem("tg.try")); sessionStorage.removeItem("tg.try"); } catch {}
     const state = shared || tried || restore();
-    if (LOCAL_TOKEN && await loadLocal()) {
+    if (Object.keys(S.files).length) { // files were opened while the engine was loading
+      setFiles({ ...S.files }, S.active);
+      scan();
+    } else if (LOCAL_TOKEN && await loadLocal()) {
       addEventListener("focus", () => loadLocal(true)); // pick up edits made in another editor
     } else if (state && Object.keys(state.files || {}).length) {
       S.config = state.config || "";
       S.plan = state.plan || "";
+      S.codeOwners = typeof state.codeOwners === "string" ? state.codeOwners : "";
       S.chat = state.chat || [];
       $("#policy-input").value = S.config;
       $("#plan-input").value = S.plan;
       setFiles(state.files, state.active);
       scan();
-    } else {
+    } else if (location.hash.includes("demo")) {
       await loadExample("insecure");
+    } else {
+      openFile(null); // first visit: the drop zone is the one way in
     }
-    showTab("overview");
+    showTab("findings"); // summary first, then the findings; the dashboard is one tab away
   }
 
-  const input = () => ({ files: S.files, plan: S.plan, config: S.config, coverage: true });
+  // code_owners: the CODEOWNERS text, if one was loaded; the engine adds owners to each finding.
+  const input = () => ({ files: S.files, plan: S.plan, config: withAddons(S.config), coverage: true, ...(S.codeOwners ? { code_owners: S.codeOwners } : {}) });
 
   function scan() {
     if (!window.terraguard) return;
@@ -303,9 +358,12 @@
     if (open) openFile(name);
   }
 
+  // Until something is loaded, the workspace is only the drop zone.
+  const syncEmpty = () => $("#app").classList.toggle("is-empty", !Object.keys(S.files).length && !S.plan);
   function openFile(name) {
     S.active = name;
     $(".drop-hint")?.toggleAttribute("hidden", !!name);
+    syncEmpty();
     if (editor) editor.setModel(name ? models[name] : null);
     renderTabs();
   }
@@ -334,6 +392,37 @@
       <button class="tab ${n === S.active ? "active" : ""}" data-file="${esc(n)}" role="tab">
         ${worst[n] ? `<span class="dot" style="background:${sevColor(worst[n])}" title="${worst[n]}"></span>` : ""}${esc(n)}
         <span class="x" data-close="${esc(n)}" title="Close file" aria-label="Close ${esc(n)}">×</span></button>`).join("");
+    renderTree(worst);
+  }
+
+  // File tree: folders and files with their active finding counts; click a file to open it.
+  let treeKey = "";
+  function renderTree(worst) {
+    const counts = {};
+    for (const f of S.report?.findings || []) if (!f.waived && f.file) counts[f.file] = (counts[f.file] || 0) + 1;
+    const names = Object.keys(S.files).sort();
+    const key = JSON.stringify([names, counts, worst, S.active]);
+    if (key === treeKey) return;
+    treeKey = key;
+    $("#tree-sum").textContent = names.length ? `${fmtN(names.length)} file${names.length === 1 ? "" : "s"}` : "";
+    if (!names.length) { $("#file-tree").innerHTML = `<p class="tree-empty">No files yet.</p>`; return; }
+    const root = { dirs: {}, files: [], n: 0, worst: "" };
+    const bump = (node, f) => {
+      node.n += counts[f] || 0;
+      if (worst[f] && (!node.worst || SEVS.indexOf(worst[f]) < SEVS.indexOf(node.worst))) node.worst = worst[f];
+    };
+    for (const name of names) {
+      let node = root;
+      bump(root, name);
+      for (const part of name.split("/").slice(0, -1)) { node = node.dirs[part] ||= { dirs: {}, files: [], n: 0, worst: "" }; bump(node, name); }
+      node.files.push(name);
+    }
+    const num = (n, sev) => (n ? `<span class="tree-n ${sev || ""}" title="${n} active finding${n === 1 ? "" : "s"}">${n}</span>` : "");
+    const draw = (node, prefix) => `<ul>${Object.entries(node.dirs).sort().map(([d, sub]) => {
+      const path = prefix + d + "/";
+      return `<li><details data-dir="${esc(path)}"${S.treeClosed.has(path) ? "" : " open"}><summary class="tree-row">${icon("folder")}<span class="nm">${esc(d)}</span>${num(sub.n, sub.worst)}</summary>${draw(sub, path)}</details></li>`;
+    }).join("")}${node.files.map((f) => `<li><button class="tree-row ${f === S.active ? "on" : ""}" data-open-file="${esc(f)}" title="${esc(f)}">${icon("file")}<span class="nm">${esc(f.split("/").pop())}</span>${num(counts[f], worst[f])}</button></li>`).join("")}</ul>`;
+    $("#file-tree").innerHTML = draw(root, "");
   }
 
   function setMarkers() {
@@ -363,6 +452,7 @@
 
   // Workspace rendering
   function renderAll() {
+    syncEmpty();
     renderTabs();
     setMarkers();
     renderScorecard();
@@ -422,7 +512,7 @@
 
   function renderOverview() {
     const r = S.report;
-    if (!r) return;
+    if (!r) { $("#tab-overview").innerHTML = `<div class="empty">Results appear here once you add files.</div>`; return; }
     const active = r.findings.filter((f) => !f.waived);
     const blocking = new Set(active.filter((f) => f.blocking).map((f) => f.rule_id));
     const warn = active.filter((f) => ["TG-VAL-008", "TG-VAL-009", "TG-STATE-001", "TG-TF-001", "TG-TF-003"].includes(f.rule_id));
@@ -433,7 +523,7 @@
       <div class="guide">
         <div><b>Start here</b><span class="hint inline">Three steps. Nothing you paste leaves this browser. Press <kbd>?</kbd> for shortcuts.</span></div>
         <ol>
-          <li><span>1</span><div><b>Add your Terraform</b><p>Paste into the editor, or use Upload, Folder or Examples above it.</p></div></li>
+          <li><span>1</span><div><b>Add your files</b><p>Drop a folder or a zip anywhere, or use Files, Folder and Zip above the editor.</p></div></li>
           <li><span>2</span><div><b>Read the verdict, then fix</b><p>The score and "will it apply" update as you type. <button class="loc" data-tab-go="findings">Open findings</button> to fix one, or all at once.</p></div></li>
           <li><span>3</span><div><b>Keep it fixed</b><p>Add your own rules in <button class="loc" data-tab-go="policy">Policy</button>, then gate every pull request from <button class="loc" data-tab-go="cicd">Pipeline</button>.</p></div></li>
         </ol>
@@ -480,27 +570,63 @@
       ${loc ? `<button class="loc" data-jump="${esc(f.file)}" data-line="${f.line || 0}">${esc(loc)}</button>` : ""}
       ${f.resource ? ` <span class="rid">${esc(f.resource)}</span>` : ""}
       ${f.remediation ? `<p class="remedy">Fix: ${esc(f.remediation)}</p>` : ""}
+      ${ownersOf(f).length ? `<p class="remedy">Code owners: ${ownersOf(f).map((o) => `<span class="badge owner">${esc(o)}</span>`).join(" ")}</p>` : ""}
       ${f.owner || f.docs ? `<p class="remedy">${f.owner ? `Owner: ${esc(f.owner)}` : ""}${f.owner && f.docs ? " · " : ""}${f.docs && /^https?:\/\//.test(f.docs) ? `<a href="${esc(f.docs)}" target="_blank" rel="noopener">Standard</a>` : ""}</p>` : ""}
       ${f.waived ? `<p class="remedy">Waived: ${esc(f.waiver_reason)}</p>` : ""}
       <div class="f-actions">
         ${f.fix && !f.waived ? `<button class="btn primary sm" data-fix="${i}">${esc(f.fix.description)}</button>` : ""}
         <button class="btn sm" data-ask="${isAI ? "ai" : ""}${i}">Explain</button>
-        ${!isAI ? `<button class="btn sm ghost" data-copy-finding="${i}" title="Copy as text for a ticket or chat">Copy</button>` : ""}
+        ${!isAI ? `<button class="btn sm" data-copy-finding="${i}" title="Copy the finding and its fix as text">${icon("copy", "ic sm")}Copy fix</button>` : ""}
         ${!isAI && f.file && models[f.file] && f.line ? `<button class="btn sm" data-ignore="${i}">Ignore here</button>` : ""}
         ${!isAI ? `<button class="btn sm" data-waive="${i}">Add waiver</button><a class="btn sm ghost" href="${issueURL}" target="_blank" rel="noopener">Report false positive</a>` : ""}
       </div>
     </article>`;
   }
 
+  // code_owners comes from the engine when a CODEOWNERS file was loaded; absent otherwise.
+  const ownersOf = (f) => (Array.isArray(f.code_owners) ? f.code_owners.filter((o) => typeof o === "string") : []);
+  const FORMAT_NAMES = { terraform: "Terraform", kubernetes: "Kubernetes", cloudformation: "CloudFormation", arm: "ARM", dockerfile: "Dockerfile", "docker-compose": "docker-compose",
+    "github-actions": "GitHub Actions", "gitlab-ci": "GitLab CI", "azure-pipelines": "Azure Pipelines", circleci: "CircleCI", "bitbucket-pipelines": "Bitbucket", serverless: "Serverless",
+    ansible: "Ansible", openapi: "OpenAPI", pulumi: "Pulumi", crossplane: "Crossplane", "deployment-manager": "Deployment Manager", policy: "Policy" };
+  // A file's format: what the engine reported for its resources, else a guess from the name.
+  function formatOf(file) {
+    const r = S.report;
+    if (r && !r._fmt) r._fmt = Object.fromEntries((r.coverage?.items || []).map((it) => [it.file, it.format || "terraform"]));
+    if (r?._fmt[file]) return r._fmt[file];
+    if (!file) return "";
+    if (/\.(tf|tofu|tfvars)(\.json)?$|terragrunt\.hcl$|\.tfstate/.test(file)) return "terraform";
+    if (/(^|\/)(Dockerfile|Containerfile)[^/]*$|\.dockerfile$/i.test(file)) return "dockerfile";
+    if (/(^|\/)(docker-)?compose[^/]*\.ya?ml$/.test(file)) return "docker-compose";
+    if (/(^|\/)\.github\/workflows\//.test(file)) return "github-actions";
+    if (/\.gitlab-ci\.ya?ml$/.test(file)) return "gitlab-ci";
+    return "other";
+  }
+  const fmtName = (k) => FORMAT_NAMES[k] || (k === "other" ? "Other" : k);
+
   function matches(f) {
-    const q = S.filter.q.toLowerCase();
+    const q = S.filter.q.toLowerCase(), fl = S.filter.file;
     if (S.filter.sev.size && !S.filter.sev.has(f.severity)) return false;
     if (S.filter.cloud && cloudOf(f.resource) !== S.filter.cloud) return false;
-    return !q || [f.rule_id, f.title, f.message, f.resource, f.file, f.category].join(" ").toLowerCase().includes(q);
+    if (fl && !(fl.endsWith("/") ? (f.file || "").startsWith(fl) : f.file === fl)) return false;
+    if (S.filter.format && formatOf(f.file) !== S.filter.format) return false;
+    return !q || [f.rule_id, f.title, f.message, f.resource, f.file, f.category, ownersOf(f).join(" ")].join(" ").toLowerCase().includes(q);
+  }
+
+  // Keep a select's options in sync without losing the current choice.
+  function fillSelect(sel, first, options, value) {
+    const html = `<option value="">${esc(first)}</option>` + options.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+    if (sel._html !== html) { sel.innerHTML = html; sel._html = html; }
+    sel.value = options.some(([v]) => v === value) ? value : "";
+    return sel.value;
   }
 
   function renderFindings() {
     const r = S.report;
+    const all = r?.findings || [];
+    const files = [...new Set(all.map((f) => f.file).filter(Boolean))].sort();
+    const dirs = [...new Set(files.flatMap((f) => f.split("/").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join("/") + "/")))].sort();
+    S.filter.file = fillSelect($("#filter-file"), "All files", [...dirs.map((d) => [d, d]), ...files.map((f) => [f, f])], S.filter.file);
+    S.filter.format = fillSelect($("#filter-format"), "All formats", [...new Set(files.map(formatOf))].sort().map((k) => [k, fmtName(k)]), S.filter.format);
     $("#sev-chips").innerHTML = SEVS.map((s) => `<button class="chip ${S.filter.sev.has(s) ? "on" : ""}" data-sev="${s}"><span class="sevdot" style="background:${sevColor(s)}"></span>${s.toLowerCase()} ${r?.summary[s] || 0}</button>`).join("");
     const clouds = Object.entries(r?.by_provider || {}).sort((a, b) => b[1] - a[1]);
     $("#cloud-chips").innerHTML = clouds.length ? `<button class="chip ${!S.filter.cloud ? "on" : ""}" data-cloud="">All providers</button>` + clouds.map(([c, n]) => `<button class="chip ${S.filter.cloud === c ? "on" : ""}" data-cloud="${esc(c)}">${brandIcon(c)}${esc(CLOUDS[c] || c)} ${n}</button>`).join("") : "";
@@ -510,11 +636,23 @@
       $("#findings-list").innerHTML = `<div class="empty">Paste Terraform into the editor, drop a folder, or load an example.</div>`;
       return;
     }
-    const rows = (r?.findings || []).map((f, i) => [f, i]).filter(([f]) => matches(f));
+    const rows = all.map((f, i) => [f, i]).filter(([f]) => matches(f));
     const ai = S.aiFindings.map((f, i) => [f, i]).filter(([f]) => matches(f));
+    const by = S.filter.group;
+    let body = rows.map(([f, i]) => findingCard(f, i, false)).join("");
+    if (by && rows.length) {
+      const groups = new Map();
+      for (const row of rows) {
+        const k = by === "file" ? row[0].file || "No file" : ownersOf(row[0]).join(", ") || "No owner";
+        (groups.get(k) || groups.set(k, []).get(k)).push(row);
+      }
+      const keys = [...groups.keys()].sort((a, b) => groups.get(b).length - groups.get(a).length || a.localeCompare(b));
+      body = keys.map((k) => `<div class="group-head"><span>${esc(k)}</span><span>${groups.get(k).length}</span></div>${groups.get(k).map(([f, i]) => findingCard(f, i, false)).join("")}`).join("");
+      if (by === "owner" && !S.codeOwners && !all.some((f) => ownersOf(f).length)) body = `<p class="hint">No CODEOWNERS file is loaded. Add one (at the root, .github/ or docs/) to see owners.</p>` + body;
+    }
     $("#findings-list").innerHTML = rows.length || ai.length
-      ? rows.map(([f, i]) => findingCard(f, i, false)).join("") + ai.map(([f, i]) => findingCard(f, i, true)).join("")
-      : `<div class="empty">${r?.findings.length ? "No findings match the filters." : "No findings. Clean scan."}</div>`;
+      ? body + ai.map(([f, i]) => findingCard(f, i, true)).join("")
+      : `<div class="empty">${all.length ? "No findings match the filters." : "No findings. Clean scan."}</div>`;
   }
 
   const usd = (n) => "$" + Number(n || 0).toFixed(2);
@@ -559,7 +697,7 @@
   const PROVIDER_COLOR = {
     aws: "#FF9900", google: "#4285F4", azurerm: "#0078D4", cloudflare: "#FBAD41", digitalocean: "#0080FF", hcloud: "#D50C2D",
     linode: "#00A95C", openstack: "#ED1944", ovh: "#123F6D", oci: "#C74634", alicloud: "#FF6A00", vultr: "#007BFC",
-    kubernetes: "#326CE5", helm: "#0F1689", module: "#8B5CF6",
+    kubernetes: "#326CE5", helm: "#0F1689", nutanix: "#024DA1", vsphere: "#0091DA", rhcs: "#CC0000", module: "#8B5CF6",
   };
   // Own line icons per kind of resource (no vendor logos: they are trademarks).
   const KIND_ICON = {
@@ -595,7 +733,12 @@
   };
   // First match wins, so specific kinds come before broad ones.
   const KINDS = [
-    ["cluster", /eks_cluster|kubernetes_cluster|container_cluster|containerengine_cluster|lke_cluster|cs_managed_kubernetes|cs_kubernetes|vultr_kubernetes|gke|aks|_k8s|node_pool|node_group/],
+    // Private cloud first: these names would otherwise hit broader patterns (container, bucket).
+    ["volume", /^nutanix_storage_container|^vsphere_(vmfs_|nas_)?datastore/],
+    ["subnet", /^vsphere_(distributed_port_group|host_port_group|distributed_virtual_switch|host_virtual_switch)|^nutanix_subnet/],
+    ["vpc", /^nutanix_vpc/],
+    ["compute", /^vsphere_(host$|compute_cluster|virtual_machine)|^nutanix_virtual_machine/],
+    ["cluster", /nutanix_karbon_cluster|rhcs_cluster|redhat_openshift|openshift|eks_cluster|kubernetes_cluster|container_cluster|containerengine_cluster|lke_cluster|cs_managed_kubernetes|cs_kubernetes|vultr_kubernetes|gke|aks|_k8s|node_pool|node_group/],
     ["function", /lambda|function|workers?_script|worker_route/],
     ["bucket", /s3_bucket|storage_bucket|storage_account|storage_container|spaces_bucket|objectstorage|object_storage|oss_bucket|r2_bucket|_bucket/],
     ["container", /^(kubernetes_|helm_)|ecs_|ecr_|container|cloud_run|app_service|_app$/],
@@ -613,7 +756,7 @@
     ["identity", /iam|role|policy|identity|service_account|user|principal/],
     ["compute", /instance|droplet|server|vm|virtual_machine|launch_template|autoscaling|scale_set|compute/],
   ];
-  const PROVIDER_TAG = { aws: "AWS", google: "GCP", azurerm: "AZURE", cloudflare: "CF", digitalocean: "DO", hcloud: "HETZNER", linode: "LINODE", openstack: "OPENSTACK", ovh: "OVH", oci: "OCI", alicloud: "ALIBABA", vultr: "VULTR", kubernetes: "K8S", helm: "HELM", module: "MODULE" };
+  const PROVIDER_TAG = { aws: "AWS", google: "GCP", azurerm: "AZURE", cloudflare: "CF", digitalocean: "DO", hcloud: "HETZNER", linode: "LINODE", openstack: "OPENSTACK", ovh: "OVH", oci: "OCI", alicloud: "ALIBABA", vultr: "VULTR", kubernetes: "K8S", helm: "HELM", nutanix: "NUTANIX", vsphere: "VSPHERE", rhcs: "ROSA", module: "MODULE" };
   const kindOf = (type) => (type === "module" ? "module" : (KINDS.find(([, re]) => re.test(type.replace(/^data\./, ""))) || ["other"])[0]);
   // Each node is one image: provider colour, icon and tag.
   const nodeImage = (kind, prov, fill) => "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 48 48"><rect width="48" height="48" rx="7" fill="${fill}"/><g transform="translate(10.4 4.5) scale(1.13)" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${KIND_ICON[kind]}</g><text x="24" y="43" text-anchor="middle" font-family="monospace" font-size="${(PROVIDER_TAG[prov] || prov).length > 6 ? 5.5 : 7}" font-weight="700" fill="#fff" fill-opacity=".92">${esc((PROVIDER_TAG[prov] || prov).slice(0, 9))}</text></svg>`);
@@ -646,7 +789,7 @@
       layout: graphLayout === "cose" ? { name: "cose", animate: !reduceMotion, animationDuration: 500, padding: 30, nodeRepulsion: 22000, idealEdgeLength: 110, edgeElasticity: 80, gravity: 0.6, numIter: 1500 } : { name: "breadthfirst", directed: true, spacingFactor: 1.6, padding: 30, animate: !reduceMotion },
       style: [
         { selector: "node", style: { "background-color": "data(fill)", "background-image": "data(icon)", "background-width": "100%", "background-height": "100%", "background-clip": "node",
-          shape: "round-rectangle", width: 52, height: 52, "border-width": 3, "border-color": "data(ring)", label: "data(label)", color: ink, "font-size": 12, "font-family": "JetBrains Mono, monospace",
+          shape: "round-rectangle", width: 52, height: 52, "border-width": 3, "border-color": "data(ring)", label: "data(label)", color: ink, "font-size": 12, "font-family": "Geist Mono, JetBrains Mono, monospace",
           "text-valign": "bottom", "text-margin-y": 7, "text-wrap": "wrap", "line-height": 1.25, "text-background-color": isDark() ? "#0b0d12" : "#ffffff", "text-background-opacity": 0.75, "text-background-padding": 2,
           "transition-property": "opacity, border-width", "transition-duration": "200ms" } },
         { selector: "node[?path]", style: { "border-color": "#d92d20", "border-width": 5, "underlay-color": "#d92d20", "underlay-padding": 8, "underlay-opacity": 0.25, "underlay-shape": "round-rectangle" } },
@@ -692,6 +835,7 @@
     if (!window.terraguard) return;
     S.docs = $("#docs-kind").value === "agents" ? terraguard.agentsMD(JSON.stringify(input())) : terraguard.docs(JSON.stringify({ files: S.files }));
     $("#docs-view").innerHTML = md(S.docs);
+    addCopyButtons($("#docs-view"));
   }
 
   const RULE_PROVIDER = { AWS: "AWS", AZ: "Azure", GCP: "Google Cloud", K8S: "Kubernetes", HELM: "Kubernetes", CF: "Cloudflare", DO: "DigitalOcean", HZ: "Hetzner",
@@ -988,8 +1132,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     if (val("#cr-fix")) lines.push(`    remediation: ${JSON.stringify(val("#cr-fix"))}`);
     let c = S.config.trimEnd();
     if (new RegExp(`^\\s*-\\s*id:\\s*${id}\\s*$`, "m").test(c)) return msg(`${id} already exists in the policy.`, true);
-    c = /^custom_rules:\s*$/m.test(c) ? c.replace(/^custom_rules:\s*$/m, "custom_rules:\n" + lines.join("\n")) : `${c}${c ? "\n\n" : ""}custom_rules:\n${lines.join("\n")}`;
-    S.config = c + "\n";
+    S.config = addRules(c, lines.join("\n"));
     $("#policy-input").value = S.config;
     scan();
     if (S.report.errors?.length) return msg(S.report.errors[0], true);
@@ -1047,8 +1190,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
 
   function addDraft() {
     if (!draft || draft.error) return;
-    const c = S.config.trimEnd();
-    S.config = (/^custom_rules:\s*$/m.test(c) ? c.replace(/^custom_rules:\s*$/m, "custom_rules:\n" + draft.yaml) : `${c}${c ? "\n\n" : ""}custom_rules:\n${draft.yaml}`) + "\n";
+    S.config = addRules(S.config, draft.yaml);
     $("#policy-input").value = S.config;
     scan();
     log("Policy", `Added ${draft.rule.id} from a plain-English standard`);
@@ -1108,20 +1250,280 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     } catch { toast("Could not load the example"); }
   }
 
-  async function readUploads(fileList) {
-    let n = 0;
-    for (const f of fileList) {
-      const path = f.webkitRelativePath || f.name;
-      if (!/\.(tf|tofu|tfvars|json|ya?ml|template|dockerfile)$|(^|\/)(terragrunt\.hcl|Dockerfile[^/]*|Containerfile)$|\.tfstate/i.test(path) || /(^|\/)(\.terraform|node_modules|vendor)\//.test(path)) continue;
-      const name = path.split("/").slice(f.webkitRelativePath ? 1 : 0).join("/") || f.name;
+  // Loading files, folders and zips. Every path goes through the same filter and limits.
+  const SCANNABLE = /\.(tf|tofu|tfvars|json|ya?ml|template|dockerfile)$|(^|\/)(terragrunt\.hcl|Dockerfile[^/]*|Containerfile)$|\.tfstate/i;
+  const SKIP_DIR = /(^|\/)(\.terraform|node_modules|vendor|\.git)(\/|$)/;
+  const OWNERS_FILE = /^(\.github\/|docs\/)?CODEOWNERS$/;
+  const LIMIT = { file: 2 << 20, files: 5000, total: 50 << 20 };
+  const unsafePath = (p) => /^\/|^[a-zA-Z]:/.test(p) || p.split("/").includes("..");
+
+  function progress(text, done, total) {
+    $("#ingest").hidden = !text;
+    $("#ingest-text").textContent = text || "";
+    $("#ingest-bar").value = total ? done / total : 0;
+  }
+
+  // entries: [{ path, size, read }]. replace: a folder or zip replaces the open files.
+  async function ingest(entries, replace) {
+    entries = entries.map((e) => ({ ...e, path: e.path.replace(/\\/g, "/").replace(/^\.\//, "") })).filter((e) => !unsafePath(e.path));
+    // Folder pickers and GitHub zips put everything under one top folder; drop it.
+    const top = entries[0]?.path.split("/")[0];
+    if (top && entries.every((e) => e.path.includes("/") && e.path.split("/")[0] === top)) entries.forEach((e) => (e.path = e.path.slice(top.length + 1)));
+    const ownersPath = (p) => OWNERS_FILE.test(p);
+    const keep = entries.filter((e) => e.path && !SKIP_DIR.test(e.path) && (SCANNABLE.test(e.path) || ownersPath(e.path)));
+    const out = {};
+    let n = 0, total = 0, big = 0, bad = 0, owners = null, stopped = "";
+    for (const [i, e] of keep.entries()) {
+      if (i % 25 === 0) progress(`Reading ${fmtN(i)} of ${fmtN(keep.length)} files`, i, keep.length);
+      if (n >= LIMIT.files) { stopped = `stopped at ${fmtN(LIMIT.files)} files`; break; }
+      if (e.size > LIMIT.file) { big++; continue; }
+      if (total + e.size > LIMIT.total) { stopped = "stopped at 50 MB"; break; }
+      let text = "";
       // A committed state file is itself the finding; never load its secrets into the editor.
-      addFile(name, /\.tfstate/.test(name) ? "" : await f.text(), false);
+      if (!/\.tfstate/i.test(e.path)) {
+        try { text = await e.read(); } catch { bad++; continue; }
+      }
+      total += e.size;
+      if (ownersPath(e.path)) { owners = text; continue; }
+      out[e.path] = text;
       n++;
     }
-    if (!S.active) openFile(Object.keys(S.files)[0] || null);
+    if (replace) {
+      S.config = ""; $("#policy-input").value = "";
+      S.aiFindings = [];
+      S.codeOwners = owners || "";
+      S.filter.file = "";
+      setFiles(out, null);
+    } else {
+      if (owners !== null) S.codeOwners = owners;
+      for (const [p, t] of Object.entries(out)) addFile(p, t, false);
+      if (!S.active || !S.files[S.active]) openFile(Object.keys(S.files)[0] || null);
+    }
+    const folders = new Set(Object.keys(out).map((p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "."))).size;
+    const extra = [big && `skipped ${big} over 2 MB`, bad && `skipped ${bad} unreadable`, owners !== null && "CODEOWNERS loaded", stopped].filter(Boolean);
+    const msg = n ? `Scanned ${fmtN(n)} file${n === 1 ? "" : "s"} in ${fmtN(folders)} folder${folders === 1 ? "" : "s"}${extra.length ? `; ${extra.join(", ")}` : ""}.` : "No files TerraGuard can scan were found.";
+    progress(msg, 1, 1);
+    clearTimeout(progress._h);
+    progress._h = setTimeout(() => progress(""), 6000);
     renderTabs();
-    toast(`Loaded ${n} file(s)`);
     scan();
+    toast(msg);
+  }
+
+  const fileEntries = (files) => [...files].map((f) => ({ path: f.webkitRelativePath || f.name, size: f.size, read: () => f.text() }));
+
+  // Zip: read the central directory, inflate each kept entry with a cap at its declared size.
+  async function zipEntries(file) {
+    if (file.size > 200 << 20) throw new Error("The zip is larger than 200 MB.");
+    const buf = await file.arrayBuffer(), dv = new DataView(buf), dec = new TextDecoder();
+    let eocd = -1;
+    for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) throw new Error("This is not a zip file.");
+    const count = dv.getUint16(eocd + 10, true), out = [];
+    let p = dv.getUint32(eocd + 16, true);
+    for (let k = 0; k < count && p + 46 <= buf.byteLength && dv.getUint32(p, true) === 0x02014b50; k++) {
+      const flags = dv.getUint16(p + 8, true), method = dv.getUint16(p + 10, true);
+      const csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+      const nlen = dv.getUint16(p + 28, true), off = dv.getUint32(p + 42, true);
+      const name = dec.decode(new Uint8Array(buf, p + 46, Math.min(nlen, buf.byteLength - p - 46)));
+      p += 46 + nlen + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+      // skip folders, encrypted entries, unknown methods and zip64 sizes
+      if (name.endsWith("/") || flags & 1 || (method !== 0 && method !== 8) || csize === 0xffffffff || usize === 0xffffffff) continue;
+      out.push({ path: name, size: usize, read: async () => {
+        if (off + 30 > buf.byteLength || dv.getUint32(off, true) !== 0x04034b50) throw new Error("bad entry");
+        const start = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true);
+        if (start + csize > buf.byteLength) throw new Error("truncated entry");
+        const data = new Uint8Array(buf, start, csize);
+        if (method === 0) { if (csize !== usize) throw new Error("size mismatch"); return dec.decode(data); }
+        return (await inflateRaw(data, usize)).text(); // never beyond the declared size
+      } });
+    }
+    return out;
+  }
+  async function openZip(file) {
+    progress(`Opening ${file.name}`, 0, 1);
+    try { await ingest(await zipEntries(file), true); }
+    catch (e) { progress(""); toast(`Could not read the zip: ${e.message}`); }
+  }
+
+  // Dropped folders: walk the tree, pruning skipped folders and unscannable names early.
+  async function dropEntries(roots) {
+    const out = [];
+    let visited = 0;
+    const walk = async (entry, prefix) => {
+      if (++visited > 50000 || out.length > LIMIT.files * 2) return;
+      const path = prefix + entry.name;
+      if (entry.isFile) {
+        if (SKIP_DIR.test(path) || !(SCANNABLE.test(path) || /(^|\/)CODEOWNERS$/.test(path))) return;
+        const f = await new Promise((ok, fail) => entry.file(ok, fail)).catch(() => null);
+        if (f) out.push({ path, size: f.size, read: () => f.text() });
+      } else if (entry.isDirectory && !SKIP_DIR.test(path + "/")) {
+        const reader = entry.createReader();
+        for (let batch; (batch = await new Promise((ok) => reader.readEntries(ok, () => ok([])))).length;) for (const c of batch) await walk(c, path + "/");
+      }
+    };
+    for (const r of roots) await walk(r, "");
+    return out;
+  }
+
+  // One self-contained HTML file: inline CSS, no scripts, every value escaped.
+  function htmlReport() {
+    const r = S.report, active = r.findings.filter((f) => !f.waived), anyOwner = active.some((f) => ownersOf(f).length);
+    const files = {};
+    for (const f of active) {
+      const k = f.file || "(no file)";
+      files[k] ||= { n: 0, worst: f.severity };
+      files[k].n++;
+      if (SEVS.indexOf(f.severity) < SEVS.indexOf(files[k].worst)) files[k].worst = f.severity;
+    }
+    const owners = {};
+    for (const f of active) for (const o of ownersOf(f).length ? ownersOf(f) : ["No owner"]) owners[o] = (owners[o] || 0) + 1;
+    const row = (f) => `<tr><td class="${esc(f.severity)}">${esc(f.severity)}</td><td><b>${esc(f.title)}</b><br>${esc(f.message)}${f.remediation ? `<br><span class="m">Fix: ${esc(f.remediation)}</span>` : ""}</td><td class="mono">${esc(f.file || "")}${f.line ? ":" + esc(f.line) : ""}<br>${esc(f.rule_id)}</td>${anyOwner ? `<td>${esc(ownersOf(f).join(", "))}</td>` : ""}</tr>`;
+    const head = `<tr><th>Severity</th><th>Finding</th><th>Where</th>${anyOwner ? "<th>Owners</th>" : ""}</tr>`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>TerraGuard report</title>
+<style>body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;color:#0a0a0b;background:#fff;max-width:1100px;margin:0 auto;padding:32px 20px}
+h1{font-size:30px;letter-spacing:-.03em;margin:0 0 4px}h2{font-size:20px;margin:36px 0 10px}.m{color:#5d5e66}.mono{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;word-break:break-all}
+table{width:100%;border-collapse:collapse;margin:8px 0}th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid #e7e7eb}th{font-size:13px;color:#5d5e66;background:#f7f7f8}
+.kpis{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0}.kpis div{border:1px solid #e7e7eb;border-radius:12px;padding:12px 16px;min-width:120px}.kpis b{display:block;font-size:24px}
+.CRITICAL{color:#c4291c;font-weight:700}.HIGH{color:#b04a05;font-weight:700}.MEDIUM{color:#8a6200;font-weight:700}.LOW{color:#1f5fcc;font-weight:700}.INFO{color:#5d5e66;font-weight:700}
+.ok{color:#157a3c}.bad{color:#c4291c}</style></head><body>
+<h1>TerraGuard report</h1><p class="m">${esc(new Date().toISOString().slice(0, 16).replace("T", " "))} UTC · engine ${esc(window.terraguard?.version || "")} · ${esc(r.stats.files)} files · ${esc(r.stats.resources)} resources</p>
+<p class="${r.verdict.will_apply ? "ok" : "bad"}"><b>${esc(r.verdict.message)}</b></p>
+<p>Policy ${r.passed ? `<span class="ok">passed</span>` : `<span class="bad">failed at ${esc(r.fail_on)}</span>`} · score ${esc(r.score)}/100 (${esc(r.grade)})</p>
+<div class="kpis">${SEVS.map((s) => `<div><b class="${s}">${esc(r.summary[s] || 0)}</b>${s.toLowerCase()}</div>`).join("")}<div><b>${esc(r.fixable)}</b>auto-fixable</div><div><b>${esc(r.waived)}</b>waived</div></div>
+<h2>By file</h2><table><tr><th>File</th><th>Findings</th><th>Worst</th></tr>${Object.entries(files).sort((a, b) => b[1].n - a[1].n).map(([k, v]) => `<tr><td class="mono">${esc(k)}</td><td>${v.n}</td><td class="${esc(v.worst)}">${esc(v.worst)}</td></tr>`).join("")}</table>
+${anyOwner ? `<h2>By owner</h2><table><tr><th>Owner</th><th>Findings</th></tr>${Object.entries(owners).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")}</table>` : ""}
+${SEVS.filter((s) => active.some((f) => f.severity === s)).map((s) => `<h2>${s[0] + s.slice(1).toLowerCase()} (${active.filter((f) => f.severity === s).length})</h2><table>${head}${active.filter((f) => f.severity === s).sort((a, b) => (a.file || "").localeCompare(b.file || "") || a.line - b.line).map(row).join("")}</table>`).join("")}
+${active.length ? "" : "<p>No active findings.</p>"}
+<p class="m">Generated in the browser by TerraGuard. Nothing was uploaded.</p></body></html>`;
+  }
+
+  // Add-ons panel
+  const ADDON_TEMPLATES = [
+    ["Require tags", `id: ADDON-TAGS-001
+title: Instances, buckets and databases have an owner tag
+severity: MEDIUM
+resource_types: [aws_instance, aws_s3_bucket, aws_db_instance]
+attribute: tags.owner
+exists: true
+remediation: Add tags = { owner = "team-name" }`],
+    ["Deny public buckets", `id: ADDON-S3-PUBLIC
+title: S3 buckets are never public
+severity: HIGH
+resource_types: [aws_s3_bucket, aws_s3_bucket_acl]
+attribute: acl
+not_in: [public-read, public-read-write]
+remediation: Use acl = "private" and serve content through a CDN.`],
+    ["Allowed instance types", `id: ADDON-EC2-TYPES
+title: Only approved instance types
+severity: MEDIUM
+resource_types: [aws_instance, aws_launch_template]
+attribute: instance_type
+in: [t3.micro, t3.small, t3.medium, m6i.large]
+remediation: Pick an approved size or ask the platform team.`],
+    ["Encrypted databases", `id: ADDON-DB-ENCRYPT
+title: Databases encrypt storage
+severity: HIGH
+resource_types: [aws_db_instance, aws_rds_cluster]
+attribute: storage_encrypted
+equals: true`],
+    ["Production backups", `id: ADDON-DB-BACKUP
+title: Production databases keep 14 days of backups
+severity: MEDIUM
+resource_types: [aws_db_instance]
+where: [{ attribute: tags.env, equals: prod }]
+attribute: backup_retention_period
+min: 14`],
+  ];
+  const INTEGRATIONS = [
+    ["VS Code", "Findings on save and quick fixes.", `code --install-extension terraguard-${RELEASE_N}.vsix`],
+    ["Neovim", "Diagnostics over LSP.", `vim.lsp.start({ name = "terraguard", cmd = { "terraguard", "lsp" } })`],
+    ["JetBrains", "With the LSP4IJ plugin, command:", "terraguard lsp"],
+    ["GitHub Action", "Gate pull requests.", `uses: Karthik-099/TERRAGUARD@${RELEASE}`],
+    ["pre-commit", "Check before every commit.", "- repo: https://github.com/Karthik-099/TERRAGUARD"],
+    ["MCP for AI agents", "Scan and fix tools for agents.", "claude mcp add terraguard -- terraguard mcp"],
+    ["Admission webhook", "The cluster refuses what CI would.", "terraguard serve --admission-policy .terraguard.yml"],
+  ];
+  const globRe = (g) => new RegExp("^" + g.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$");
+  const addonMsg = (t, bad) => { $("#addon-msg").textContent = t; $("#addon-msg").style.color = bad ? "var(--crit)" : ""; };
+
+  // Validates one rule with the engine (DraftRule) and dry-runs it on the loaded files.
+  function testAddon() {
+    if (!window.terraguard) return null;
+    const src = $("#addon-yaml").value.trim();
+    if (!src) { addonMsg("Write a rule or pick a template first.", true); return null; }
+    const d = JSON.parse(terraguard.draftRule(src, JSON.stringify({ files: S.files })));
+    if (d.error) {
+      $("#addon-result").innerHTML = `<div class="addon-res bad">${esc(d.error)}</div>`;
+      addonMsg("");
+      return null;
+    }
+    const types = (d.rule.resource_types || []).map(globRe);
+    const fails = new Set(d.hits.map((h) => h.resource));
+    const items = (S.report?.coverage?.items || []).filter((it) => types.some((re) => re.test(it.type)));
+    const pass = items.filter((it) => !fails.has(it.address));
+    const li = (file, line, label) => `<li><button class="loc" data-jump="${esc(file)}" data-line="${+line || 0}">${esc(label)}</button></li>`;
+    $("#addon-result").innerHTML = `<div class="addon-res"><b>${esc(d.rule.id)}</b> is valid. ${Object.keys(S.files).length ? `${d.hits.length} failing, ${pass.length} passing or out of scope.` : "Load files to see what it flags."}
+      ${items.length || d.hits.length ? `<div class="addon-cols">
+        <div class="fail"><h4>Fails (${d.hits.length})</h4><ul>${d.hits.slice(0, 50).map((h) => li(h.file, h.line, h.resource || h.file)).join("") || `<li class="muted">None</li>`}</ul></div>
+        <div class="pass"><h4>Passes (${pass.length})</h4><ul>${pass.slice(0, 50).map((it) => li(it.file, it.line, it.address)).join("") || `<li class="muted">None</li>`}</ul></div></div>` : ""}</div>`;
+    addonMsg("");
+    return d;
+  }
+  function saveAddon() {
+    const d = testAddon();
+    if (!d) return;
+    if (hasRule(S.config, d.rule.id)) return addonMsg(`${d.rule.id} is already in the policy file.`, true);
+    const a = { id: d.rule.id, title: d.rule.title || d.rule.id, src: $("#addon-yaml").value.trim(), yaml: d.yaml, on: true };
+    const i = addons.findIndex((x) => x.id === a.id);
+    i >= 0 ? (addons[i] = a) : addons.push(a);
+    saveAddons();
+    renderAddons();
+    scan();
+    addonMsg(`${a.id} saved and on.`);
+  }
+  function renderAddons() {
+    const on = addons.filter((a) => a.on).length, c = $("#count-addons");
+    c.hidden = !on;
+    c.textContent = on;
+    if (!$("#addon-templates").innerHTML) {
+      $("#addon-templates").innerHTML = ADDON_TEMPLATES.map(([name], i) => `<button class="chip" data-addon-template="${i}">${esc(name)}</button>`).join("");
+      $("#addon-integ").innerHTML = INTEGRATIONS.map(([name, what, cmd]) => `<div class="card"><h3>${esc(name)}</h3><p>${esc(what)}</p><pre>${esc(cmd)}</pre></div>`).join("")
+        + `<div class="card"><h3>Everything else</h3><p>CLI, Docker, GitLab, Jenkins and self-hosting.</p><a class="link-more" href="#/integrations">All integrations</a></div>`;
+      addCopyButtons($("#addon-integ"));
+    }
+    $("#addon-list").innerHTML = addons.length ? addons.map((a, i) => `<div class="addon-item">
+        <label class="switch" title="${a.on ? "On" : "Off"}"><input type="checkbox" data-addon-toggle="${i}" ${a.on ? "checked" : ""} aria-label="Turn ${esc(a.id)} on or off"><span></span></label>
+        <div class="grow"><b>${esc(a.title)}</b><span class="rid">${esc(a.id)}</span></div>
+        <button class="btn sm" data-addon-edit="${i}">Edit</button><button class="btn sm ghost" data-addon-del="${i}">Remove</button></div>`).join("")
+      : `<p class="hint">None yet. Pick a template above, test it, then save.</p>`;
+  }
+  // A pack is a policy file with custom_rules; each rule is validated before it is kept.
+  async function importAddons(file) {
+    if (file.size > 1 << 20) return addonMsg("Packs larger than 1 MB are not imported.", true);
+    const lines = (await file.text()).replace(/\r/g, "").split("\n").filter((l) => !/^\s*#/.test(l) && !/^custom_rules:\s*$/.test(l));
+    const base = Math.min(...lines.filter((l) => /^\s*- /.test(l)).map((l) => l.match(/^\s*/)[0].length));
+    if (!isFinite(base)) return addonMsg("No rules found in that file.", true);
+    const chunks = [];
+    for (const l of lines) {
+      if (l.match(/^\s*/)[0].length === base && /^\s*- /.test(l)) chunks.push([]);
+      if (chunks.length && l.trim()) chunks.at(-1).push(l.slice(base));
+    }
+    let ok = 0, bad = 0;
+    for (const c of chunks.slice(0, 200)) {
+      const src = c.join("\n");
+      const d = JSON.parse(terraguard.draftRule(src, "{}"));
+      if (d.error) { bad++; continue; }
+      const a = { id: d.rule.id, title: d.rule.title || d.rule.id, src, yaml: d.yaml, on: true };
+      const i = addons.findIndex((x) => x.id === a.id);
+      i >= 0 ? (addons[i] = a) : addons.push(a);
+      ok++;
+    }
+    saveAddons();
+    renderAddons();
+    scan();
+    addonMsg(`Imported ${ok} rule${ok === 1 ? "" : "s"}${bad ? `; ${bad} rejected by the engine` : ""}.`, !ok);
   }
 
   function showTab(tab) {
@@ -1131,6 +1533,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     if (tab === "rules" && !$("#rules-list").innerHTML) renderRules();
     if (tab === "cicd") renderCICD();
     if (tab === "ai") renderChat();
+    if (tab === "addons") renderAddons();
     if (tab === "graph") requestAnimationFrame(renderGraph);
     else renderAll();
   }
@@ -1179,7 +1582,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
   function wire() {
     addEventListener("hashchange", route);
     $$("[data-theme-toggle]").forEach((b) => (b.onclick = toggleTheme));
-    $(".ws-nav").addEventListener("click", (e) => e.target.dataset.tab && showTab(e.target.dataset.tab));
+    $(".ws-nav").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) showTab(b.dataset.tab); });
 
     $("#file-tabs").addEventListener("click", (e) => {
       const close = e.target.dataset.close;
@@ -1196,8 +1599,23 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     });
 
     $("#btn-new").onclick = () => { const n = prompt("File name", "new.tf"); if (n && !S.files[n]) { addFile(n, ""); scan(); } };
-    $("#upload").onchange = (e) => readUploads(e.target.files);
-    $("#upload-dir").onchange = (e) => readUploads(e.target.files);
+    $("#upload").onchange = (e) => { ingest(fileEntries(e.target.files), false); e.target.value = ""; };
+    $("#upload-dir").onchange = (e) => { ingest(fileEntries(e.target.files), true); e.target.value = ""; };
+    $("#upload-zip").onchange = (e) => { if (e.target.files[0]) openZip(e.target.files[0]); e.target.value = ""; };
+    $("#editor").addEventListener("click", (e) => {
+      const ex = e.target.closest("[data-example]");
+      if (ex) loadExample(ex.dataset.example);
+      else if (e.target.closest("[data-new-file]")) $("#btn-new").click();
+    });
+    $("#file-tree").addEventListener("click", (e) => { const b = e.target.closest("[data-open-file]"); if (b) openFile(b.dataset.openFile); });
+    $("#file-tree").addEventListener("toggle", (e) => {
+      const d = e.target.dataset?.dir;
+      if (d !== undefined) e.target.open ? S.treeClosed.delete(d) : S.treeClosed.add(d);
+    }, true);
+    const treeBtn = $("#btn-tree"), body = $(".editor-body");
+    const setTree = (show) => { body.classList.toggle("no-tree", !show); treeBtn.setAttribute("aria-expanded", show); };
+    setTree(innerWidth > 960);
+    treeBtn.onclick = () => setTree(body.classList.contains("no-tree"));
     $("#example-select").onchange = (e) => { if (e.target.value) loadExample(e.target.value); e.target.value = ""; };
     $("#btn-download").onclick = () => S.active && download(S.active, S.files[S.active]);
     $("#btn-format").onclick = () => {
@@ -1215,25 +1633,27 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
     $("#btn-docs-download").onclick = () => download($("#docs-kind").value === "agents" ? "AGENTS.md" : "README.md", S.docs || "", "text/markdown");
     $("#docs-kind").onchange = renderDocs;
 
-    const ed = $("#editor");
-    ed.addEventListener("dragover", (e) => { e.preventDefault(); ed.classList.add("dragging"); });
-    ed.addEventListener("dragleave", () => ed.classList.remove("dragging"));
-    ed.addEventListener("drop", async (e) => {
+    // Drop files, folders or a zip anywhere on the workspace.
+    const app = $("#app");
+    let depth = 0;
+    const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+    app.addEventListener("dragenter", (e) => { if (hasFiles(e)) { depth++; app.classList.add("dragging"); } });
+    app.addEventListener("dragover", (e) => { if (hasFiles(e)) e.preventDefault(); });
+    app.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; app.classList.remove("dragging"); } });
+    app.addEventListener("drop", async (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
-      ed.classList.remove("dragging");
-      const files = [];
-      const walk = async (entry, prefix = "") => {
-        if (entry.isFile) files.push(new File([await new Promise((r) => entry.file(r))], prefix + entry.name));
-        else if (entry.isDirectory && entry.name !== ".terraform" && entry.name !== ".git") {
-          const reader = entry.createReader();
-          let batch;
-          while ((batch = await new Promise((r) => reader.readEntries(r))).length) for (const c of batch) await walk(c, prefix + entry.name + "/");
-        }
-      };
-      const items = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
-      if (items.length) for (const it of items) await walk(it);
-      else files.push(...e.dataTransfer.files);
-      readUploads(files);
+      depth = 0;
+      app.classList.remove("dragging");
+      // Entries must be taken synchronously; the transfer is cleared after the first await.
+      const roots = [...e.dataTransfer.items].filter((i) => i.kind === "file").map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
+      const files = [...e.dataTransfer.files];
+      if (files.length === 1 && /\.zip$/i.test(files[0].name)) return openZip(files[0]);
+      if (roots.some((r) => r.isDirectory)) {
+        progress("Reading the folder", 0, 1);
+        return ingest(await dropEntries(roots), true);
+      }
+      ingest(fileEntries(files), false);
     });
 
     $("#filter-q").oninput = (e) => { S.filter.q = e.target.value; renderFindings(); };
@@ -1247,6 +1667,32 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       const c = e.target.closest("[data-cloud]");
       if (c) { S.filter.cloud = c.dataset.cloud; renderFindings(); }
     };
+    $("#filter-file").onchange = (e) => { S.filter.file = e.target.value; renderFindings(); };
+    $("#filter-format").onchange = (e) => { S.filter.format = e.target.value; renderFindings(); };
+    $("#group-by").onchange = (e) => { S.filter.group = e.target.value; renderFindings(); };
+
+    $("#addon-test").onclick = testAddon;
+    $("#addon-save").onclick = saveAddon;
+    $("#addon-export").onclick = () => {
+      if (!addons.length) return addonMsg("Save an add-on first.", true);
+      download("terraguard-addons.yml", `# TerraGuard add-on pack: merge into .terraguard.yml or import in the workspace\ncustom_rules:\n${addons.map((a) => a.yaml.trimEnd()).join("\n")}\n`, "text/yaml");
+    };
+    $("#addon-import").onchange = (e) => { if (e.target.files[0]) importAddons(e.target.files[0]); e.target.value = ""; };
+    $("#tab-addons").addEventListener("click", (e) => {
+      const d = e.target.closest("[data-addon-template],[data-addon-edit],[data-addon-del]")?.dataset;
+      if (!d) return;
+      if (d.addonTemplate !== undefined) { $("#addon-yaml").value = ADDON_TEMPLATES[+d.addonTemplate][1]; testAddon(); }
+      else if (d.addonEdit !== undefined) { $("#addon-yaml").value = addons[+d.addonEdit].src; $("#addon-yaml").focus(); testAddon(); }
+      else if (d.addonDel !== undefined && confirm(`Remove ${addons[+d.addonDel].id}?`)) { addons.splice(+d.addonDel, 1); saveAddons(); renderAddons(); scan(); }
+    });
+    $("#tab-addons").addEventListener("change", (e) => {
+      const i = e.target.dataset.addonToggle;
+      if (i === undefined) return;
+      addons[+i].on = e.target.checked;
+      saveAddons();
+      renderAddons();
+      scan();
+    });
 
     // Actions on finding cards and tiles, shared across tabs.
     document.addEventListener("click", (e) => {
@@ -1268,10 +1714,10 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       else if (d.copyFinding !== undefined) {
         const f = all[+d.copyFinding];
         navigator.clipboard.writeText(`[${f.severity}] ${f.rule_id} ${f.title}\n${f.file}${f.line ? ":" + f.line : ""}${f.resource ? " (" + f.resource + ")" : ""}\n${f.message}${f.remediation ? "\nFix: " + f.remediation : ""}`);
-        toast("Finding copied");
+        toast("Fix copied");
       }
       else if (d.tabGo) showTab(d.tabGo);
-      else if (d.filterRule) { S.filter.q = d.filterRule; $("#filter-q").value = d.filterRule; showTab("findings"); }
+      else if (d.filterRule) { S.filter.q = d.filterRule; $("#filter-q").value = d.filterRule; $("#more-filters").open = true; showTab("findings"); }
       else if (d.q) { const q = typeof QUICK[d.q] === "function" ? QUICK[d.q]() : QUICK[d.q]; if (q) ask(q); }
     });
 
@@ -1282,6 +1728,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       const f = e.target.dataset.export;
       if (!f) return;
       $("#export-menu").hidden = true;
+      if (f === "html") return S.report ? download("terraguard-report.html", htmlReport(), "text/html") : toast("Add files first");
       download({ markdown: "terraguard-report.md", json: "terraguard-report.json", sarif: "terraguard.sarif", junit: "terraguard-junit.xml", codequality: "gl-code-quality.json", checkstyle: "terraguard-checkstyle.xml" }[f], terraguard.render(JSON.stringify(input()), f));
     };
 
@@ -1299,7 +1746,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       else if (e.altKey && e.code === "KeyF") { e.preventDefault(); fixAll(); }
       else if (e.altKey && e.code === "KeyS") { e.preventDefault(); $("#btn-share").click(); }
       else if (typing || e.altKey) return;
-      else if (e.key === "/") { e.preventDefault(); if (S.tab !== "rules") showTab("findings"); $(S.tab === "rules" ? "#rules-q" : "#filter-q")?.focus(); }
+      else if (e.key === "/") { e.preventDefault(); if (S.tab !== "rules") { showTab("findings"); $("#more-filters").open = true; } $(S.tab === "rules" ? "#rules-q" : "#filter-q")?.focus(); }
       else if (e.key === "?") { e.preventDefault(); $("#shortcuts").showModal(); }
     });
     $("#nl-draft").onclick = draftFromText;
@@ -1369,7 +1816,11 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
       b.textContent = "Copy";
       b.setAttribute("aria-label", "Copy to clipboard");
       b.onclick = async () => {
-        try { await navigator.clipboard.writeText(pre.innerText.trim()); b.textContent = "Copied"; } catch { b.textContent = "Press Ctrl+C"; }
+        // Terminal blocks copy only their commands, not the sample output.
+        const text = pre.classList.contains("term")
+          ? pre.innerText.split("\n").filter((l) => l.startsWith("$ ")).map((l) => l.slice(2).replace(/\s+#.*$/, "")).join("\n") || pre.innerText
+          : pre.innerText;
+        try { await navigator.clipboard.writeText(text.trim()); b.textContent = "Copied"; } catch { b.textContent = "Press Ctrl+C"; }
         setTimeout(() => (b.textContent = "Copy"), 1600);
       };
       wrap.append(b);
@@ -1377,7 +1828,7 @@ Prefer least privilege, encryption, private networking and pinned versions. Neve
   }
 
   // Install commands per platform; selecting one never downloads anything.
-  const RELEASE_URL = "https://github.com/Karthik-099/TERRAGUARD/releases/latest/download/terraguard_";
+  const RELEASE_URL = `https://github.com/Karthik-099/TERRAGUARD/releases/download/${RELEASE}/terraguard_`;
   function installCommand(p) {
     if (p.startsWith("windows")) {
       return `# PowerShell
@@ -1400,6 +1851,9 @@ terraguard scan .`;
     $("#dl-binary").textContent = `Download terraguard_${p}${ext}`;
   }
   function setupDownloads() {
+    $$("[data-release]").forEach((el) => (el.textContent = RELEASE));
+    $$("[data-release-n]").forEach((el) => (el.textContent = RELEASE_N));
+    if ($("#dl-vsix")) $("#dl-vsix").href = `https://github.com/Karthik-099/TERRAGUARD/releases/download/${RELEASE}/terraguard-${RELEASE_N}.vsix`;
     if (!$("#install-cmd")) return;
     const ua = navigator.userAgent, arm = /arm|aarch64/i.test(navigator.userAgentData?.architecture || ua);
     const detected = /Windows/.test(ua) ? "windows_amd64" : /Mac/.test(ua) ? (arm || !/Intel/.test(ua) ? "darwin_arm64" : "darwin_amd64") : arm ? "linux_arm64" : "linux_amd64";
@@ -1408,60 +1862,88 @@ terraguard scan .`;
     selectPlatform(detected);
   }
 
-  // Background: a slowly drifting graph of nodes, like the infrastructure it
-  // checks. Links follow the pointer; it pauses when hidden or in the workspace.
-  function network(canvas) {
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d"), dpr = Math.min(devicePixelRatio || 1, 2), pointer = { x: -1e4, y: -1e4 };
-    let nodes = [], w = 0, h = 0;
-    const size = () => {
-      w = canvas.width = innerWidth * dpr; h = canvas.height = innerHeight * dpr;
-      const n = Math.min(90, Math.round((innerWidth * innerHeight) / 18000));
-      nodes = Array.from({ length: n }, () => ({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.25 * dpr, vy: (Math.random() - 0.5) * 0.25 * dpr, r: (Math.random() * 1.4 + 0.8) * dpr }));
-    };
+  // Command palette: Ctrl/Cmd+K anywhere. Pick a page, a doc, an action or a rule search.
+  function setupPalette() {
+    const dlg = $("#palette"), q = $("#palette-q"), list = $("#palette-list");
+    if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) $$("[data-mod]").forEach((k) => (k.textContent = "Cmd K"));
+    const go = (hash) => () => { location.hash = hash; };
+    // Runs fn once the workspace is open and the engine is ready.
+    const ws = (fn) => () => { if (!inApp()) { location.hash = "#/app"; route(); } appReady?.then(fn); };
+    // File pickers need the click itself, so they open right away.
+    const pick = (id) => () => { $(id).click(); if (!inApp()) location.hash = "#/app"; };
+    const DOC_ITEMS = [["guide", "Getting started"], ["reference", "Reference: CLI, policy, API, MCP"], ["plugins", "Plugins and add-ons"], ["vuln", "Vulnerability scanning"], ["rules", "Rule catalog"],
+      ["limits", "Guarantees and limits"], ["self-hosting", "Self-hosting"], ["security", "Security and threat model"], ["architecture", "Architecture"]];
+    const BASE = [
+      ["Open the workspace", "Workspace", go("#/app")],
+      ["Open a folder", "Workspace", pick("#upload-dir")],
+      ["Open a zip of a repository", "Workspace", pick("#upload-zip")],
+      ["Load the example project", "Workspace", ws(() => loadExample("insecure"))],
+      ["Export an HTML report", "Workspace", ws(() => (S.report ? download("terraguard-report.html", htmlReport(), "text/html") : toast("Add files first")))],
+      ["Switch theme (system, light, dark)", "Settings", () => toggleTheme()],
+      ["What's new in 3.0", "Page", go("#/whats-new")],
+      ["Integrations and install", "Page", go("#/integrations")],
+      ["Policy-as-code", "Page", go("#/policy")],
+      ["AI", "Page", go("#/ai")],
+      ["Compare", "Page", go("#/compare")],
+      ["Open source and support", "Page", go("#/open-source")],
+      ...DOC_ITEMS.map(([slug, t]) => [t, "Docs", go(`#/docs/${slug}`)]),
+    ];
+    let items = [], sel = 0;
     const draw = () => {
-      const dark = isDark(), reach = 150 * dpr;
-      ctx.clearRect(0, 0, w, h);
-      for (const a of nodes) {
-        a.x += a.vx; a.y += a.vy;
-        if (a.x < 0 || a.x > w) a.vx *= -1;
-        if (a.y < 0 || a.y > h) a.vy *= -1;
-      }
-      ctx.lineWidth = dpr;
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i], b = nodes[j], d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < reach) {
-            ctx.strokeStyle = dark ? `rgba(79,227,193,${(1 - d / reach) * 0.22})` : `rgba(13,148,136,${(1 - d / reach) * 0.18})`;
-            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-          }
-        }
-        const a = nodes[i], d = Math.hypot(a.x - pointer.x, a.y - pointer.y);
-        if (d < reach * 1.4) {
-          ctx.strokeStyle = `rgba(167,139,250,${(1 - d / (reach * 1.4)) * 0.5})`;
-          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(pointer.x, pointer.y); ctx.stroke();
-        }
-        ctx.fillStyle = dark ? "rgba(154,245,223,.7)" : "rgba(13,148,136,.55)";
-        ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2); ctx.fill();
-      }
+      const text = q.value.trim(), words = text.toLowerCase().split(/\s+/).filter(Boolean);
+      items = BASE.filter(([t, k]) => words.every((w) => `${t} ${k}`.toLowerCase().includes(w)));
+      if (text) items.push([`Search rules for "${text}"`, "Rules", ws(() => { showTab("rules"); const r = $("#rules-q"); if (r) { r.value = text; r.dispatchEvent(new Event("input")); } })],
+        [`Search findings for "${text}"`, "Findings", ws(() => { S.filter.q = text; $("#filter-q").value = text; showTab("findings"); })]);
+      sel = Math.min(sel, items.length - 1);
+      list.innerHTML = items.map(([t, k], i) => `<li role="option" id="pal-${i}" aria-selected="${i === sel}" data-pal="${i}"><span>${esc(t)}</span><small>${esc(k)}</small></li>`).join("");
+      q.setAttribute("aria-activedescendant", items.length ? `pal-${sel}` : "");
+      list.children[sel]?.scrollIntoView({ block: "nearest" });
     };
-    let raf = 0;
-    const loop = () => { draw(); raf = requestAnimationFrame(loop); };
-    const run = () => {
-      cancelAnimationFrame(raf);
-      if (document.hidden || $("#landing").hidden) return;
-      reduceMotion ? draw() : loop();
-    };
-    size();
-    addEventListener("resize", () => { size(); run(); });
-    addEventListener("pointermove", (e) => { pointer.x = e.clientX * dpr; pointer.y = e.clientY * dpr; }, { passive: true });
-    document.addEventListener("visibilitychange", run);
-    addEventListener("hashchange", () => setTimeout(run));
-    run();
+    const run = (i) => { const it = items[i]; if (!it) return; dlg.close(); it[2](); };
+    const open = () => { if (dlg.open) return; q.value = ""; sel = 0; draw(); dlg.showModal(); q.focus(); };
+    q.addEventListener("input", () => { sel = 0; draw(); });
+    q.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); sel = (sel + (e.key === "ArrowDown" ? 1 : -1) + items.length) % Math.max(items.length, 1); draw(); }
+      else if (e.key === "Enter") { e.preventDefault(); run(sel); }
+    });
+    list.addEventListener("click", (e) => { const li = e.target.closest("[data-pal]"); if (li) run(+li.dataset.pal); });
+    dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); }); // click on the backdrop
+    document.addEventListener("click", (e) => { if (e.target.closest("[data-palette]")) open(); });
+    addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") { e.preventDefault(); e.stopPropagation(); open(); }
+      else if (e.key === "Escape" && !$("#export-menu").hidden) $("#export-menu").hidden = true;
+    }, true);
   }
 
+  // Product page motion: calm reveal on scroll, a header hairline once scrolled,
+  // the mobile menu and the showcase tabs. Nothing moves for reduced motion.
   function setupMotion() {
-    const targets = $$("#landing .section-head, #landing .card, #landing .stage, #landing .metric, #landing .lane, #landing .diagram, #landing .table-wrap, #landing .policy-code, #landing .cap-list > div, #landing .try-panel, #landing .install, #landing .layer, #landing .flow");
+    const header = $(".site-header");
+    const onScroll = () => header.classList.toggle("scrolled", scrollY > 8);
+    addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    $("#menu-btn").onclick = () => {
+      const open = header.classList.toggle("open");
+      $("#menu-btn").setAttribute("aria-expanded", open);
+    };
+    for (const box of $$("[data-tabs]")) {
+      const tabs = $$("[data-show]", box);
+      const select = (b, focus) => {
+        for (const t of tabs) { const on = t === b; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; }
+        $$("[data-show-panel]", box).forEach((p) => (p.hidden = p.dataset.showPanel !== b.dataset.show));
+        if (focus) b.focus();
+      };
+      box.addEventListener("click", (e) => { const b = e.target.closest("[data-show]"); if (b) select(b); });
+      box.addEventListener("keydown", (e) => {
+        const i = tabs.indexOf(document.activeElement);
+        if (i < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+        e.preventDefault();
+        const n = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+        select(tabs[n], true);
+      });
+    }
+    if (reduceMotion) return;
+    const targets = $$("#landing .section-head, #landing .tile-card, #landing .feature-list li, #landing .trust article, #landing .integ-grid li, #landing .private, #landing .showcase, #landing .try-panel, #landing .card, #landing .stage, #landing .metric, #landing .table-wrap, #landing .pipeline li, #landing .install, #landing .hero-visual");
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
@@ -1469,42 +1951,12 @@ terraguard scan .`;
         io.unobserve(e.target);
         countUp(e.target);
       }
-    }, { rootMargin: "0px 0px -8% 0px" });
+    }, { rootMargin: "0px 0px -6% 0px" });
     for (const el of targets) {
-      const siblings = [...el.parentElement.children].filter((c) => c.matches(el.tagName));
-      el.style.setProperty("--d", `${Math.min(siblings.indexOf(el), 6) * 70}ms`);
+      const siblings = [...el.parentElement.children];
+      el.style.setProperty("--d", `${Math.min(siblings.indexOf(el), 5) * 60}ms`);
       el.classList.add("reveal");
       io.observe(el);
-    }
-    countUp($(".facts"));
-    network($("#net"));
-    if (reduceMotion) return;
-    // Background orbs drift with scroll; cards tilt slightly toward the pointer.
-    let ticking = false;
-    addEventListener("scroll", () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const y = scrollY;
-        document.documentElement.style.setProperty("--sx", `${Math.sin(y / 900) * 60}px`);
-        document.documentElement.style.setProperty("--sy", `${(y % 1200) / 20}px`);
-        const max = document.documentElement.scrollHeight - innerHeight;
-        document.documentElement.style.setProperty("--progress", max > 0 ? (y / max).toFixed(4) : 0);
-        document.documentElement.style.setProperty("--hx", `${Math.max(0, 14 - y / 30)}deg`);
-        ticking = false;
-      });
-    }, { passive: true });
-    for (const card of $$("#landing .grid-3 > .card, #landing .grid-4 > .card, #landing .demo-steps > .card, #landing .deploy-grid > .card")) {
-      card.classList.add("tilt");
-      card.addEventListener("pointermove", (e) => {
-        const r = card.getBoundingClientRect();
-        card.style.setProperty("--ry", `${((e.clientX - r.left) / r.width - 0.5) * 6}deg`);
-        card.style.setProperty("--rx", `${-((e.clientY - r.top) / r.height - 0.5) * 6}deg`);
-        card.style.setProperty("--mx", `${e.clientX - r.left}px`);
-        card.style.setProperty("--my", `${e.clientY - r.top}px`);
-        card.style.setProperty("--ty", "-3px");
-      });
-      card.addEventListener("pointerleave", () => { card.style.setProperty("--rx", "0deg"); card.style.setProperty("--ry", "0deg"); card.style.setProperty("--ty", "0"); });
     }
   }
 
@@ -1564,13 +2016,17 @@ terraguard scan .`;
     $("#install-box .install-tabs").addEventListener("click", (e) => {
       const b = e.target.closest("[data-install]");
       if (!b) return;
-      $$("#install-box [data-install]").forEach((x) => x.classList.toggle("on", x === b));
+      $$("#install-box [data-install]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", x === b); });
       $$("#install-box [data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== b.dataset.install));
+      const panel = $("#install-box .install-panel");
+      if (panel.getBoundingClientRect().top > innerHeight - 120) panel.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
     });
   }
 
   // Boot (fonts are self-hosted; GitHub stats are skipped when air-gapped)
+  applyTheme(themeMode);
   wire();
+  setupPalette();
   setupMotion();
   setupDownloads();
   addCopyButtons($("#landing"));
@@ -1579,6 +2035,5 @@ terraguard scan .`;
   setupScrollButtons();
   route();
   AI.detectServer().then(renderLiveStats);
-  if (!LOCAL) renderGitHub();
   mountGiscus();
 })();

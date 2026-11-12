@@ -5,7 +5,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -250,5 +254,43 @@ func TestUbuntuSuffixLookup(t *testing.T) {
 	ms, err := MatchAll(db, []Package{{Ecosystem: "Ubuntu:22.04", Name: "openssl", Version: "3.0.2-0ubuntu1.10"}})
 	if err != nil || len(ms) != 1 || ms[0].Severity != "MEDIUM" {
 		t.Fatalf("ms = %+v, err = %v", ms, err)
+	}
+}
+
+func TestScanImageLimits(t *testing.T) {
+	// One layer with more lockfiles than the limit, cut short: the limit must
+	// trip while reading, before the whole layer is held in memory.
+	var many []tarFile
+	for i := 0; i <= maxImageFiles+1; i++ {
+		many = append(many, tarFile{name: fmt.Sprintf("a%d/package-lock.json", i), body: "{}"})
+	}
+	layer := makeTar(t, many, false)
+	layer = layer[:len(layer)-1024-600]
+	archive := makeTar(t, []tarFile{{name: "manifest.json", body: `[{"Layers": ["l.tar"]}]`}, {name: "l.tar", body: string(layer)}}, false)
+	if _, err := ScanImage(bytes.NewReader(archive), int64(len(archive))); err == nil || !strings.Contains(err.Error(), "scan limit") {
+		t.Errorf("many files in one layer: %v", err)
+	}
+
+	small := makeTar(t, []tarFile{{name: "etc/os-release", body: "ID=debian\n"}}, false)
+	layers := strings.Repeat(`"l.tar",`, maxLayers) + `"l.tar"`
+	archive = makeTar(t, []tarFile{{name: "manifest.json", body: `[{"Layers": [` + layers + `]}]`}, {name: "l.tar", body: string(small)}}, false)
+	if _, err := ScanImage(bytes.NewReader(archive), int64(len(archive))); err == nil || !strings.Contains(err.Error(), "layers") {
+		t.Errorf("repeated layers: %v", err)
+	}
+}
+
+func TestDownloadRedirectsStayHTTPS(t *testing.T) {
+	for u, ok := range map[string]bool{"https://storage.googleapis.com/x.zip": true, "http://storage.googleapis.com/x.zip": false, "file:///etc/passwd": false} {
+		r, _ := http.NewRequest("GET", u, nil)
+		if err := httpsOnly(r, nil); (err == nil) != ok {
+			t.Errorf("%s: %v", u, err)
+		}
+	}
+}
+
+func TestUpdateRefusedOffline(t *testing.T) {
+	t.Setenv("TERRAGUARD_OFFLINE", "true")
+	if err := Update(context.Background(), t.TempDir(), []string{"Go"}, io.Discard); err == nil || !strings.Contains(err.Error(), "OFFLINE") {
+		t.Fatalf("want an offline refusal, got %v", err)
 	}
 }

@@ -32,6 +32,12 @@ type Input struct {
 	// Only and Skip select rules by ID or glob for this run (--check, --skip-check).
 	Only []string `json:"only,omitempty"`
 	Skip []string `json:"skip,omitempty"`
+	// CodeOwners is the text of a CODEOWNERS file; every finding with a file
+	// gets the owners of that file in Finding.CodeOwners.
+	CodeOwners string `json:"code_owners,omitempty"`
+	// CodeOwnersRoot is the Files key prefix (a directory) the CODEOWNERS
+	// patterns are relative to; empty means the keys already are.
+	CodeOwnersRoot string `json:"code_owners_root,omitempty"`
 }
 
 type Report struct {
@@ -244,11 +250,20 @@ func Scan(in Input) *Report {
 			findings[i].Line, findings[i].Fix = lines[findings[i].Line], nil
 		}
 	}
+	// After the JSON line mapping: the secret scan reads the raw files and has its own lines.
+	findings = supersedeOldSecrets(append(findings, secretScan(files)...))
+	ignSrc := make(map[string][]byte, len(files)) // inline ignores also apply in files the parser did not keep
+	for name, src := range files {
+		ignSrc[name] = []byte(src)
+	}
+	for name, src := range m.Files {
+		ignSrc[name] = src
+	}
 	blockLine := map[string]int{}
 	for _, b := range m.Blocks {
 		blockLine[b.Address()] = b.Line
 	}
-	findings = applyPolicy(findings, cfg, inlineIgnores(m.Files, time.Now()), blockLine, time.Now())
+	findings = applyPolicy(findings, cfg, inlineIgnores(ignSrc, time.Now()), blockLine, time.Now())
 	if len(in.Baseline) > 0 {
 		accepted := map[string]bool{}
 		for _, k := range in.Baseline {
@@ -258,6 +273,12 @@ func Scan(in Input) *Report {
 			if !findings[i].Waived && accepted[FindingKey(findings[i])] && !globAny(cfg.Unwaivable, findings[i].RuleID) {
 				findings[i].Waived, findings[i].WaiverReason = true, "accepted in baseline"
 			}
+		}
+	}
+	if in.CodeOwners != "" {
+		co := ParseCodeOwners(in.CodeOwners)
+		for i := range findings {
+			findings[i].CodeOwners = co.OwnersUnder(in.CodeOwnersRoot, findings[i].File)
 		}
 	}
 	sortFindings(findings)
@@ -338,7 +359,7 @@ func Scan(in Input) *Report {
 		rep.Verdict.Message = "No blocking issues found; syntax, references and provider-side validations look applyable."
 	}
 
-	rep.Stats = Stats{Files: len(in.Files), Resources: len(m.Resources), Rules: len(Rules) + len(ModuleRules) + len(cfg.CustomRules)}
+	rep.Stats = Stats{Files: len(in.Files), Resources: len(m.Resources), Rules: len(Rules) + len(ModuleRules) + len(secretRules) + len(cfg.CustomRules)}
 	rep.Graph = buildGraph(m, findings)
 	rep.Compliance = complianceReport(findings)
 	return rep
@@ -411,7 +432,7 @@ func FixAll(in Input) (map[string]string, []error) {
 
 // Catalog lists every built-in rule, sorted by ID.
 func Catalog() []Rule {
-	all := append(append(append(append([]Rule{}, Rules...), ModuleRules...), schemaRules...), graphRules...)
+	all := append(append(append(append(append([]Rule{}, Rules...), ModuleRules...), schemaRules...), graphRules...), secretRules...)
 	for i := range all {
 		all[i].Themes = ThemesFor(all[i].ID)
 		all[i].Since = RuleSince(all[i].ID)

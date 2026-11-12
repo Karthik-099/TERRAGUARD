@@ -56,6 +56,11 @@ func runUI(args []string) error {
 // uiHandler adds GET /api/local/files to the normal server.
 func uiHandler(next http.Handler, paths []string, token, listen string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The rest of the server has no token (AI chat, MCP): DNS rebinding must not reach it either.
+		if !loopbackHost(r.Host) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+			return
+		}
 		if r.URL.Path != "/api/local/files" {
 			next.ServeHTTP(w, r)
 			return

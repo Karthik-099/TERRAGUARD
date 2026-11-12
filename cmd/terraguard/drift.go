@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 
 	"github.com/Karthik-099/TERRAGUARD/engine"
@@ -39,7 +40,7 @@ func runDrift(args []string) (int, error) {
 	}
 	root := map[string]string{} // the root module only: inventory addresses have no module path
 	for name, src := range in.Files {
-		if filepath.Dir(filepath.FromSlash(name)) == filepath.Clean(dir) {
+		if path.Dir(name) == rootKey(dir) {
 			root[name] = src
 		}
 	}

@@ -34,10 +34,20 @@ func runPulse(args []string) (int, error) {
 		if err != nil {
 			return 2, err
 		}
+		owners, _ := findCodeOwners([]string{root})
 		for _, dir := range dirs {
 			m, err := scanModule(root, dir)
 			if err != nil {
 				return 2, err
+			}
+			if owners != "" {
+				co := engine.ParseCodeOwners(owners)
+				rel, _ := filepath.Rel(root, dir)
+				for i, f := range m.Report.Findings {
+					if f.File != "" { // pulse keys files by name within the module
+						m.Report.Findings[i].CodeOwners = co.Owners(filepath.ToSlash(filepath.Join(rel, f.File)))
+					}
+				}
 			}
 			mods = append(mods, m)
 		}

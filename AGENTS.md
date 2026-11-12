@@ -6,9 +6,11 @@ Guidance for AI coding agents (and new contributors) working in this repository.
 
 An open-source infrastructure-as-code checker: Terraform and OpenTofu,
 Kubernetes (Helm, Kustomize), CloudFormation and SAM, Serverless, ARM and
-Bicep, Dockerfile, docker-compose, CI pipelines, Ansible and OpenAPI. One
-deterministic Go engine finds misconfigurations, apply-time failures,
-destructive plan changes and cost, and fixes many of them. The same engine runs in the browser (WebAssembly), the
+Bicep, Dockerfile, docker-compose, CI pipelines, Ansible, OpenAPI, Pulumi,
+Crossplane and OpenShift, on public clouds and on Nutanix, VMware vSphere and
+Red Hat (ROSA, ARO). One deterministic Go engine finds misconfigurations,
+leaked secrets, apply-time failures, destructive plan changes and cost, and
+fixes many of them. The same engine runs in the browser (WebAssembly), the
 CLI, the GitHub Action, VS Code, an MCP server and a self-hosted server.
 AI is optional: it explains and proposes; the engine decides.
 
@@ -24,16 +26,17 @@ AI is optional: it explains and proposes; the engine decides.
 - **Rule pinning.** `rules_version` in the policy; `engine.RuleSince` says when each rule arrived (add a release's new rules to `rule_versions.go` when it ships).
 - **Pulse.** Control adoption, waiver inventory and trend across many modules.
 - **Attack paths.** Cross-resource graph checks (for example a public instance reaching an unencrypted database).
-- **Privacy.** Code never leaves the device in the browser; air-gapped mode makes zero outside requests; paid AI is opt-in only.
+- **Teams.** CODEOWNERS on every finding (`--group-by owner`), whole-folder and zip scans in the browser, plugins and add-on rules.
+- **Privacy.** Code never leaves the device in the browser; air-gapped mode (`TERRAGUARD_OFFLINE=true`) makes zero outside requests; paid AI is opt-in only.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `engine/` | Pure Go, no I/O. `parse.go` (HCL), `json_config.go` (.tf.json), `plan.go` (plan JSON), `rules*.go` (resource rules: hand-written, `rules_port_*.go`, table checks in `rules_table.go`, generated `rules_parity.go`), `graphpolicy.go` + `rules_graph_gen.go` (graph policies), `checks.go` (module, state, graph), `schema*.go` (provider schemas, bundled in `schemas/`), `cost.go`, `policy.go`, `scan.go` (report, verdict, gate), `fix.go` (hclwrite), `verify.go`, `review.go`, `format.go` (SARIF, JUnit, Code Quality, Markdown) |
-| `engine/format_*.go` | Parsers for non-Terraform formats, registered in `formats.go`; each turns a file into `Resource`s. Rules for them are in `rules_k8s_manifest.go`, `rules_cfn.go`, `rules_azure_rm.go`, `rules_docker.go`, `rules_ci.go`, `rules_ansible.go`, `rules_openapi.go`; AWS API value checks in `rules_values.go` (generated table `values_aws_gen.go`) |
+| `engine/format_*.go` | Parsers for non-Terraform formats, registered in `formats.go`; each turns a file into `Resource`s. Rules for them are in `rules_k8s_manifest.go`, `rules_cfn.go`, `rules_azure_rm.go`, `rules_docker.go`, `rules_ci.go`, `rules_ansible.go`, `rules_openapi.go`, `rules_redhat.go` (OpenShift, ROSA, ARO); private clouds in `rules_nutanix.go` and `rules_vsphere.go`; secret scanning in `secrets.go`; CODEOWNERS in `codeowners.go`; SBOM in `sbom.go`; AWS API value checks in `rules_values.go` (generated table `values_aws_gen.go`) |
 | `tools/` | Generators: `awsvalgen` (AWS API value table), `ckvgen` (rule table and graph policies, with reviewed `wording*.txt`, `overrides.txt`, `duplicates.txt`), `schemagen` (bundled provider schemas) |
-| `cmd/terraguard/` | CLI: init, scan (`--watch`, `--coverage`), fix, review, agent, pulse, policy, cost, preflight, explain, doctor, docs, agents-md, ask, ai, ui, lsp, serve (with the admission webhook), mcp, rules |
+| `cmd/terraguard/` | CLI: init, scan (`--watch`, `--coverage`), fix, review, agent, pulse, policy, cost, preflight, explain, doctor, docs, agents-md, ask, ai, ui, lsp, serve (with the admission webhook), mcp, rules, drift, vuln, sbom, plugins (`terraguard-<name>` executables) |
 | `cmd/wasm/` | Browser build of the engine |
 | `internal/ai` | Free-first model router with fallback and key redaction |
 | `web/` | Static site and workspace (`index.html`, `app.js`, `style.css`), embedded into `terraguard serve` |

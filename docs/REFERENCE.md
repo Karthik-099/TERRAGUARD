@@ -60,6 +60,8 @@ Auto-fix edits Terraform only; findings in other formats have no fix.
 | `terraguard ui [path] [--no-browser]` | Open the workspace locally with the folder loaded from disk (loopback only, one-time token, read-only) |
 | `terraguard serve [--addr host:port] [--tls-cert F --tls-key F] [--admission-policy F]` | Self-host the web app, the HTTP API and the Kubernetes admission webhook (`/api/k8s/validate`) |
 | `terraguard mcp` | Run the MCP server over stdio |
+| `terraguard sbom [paths] [--format cyclonedx\|json] [--out FILE]` | Offline CycloneDX 1.5 inventory: Terraform providers (locked versions), modules, container images and lockfile packages, with purls |
+| `terraguard vuln --sbom FILE` | Offline OSV scan of the packages in a CycloneDX JSON SBOM (from `terraguard sbom` or another tool) instead of lockfiles |
 | `terraguard version` | Print the version |
 
 Every command accepts `-h` for its flags. Flags may appear before or after paths.
@@ -90,6 +92,7 @@ Every command accepts `-h` for its flags. Flags may appear before or after paths
 | `--write-baseline FILE` | Save current findings as accepted debt |
 | `--baseline FILE` | Report baselined findings as waived; gate only on new ones |
 | `--ai` | Add an advisory AI remediation plan to the Markdown report |
+| `--group-by owner` | Group `text` and `markdown` output into one section per CODEOWNERS owner, with counts; unowned findings last |
 
 ### review, agent and pulse flags
 
@@ -104,6 +107,7 @@ Every command accepts `-h` for its flags. Flags may appear before or after paths
 | pulse | `--baseline FILE` | Previous pulse JSON, to show the trend |
 | pulse | `--json FILE`, `--markdown FILE`, `--format` | Outputs |
 | pulse | `--min-adoption N` | Exit 1 if any control's adoption is below N percent |
+| pulse | (CODEOWNERS) | With a CODEOWNERS file in a root, the report adds findings per owner (`owners` in JSON) |
 
 ### Exit codes
 
@@ -221,6 +225,38 @@ resource "aws_s3_bucket" "scratch" { ... }
 
 Prefer waivers for anything long-lived: they carry a reason, an approver and an expiry.
 
+## Secret scanning
+
+Every scanned file, of any format, is also read as plain text for
+credentials. The `TG-SECRET-*` rules report a known token shape (AWS key pairs,
+GitHub, GitLab, Slack, Stripe live, Google API and service-account keys, Azure
+account keys and SAS, PEM private keys, JWTs) or, for `password = "..."` style
+assignments, a value of at least 12 characters with high entropy that is not a
+placeholder (`changeme`, `example`, `${...}`, `var.x`, `<...>`, `xxx`, `test`
+and similar). Documented sample values (AWS `...EXAMPLE` keys, the Azurite key,
+the jwt.io token) are skipped. Messages show at most the first 4 characters of
+a value. Inline ignores and waivers work as for any rule, and the
+`recommended` and `strict` packs make `TG-SECRET-*` unwaivable. On the same
+line a specific token rule replaces the older `TG-SEC-002`, and `TG-SECRET-014`
+yields to `TG-SEC-001`.
+
+`TG-SECRET-015` reports files whose name says they hold credentials: `.env`,
+`.env.*` (not `.example`, `.sample`, `.template`), `*.pem` (not certificates),
+`*.key`, `id_rsa`, `id_ed25519`, `*.pfx`, `*.p12`, `credentials.json` and
+`kubeconfig`. The CLI passes them by name only and never reads them; files git
+ignores are left out.
+
+## Code owners
+
+`scan`, `review` and the other commands that read a folder look for
+`.github/CODEOWNERS`, `CODEOWNERS` or `docs/CODEOWNERS` in the first scanned
+folder. Every finding with a file gets `code_owners` (JSON, SARIF result
+`properties`, a Markdown column), matched with GitHub's rules: the last
+matching line wins, patterns are gitignore-style, and a line without owners
+clears them. `Finding.owner` is unchanged: the team that owns the standard.
+API and WASM callers pass the file text as `code_owners` in the input, and
+`code_owners_root` when file keys carry a prefix the CODEOWNERS paths do not.
+
 ## HTTP API (`terraguard serve`)
 
 | Method and path | Auth | Body or response |
@@ -294,6 +330,7 @@ All are optional. The CLI and server also read `./.env`.
 | `TERRAGUARD_TRUST_PROXY` | `true` when behind a reverse proxy: client IP and SSO user from its headers |
 | `TERRAGUARD_AUDIT_LOG` | File for one JSON line per API call (metadata only) |
 | `TERRAGUARD_TELEMETRY_URL` | Opt-in anonymous usage counts from the CLI |
+| `TERRAGUARD_OFFLINE` | `true` makes the CLI start no outside request: remote policy `extends` and `vuln update` are refused, telemetry is off, and AI uses local endpoints only. Scans never need the network |
 | `TERRAGUARD_ENV_FILE` | Read a different env file instead of `./.env` |
 | `TERRAGUARD_RUN_TASK_HMAC_KEY` | Enables `/api/run-task`; the HMAC key configured on the run task |
 | `TERRAGUARD_TFC_HOST` | The only host run tasks may call (default `app.terraform.io`) |

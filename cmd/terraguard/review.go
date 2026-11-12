@@ -36,6 +36,9 @@ func runReview(args []string) (int, error) {
 	if head.Schema, err = readOptional(*schema); err != nil {
 		return 2, err
 	}
+	if strings.HasPrefix(*base, "-") {
+		return 2, fmt.Errorf("--base %q is not a git revision", *base)
+	}
 	baseFiles, err := gitFilesAt(*base, paths)
 	if err != nil {
 		return 2, err
@@ -96,7 +99,7 @@ func runReview(args []string) (int, error) {
 }
 
 func git(args ...string) (string, error) {
-	out, err := exec.Command("git", args...).Output()
+	out, err := exec.Command("git", append([]string{"-c", "core.fsmonitor=false"}, args...)...).Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
 			return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(ee.Stderr)))

@@ -7,7 +7,7 @@ import (
 )
 
 // Rules is the full resource-rule catalog.
-var Rules = concatRules(coreRules, moreAWSRules, gcpAzureRules, otherCloudRules, kubernetesRules, dnsCDNRules, costRules, extraRules, moreRules, tableRules(), portedAWS, portedAzure, portedGCP, portedOther, k8sManifestRules, k8sFlagRuleSet(), cfnRules, valueRules, cloudValueRules, dockerRules, composeRules, ciRuleSet(), armRuleSet(), ansibleRules, openapiRules, cloudflareRules, gdmRules)
+var Rules = concatRules(coreRules, moreAWSRules, gcpAzureRules, otherCloudRules, kubernetesRules, dnsCDNRules, costRules, extraRules, moreRules, tableRules(), portedAWS, portedAzure, portedGCP, portedOther, k8sManifestRules, k8sFlagRuleSet(), cfnRules, valueRules, cloudValueRules, dockerRules, composeRules, ciRuleSet(), armRuleSet(), ansibleRules, openapiRules, cloudflareRules, gdmRules, nutanixRules, vsphereRules, redhatRules)
 
 func concatRules(sets ...[]Rule) []Rule {
 	var out []Rule

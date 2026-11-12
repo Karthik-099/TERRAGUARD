@@ -1,0 +1,114 @@
+# forbid: TG-OCP-ROUTE-001, TG-OCP-ROUTE-002, TG-OCP-ROUTE-003, TG-OCP-SCC-001, TG-OCP-SCC-002, TG-OCP-SCC-003, TG-OCP-SCC-004, TG-OCP-SCC-005, TG-OCP-DC-001, TG-OCP-BUILD-001, TG-OCP-BUILD-002, TG-OCP-IS-001, TG-OCP-RBAC-001, TG-OCP-OAUTH-001, TG-K8S-007
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  host: shop.apps.example.com
+  wildcardPolicy: None
+  to: {kind: Service, name: shop}
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: serving.knative.dev/v1
+kind: Route
+metadata:
+  name: knative-route
+  namespace: shop
+spec:
+  traffic:
+  - {revisionName: shop-00001, percent: 100}
+---
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: team-restricted
+allowPrivilegedContainer: false
+allowPrivilegeEscalation: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostIPC: false
+allowHostPorts: false
+allowHostDirVolumePlugin: false
+allowedCapabilities: [NET_BIND_SERVICE]
+requiredDropCapabilities: [ALL]
+runAsUser:
+  type: MustRunAsRange
+seLinuxContext:
+  type: MustRunAs
+volumes: [configMap, csi, downwardAPI, emptyDir, ephemeral, persistentVolumeClaim, projected, secret]
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  source:
+    git:
+      uri: https://github.com/example/shop.git
+    sourceSecret: {name: git-credentials}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      forcePull: true
+      env:
+      - name: NPM_TOKEN
+        valueFrom:
+          secretKeyRef: {name: npm, key: token}
+      - name: LOG_LEVEL
+        value: info
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: base
+  namespace: shop
+spec:
+  tags:
+  - name: "9"
+    from: {kind: DockerImage, name: "registry.access.redhat.com/ubi9/ubi:9.4"}
+    importPolicy:
+      scheduled: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: basic-users
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: basic-user}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: "system:authenticated"}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sre-view
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: view}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: sre}
+---
+apiVersion: config.openshift.io/v1
+kind: OAuth
+metadata:
+  name: cluster
+spec:
+  identityProviders:
+  - name: corp-ldap
+    mappingMethod: claim
+    type: LDAP
+    ldap:
+      url: "ldaps://ldap.example.com/ou=users,dc=example,dc=com?uid"
+      insecure: false
+      bindDN: "cn=reader,dc=example,dc=com"
+      bindPassword: {name: ldap-secret}
+      attributes: {id: [dn], preferredUsername: [uid], name: [cn]}
+  - name: sso
+    mappingMethod: claim
+    type: OpenID
+    openID:
+      clientID: openshift
+      clientSecret: {name: sso-secret}
+      issuer: https://sso.example.com/realms/corp
+      claims: {preferredUsername: [preferred_username], name: [name]}

@@ -45,6 +45,8 @@ var ModuleRules = []Rule{
 	{ID: "TG-PLAN-003", Title: "Resource drifted from its code", Severity: Low, Category: CatPlan, Remediation: "Decide which side is right: put the manual change into code, or let this apply revert it. Find who changed it in the cloud's audit log."},
 	{ID: "TG-PLAN-002", Title: "Plan replaces a resource", Severity: Medium, Category: CatPlan, Remediation: "Check the attribute forcing replacement; for stateful resources use create_before_destroy, a moved block, or revert the change."},
 	{ID: "TG-POL-001", Title: "Waiver has expired", Severity: Medium, Category: CatPolicy, Remediation: "Fix the finding or renew the waiver with a new expiry and approver."},
+	{ID: "TG-NTX-PRV-001", Title: "Nutanix provider skips TLS certificate checks", Severity: Medium, Category: CatSecurity, CWE: "CWE-295", Remediation: "Remove insecure = true and trust the Prism certificate (a CA-signed certificate, or its CA added to the system trust store)."},
+	{ID: "TG-VS-PRV-001", Title: "vSphere provider skips TLS certificate checks", Severity: Medium, Category: CatSecurity, CWE: "CWE-295", Remediation: "Remove allow_unverified_ssl = true and install a CA-signed vCenter certificate, or add the VMCA root to the system trust store."},
 	{ID: "TG-POL-002", Title: "Waiver exceeds the allowed duration", Severity: Medium, Category: CatPolicy, Remediation: "Give the waiver an expiry within max_waiver_days, or fix the finding."},
 }
 
@@ -83,6 +85,9 @@ var ruleIndex = func() map[string]*Rule {
 	for i := range graphRules {
 		m[graphRules[i].ID] = &graphRules[i]
 	}
+	for i := range secretRules {
+		m[secretRules[i].ID] = &secretRules[i]
+	}
 	return m
 }()
 
@@ -104,6 +109,7 @@ func moduleChecks(m *Module) []Finding {
 	out = append(out, pinningChecks(m)...)
 	out = append(out, graphChecks(m)...)
 	out = append(out, stateChecks(m)...)
+	out = append(out, providerTLSChecks(m)...)
 	return out
 }
 

@@ -6,9 +6,11 @@
 
 TerraGuard checks Terraform and OpenTofu, Kubernetes manifests (and Helm and
 Kustomize), CloudFormation and SAM, Serverless Framework, Azure ARM and Bicep,
-Dockerfiles, docker-compose, Ansible, OpenAPI and CI pipelines (GitHub Actions,
-GitLab, Azure Pipelines, CircleCI, Bitbucket) for misconfigurations, apply-time
-errors, destructive changes and cost. It explains every finding, fixes many of
+Dockerfiles, docker-compose, Ansible, OpenAPI, Pulumi, Crossplane, OpenShift and
+CI pipelines (GitHub Actions, GitLab, Azure Pipelines, CircleCI, Bitbucket) for
+misconfigurations, leaked secrets, apply-time errors, destructive changes and
+cost, on public clouds and on private ones: Nutanix, VMware vSphere and Red Hat
+OpenShift (ROSA, ARO and self-managed). It explains every finding, fixes many of
 them automatically, and enforces your organization's standards as code. One Go
 engine runs in the browser, the editor, the terminal, CI, AI agents, your own
 server and as a Kubernetes admission controller. It is open source and costs
@@ -24,10 +26,22 @@ nothing to run.
 
 ![TerraGuard workspace](docs/screenshot.png)
 
+## New in 3.0
+
+- **Private cloud and Red Hat.** Nutanix (Prism Central, Flow, NKE, CAPX cluster manifests), VMware vSphere, and Red Hat OpenShift: Routes, SecurityContextConstraints, BuildConfigs, OAuth, ROSA (`rhcs` provider) and ARO. RHEL, Rocky and Alma container images in `terraguard vuln`.
+- **Secret scanning.** 15 `TG-SECRET-*` rules for cloud keys, Git and chat tokens, private keys, JWTs and high-entropy passwords in every file, with values redacted in every output and unwaivable in the recommended pack.
+- **Teams.** CODEOWNERS on every finding, `scan --group-by owner`, per-owner Pulse tables; drop a whole folder or zip into the web app and scan it at once.
+- **Plugins and add-ons.** Any executable named `terraguard-<name>` adds findings to a scan (`terraguard plugins`); custom rules can be written, tested and shared from the web app.
+- **Supply chain.** `terraguard sbom` (CycloneDX, offline), `vuln --sbom`, signed checksums, CycloneDX and SPDX SBOMs and provenance on every release.
+- **Hardening.** Remote policy `extends` are https-only, size- and time-limited and refused with `TERRAGUARD_OFFLINE=true`; local `extends` cannot leave the working folder; the local UI and server refuse cross-origin and DNS-rebinding requests.
+
+See [CHANGELOG.md](CHANGELOG.md) for everything, and [ROADMAP.md](ROADMAP.md) for what is next.
+
 ---
 
 ## Contents
 
+- [New in 3.0](#new-in-30)
 - [The problem](#the-problem)
 - [What TerraGuard does](#what-terraguard-does)
 - [Quick start](#quick-start)
@@ -49,7 +63,7 @@ discovered too late:
 
 | Stage | What goes wrong | How TerraGuard helps |
 |---|---|---|
-| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 1,688 rules with exact lines and fixes, verified AI fixes |
+| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 1,750 rules with exact lines and fixes, verified AI fixes |
 | **Init** | Unpinned providers; local, unencrypted or unlocked state; committed `*.tfstate` | Pinning, backend and state-file checks |
 | **Validate** | `terraform validate` needs init and credentials, and misses provider-side errors | Syntax, reference and apply-time checks with no init |
 | **Plan** | A destroy or replace of a database hides in a long plan | Plan risk with the attribute that forced replacement; rules on resolved values |
@@ -71,6 +85,10 @@ discovered too late:
 | CI pipelines | GitHub Actions, GitLab CI, Azure Pipelines, CircleCI, Bitbucket | Script injection, unpinned actions, write-all tokens, `pull_request_target` checkouts |
 | Ansible | Playbooks and task files | Cloud modules, shell and download hygiene |
 | OpenAPI | 2.0 and 3.x, YAML or JSON | Security schemes, transport, input limits |
+| Pulumi, Crossplane, Deployment Manager | `Pulumi.yaml`, stack exports, Crossplane managed resources, GDM configs | Mapped to the matching Terraform types so the same rules apply |
+| OpenShift | Routes, SCCs, BuildConfigs, ImageStreams, OAuth, DeploymentConfigs | DeploymentConfigs also get every Kubernetes pod rule |
+| Nutanix, vSphere, Red Hat | `nutanix`, `vsphere`, `rhcs` and `azurerm_redhat_openshift_cluster` resources; CAPX manifests | Provider TLS, VM hardening, Flow policies, ROSA and ARO exposure and encryption |
+| Any file | Every text file in the scan | Secret scanning; secret-bearing files (`.env`, `*.pem`, `id_rsa`, `kubeconfig`) flagged by name and never read |
 
 Files of other kinds are skipped. `--framework kubernetes,dockerfile` limits a
 scan to some formats.
@@ -80,7 +98,7 @@ scan to some formats.
 | Capability | Details |
 |---|---|
 | **Will it apply?** | Syntax, duplicates, undeclared references, `count` + `for_each`, invalid CIDRs, S3 bucket names, port ranges, deprecated Lambda runtimes, missing tfvars, unknown or missing provider arguments, and values the AWS API rejects (1,322 arguments checked against the published API models). No `terraform init`. |
-| **Security and correctness rules** | 1,688 rules across every format above and 23 cloud providers |
+| **Security and correctness rules** | 1,750 rules across every format above and 26 cloud and platform providers |
 | **Cost** | `terraguard cost`: offline monthly estimate for AWS, Azure and Google Cloud, usage-based charges from a usage file, your own negotiated prices, a budget gate, and the change shown in every pull request |
 | **Your own policies** | YAML rules in `.terraguard.yml`, graph policies in Checkov's YAML format, Rego (Conftest style), plain-English drafts |
 | **Coverage** | Every resource with the number of checks that ran on it, which passed and which failed, and the resource types no rule is written for, in the CLI (`--coverage`), the report and the workspace |
@@ -95,6 +113,11 @@ scan to some formats.
 | **Pulse** | Control adoption, waiver inventory and trend across many modules |
 | **Compliance** | Indicative mapping to CIS v8, SOC 2, PCI DSS 4.0, ISO 27001:2022, HIPAA |
 | **Docs for humans and agents** | `terraguard docs` (README) and `terraguard agents-md` (AGENTS.md) |
+| **Secrets** | 15 `TG-SECRET-*` rules across every file; values are shown as the first four characters only |
+| **Owners** | CODEOWNERS on every finding; `scan --group-by owner`; owner tables in Pulse, SARIF and Markdown |
+| **Plugins** | `terraguard-<name>` executables on PATH add findings through JSON or SARIF; waivers and the gate apply to them |
+| **Vulnerabilities and SBOM** | `terraguard vuln`: offline OSV scan of lockfiles, container image tarballs (Debian, Ubuntu, Alpine, RHEL, Rocky, Alma) and CycloneDX SBOMs; `terraguard sbom` writes one |
+| **Drift and inventory** | `terraguard drift --state` compares code with state; `--live` runs a read-only refresh-only plan |
 | **Outputs** | Text, JSON, SARIF, JUnit, Checkstyle, GitLab Code Quality, GitHub annotations, Azure DevOps, Markdown, Mermaid and DOT graphs |
 
 ## Quick start
@@ -151,7 +174,7 @@ flowchart TB
   subgraph Engine["engine/ (Go, no I/O)"]
     P[HCL parser] --> N[Normalized resource model]
     PL[Plan JSON] --> N
-    N --> R[1,688 rules] & M[Module and graph checks]
+    N --> R[1,750 rules] & M[Module and graph checks]
     R & M --> POL[Policy: packs, budgets, baselines, waivers]
     POL --> REP[Report, verdict, compliance]
     REP --> OUT[SARIF / JUnit / Code Quality / JSON / Markdown]
@@ -167,14 +190,11 @@ flowchart TB
 - **The engine decides.** The AI explains and proposes. `engine.Verify` accepts a change only if apply still works, no new medium-or-higher issue appears, and the risk weight goes down.
 - **No backend to run.** The public site is static and the engine runs in the browser as WebAssembly.
 
-### Phase 3: next
+### Phase 3: platform (3.0)
 
-- Done: provider schema checks (`--schema`) and local module input checks.
-- Allowed-value checks per argument (instance types, regions), beyond names.
-- A language server so every editor gets diagnostics.
-- SARIF inline fix suggestions.
-- OPA/Rego import.
-- Cost estimates for plan changes.
+- Done: provider schema checks, local module inputs, AWS, Azure and Google value checks, a language server, Rego, plan cost.
+- Done in 3.0: private clouds (Nutanix, vSphere), Red Hat OpenShift, secret scanning, code owners, plugins, SBOM, offline mode.
+- Next: see [ROADMAP.md](ROADMAP.md).
 
 The full HLD and LLD are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). For a guided tour, read [docs/ACADEMY.md](docs/ACADEMY.md).
 
@@ -397,8 +417,10 @@ never call a public AI service.
 |---|---|
 | Browser | [Web app](https://karthik-099.github.io/TERRAGUARD/) (WebAssembly, offline after load) |
 | VS Code | `editors/vscode`: diagnostics on save, quick fixes. `.vsix` attached to each release |
+| Neovim, JetBrains, any LSP editor | `terraguard lsp`; [editors/nvim](editors/nvim), [editors/jetbrains](editors/jetbrains) |
+| Plugins | `terraguard-<name>` executables, see [docs/PLUGINS.md](docs/PLUGINS.md) |
 | pre-commit | `.pre-commit-hooks.yaml`: hooks `terraguard` and `terraguard-fix` |
-| GitHub Actions | `uses: Karthik-099/TERRAGUARD@main` with `command: scan`, `review` or `pulse` |
+| GitHub Actions | `uses: Karthik-099/TERRAGUARD@v3.0.0` with `command: scan`, `review` or `pulse` |
 | GitLab CI | [templates/gitlab-ci.yml](templates/gitlab-ci.yml): Code Quality and JUnit in the merge request |
 | Jenkins | [templates/Jenkinsfile](templates/Jenkinsfile) |
 | Any CI | JSON, SARIF, JUnit or Markdown output; exit codes |
@@ -417,7 +439,7 @@ fmt, validate, OIDC plan, TerraGuard gate, approval and apply.
 | Formats | Terraform, OpenTofu, Kubernetes, Helm, Kustomize, CloudFormation, SAM, Serverless, ARM, Bicep, Dockerfile, Compose, Ansible, OpenAPI, 5 CI systems | Similar, plus SCA and secrets | Terraform, CloudFormation, Kubernetes, Helm, Dockerfile, ARM | Terraform | Terraform |
 | Values the cloud API rejects | 1,322 AWS arguments | No | No | Yes, deepest | No |
 | Kubernetes admission control | Built in | No | Via operator | No | No |
-| Security policy breadth | 1,688 rules, checked against reference fixtures | 1,000+ policies | Hundreds | Correctness focus | None |
+| Security policy breadth | 1,750 rules, checked against reference fixtures | 1,000+ policies | Hundreds | Correctness focus | None |
 | Your own policies | YAML rules, Checkov-format graph YAML, Rego | Python, YAML | Rego | Go plugins | No |
 | Cost of a plan | Offline estimate, budget gate | No | No | No | No |
 | Apply-time validation | Common failures | No | No | Deep, provider rulesets | Syntax and references |
@@ -461,7 +483,8 @@ Reproduce these with `go test -bench Scan ./engine` and `make evals`.
 
 - Code is analyzed where it lives: in the browser, on the runner, or in your network. No TerraGuard service ever receives it.
 - The website enforces a strict Content-Security-Policy and Subresource Integrity. The server adds security headers, rate limits, an audit log and Prometheus metrics.
-- The Docker image works fully air-gapped. Releases from v2.1 ship an SBOM, signed images and build provenance.
+- The Docker image works fully air-gapped. Set `TERRAGUARD_OFFLINE=true` to refuse every remote policy fetch.
+- Releases ship CycloneDX and SPDX SBOMs, a keyless Sigstore signature on the checksums, signed images and build provenance. SECURITY.md shows how to verify them.
 
 See [SECURITY.md](SECURITY.md) and [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
 
@@ -472,6 +495,8 @@ Also on the website: [karthik-099.github.io/TERRAGUARD/#/docs](https://karthik-0
 - [docs/GUIDE.md](docs/GUIDE.md): getting started, from a first scan to a pull-request gate
 - [docs/REFERENCE.md](docs/REFERENCE.md): CLI, policy file, HTTP API, MCP tools, environment variables
 - [docs/RULES.md](docs/RULES.md): every rule, generated from the engine
+- [docs/PLUGINS.md](docs/PLUGINS.md): write a plugin in any language
+- [docs/VULN.md](docs/VULN.md): offline vulnerability scanning and SBOMs
 - [docs/LIMITS.md](docs/LIMITS.md): guarantees and limits: drift, quotas, partial applies, permissions, false positives
 - [docs/ACADEMY.md](docs/ACADEMY.md): how Terraform works, where it breaks, and how every TerraGuard feature works
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): HLD, LLD, pipelines and design decisions

@@ -148,10 +148,10 @@ func Route() []Step {
 	return steps
 }
 
-// LocalOnly: only local endpoints (Ollama, custom) are used.
+// LocalOnly: only local endpoints (Ollama, custom) are used. Offline mode implies it.
 func LocalOnly() bool {
 	v := strings.ToLower(os.Getenv("TERRAGUARD_AI_LOCAL_ONLY"))
-	return v == "1" || v == "true" || v == "yes"
+	return v == "1" || v == "true" || v == "yes" || os.Getenv("TERRAGUARD_OFFLINE") == "true"
 }
 
 var ErrNoProvider = errors.New("no AI provider configured: set GROQ_API_KEY, OPENROUTER_API_KEY or GEMINI_API_KEY (or TERRAGUARD_OLLAMA_URL for a local model) in .env")
@@ -192,6 +192,10 @@ func Chat(ctx context.Context, msgs []Message) (*Result, error) {
 	return res, fmt.Errorf("all AI routes failed:\n  %s", strings.Join(res.Attempts, "\n  "))
 }
 
+// client never follows redirects: Go drops Authorization on a cross-host
+// redirect but not custom gateway headers (api-key), and the body is resent.
+var client = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
 func call(ctx context.Context, s Step, msgs []Message) (string, error) {
 	body, _ := json.Marshal(map[string]any{"model": s.Model, "messages": msgs, "temperature": 0.2})
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -208,7 +212,7 @@ func call(ctx context.Context, s Step, msgs []Message) (string, error) {
 		req.Header.Set("HTTP-Referer", "https://github.com/Karthik-099/TERRAGUARD")
 		req.Header.Set("X-Title", "TerraGuard")
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}

@@ -1,6 +1,6 @@
 # Use from any repo's .pre-commit-config.yaml:
 #   - repo: https://github.com/Karthik-099/TERRAGUARD
-#     rev: v2.1.0
+#     rev: v3.0.0
 #     hooks:
 #       - id: terraguard
 #       - id: terraguard-fix        # optional: apply safe auto-fixes first

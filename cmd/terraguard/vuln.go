@@ -19,7 +19,8 @@ import (
 const vulnUsage = `usage:
   terraguard vuln update [--ecosystems npm,PyPI,Go,...] [--dir DIR]   download the OSV database (network)
   terraguard vuln [paths] [--format text|json|sarif|markdown] [--fail-on SEVERITY] [--db DIR]
-  terraguard vuln image IMAGE.tar [same flags]   scan a 'docker save IMAGE -o image.tar' archive`
+  terraguard vuln image IMAGE.tar [same flags]   scan a 'docker save IMAGE -o image.tar' archive
+  terraguard vuln --sbom bom.json [same flags]   scan the packages of a CycloneDX JSON SBOM (terraguard sbom)`
 
 // runVuln scans lockfiles and image archives against an offline OSV copy.
 func runVuln(args []string) (int, error) {
@@ -63,6 +64,7 @@ func runVulnScan(args []string, image bool) (int, error) {
 	format := fs.String("format", "text", "text, json, sarif or markdown")
 	failOn := fs.String("fail-on", "HIGH", "exit 1 at or above CRITICAL|HIGH|MEDIUM|LOW|UNKNOWN, or NONE")
 	dbDir := fs.String("db", vuln.DefaultDir(), "database directory from terraguard vuln update")
+	sbom := fs.String("sbom", "", "scan the packages listed in this CycloneDX JSON SBOM instead of lockfiles")
 	fs.Usage = func() { fmt.Fprintln(fs.Output(), vulnUsage); fs.PrintDefaults() }
 	paths, err := parseInterspersed(fs, args)
 	if err != nil {
@@ -92,6 +94,10 @@ func runVulnScan(args []string, image bool) (int, error) {
 		pkgs, notes = img.Packages, img.Notes
 		if img.OS != "" {
 			notes = append(notes, "operating system: "+img.OS)
+		}
+	} else if *sbom != "" {
+		if pkgs, err = sbomPackages(*sbom); err != nil {
+			return 2, err
 		}
 	} else {
 		files, err := vuln.FindLockfiles(paths)
