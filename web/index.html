@@ -7,7 +7,7 @@
 <meta name="description" content="Catch misconfigurations, apply-time failures, destructive changes, secrets and cost in Terraform, Kubernetes, CloudFormation, ARM, Pulumi, Dockerfiles, CI pipelines and more. Open source. Runs in your browser, editor, CI and cluster.">
 <meta property="og:title" content="TerraGuard: catch infrastructure mistakes before they ship">
 <meta property="og:description" content="One open-source engine for Terraform, Kubernetes, CloudFormation, ARM, Pulumi, Docker, CI pipelines, Ansible and OpenAPI. 1,750 rules, will-it-apply checks, plan risk, cost and verified fixes. Free.">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://giscus.app 'sha256-0J+ra3zopJgilcW1JQbvHFPhxR0Nf8MtAMgATVjfbzM='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; frame-src https://giscus.app; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://giscus.app 'sha256-VpdsRO5q68zgt1AIjajLlzA2zK+oACdBAyIuL3zHakQ='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; frame-src https://giscus.app; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
@@ -28,7 +28,7 @@
  "url":"https://karthik-099.github.io/TERRAGUARD/","codeRepository":"https://github.com/Karthik-099/TERRAGUARD","license":"https://opensource.org/licenses/MIT",
  "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
 </script>
-<script>try{var t=localStorage.getItem("tg.theme.v3");document.documentElement.dataset.theme=t||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}</script>
+<script>try{var t=localStorage.getItem("tg.theme.v3");document.documentElement.dataset.theme=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light"}catch(e){document.documentElement.dataset.theme="light"}</script>
 </head>
 <body>
 <a class="skip" href="#top">Skip to content</a>
@@ -171,6 +171,27 @@
           <article class="tile-card t-mint"><svg class="ic lg"><use href="#i-lock"/></svg><h3>Secrets</h3><p>Passwords and keys typed into code, variables or pipelines.</p></article>
           <article class="tile-card t-lilac"><svg class="ic lg"><use href="#i-layers"/></svg><h3>Vulnerable dependencies</h3><p>Lockfiles and container images, checked against an offline database.</p></article>
           <article class="tile-card t-peach"><svg class="ic lg"><use href="#i-gauge"/></svg><h3>Cost</h3><p>The monthly cost change of a plan, with a budget gate.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="how-it-works">
+      <div class="container">
+        <header class="section-head center">
+          <p class="kicker">How it works</p>
+          <h2>One engine. One path for every file.</h2>
+          <p class="sub">Click any step to go deeper.</p>
+        </header>
+        <div class="flow-wrap" data-flow>
+          <ol class="flow">
+            <li><a class="flow-step" href="#/docs/guide"><span class="flow-n">01 Input</span><h3>Your files</h3><ul><li>Terraform, OpenTofu, plans</li><li>Kubernetes, Helm, OpenShift</li><li>CloudFormation, ARM, Bicep</li><li>Pulumi, Docker, CI pipelines</li></ul><span class="flow-more">Supported formats</span></a></li>
+            <li><a class="flow-step" href="#/docs/architecture"><span class="flow-n">02 Parse</span><h3>One model</h3><ul><li>Every format becomes the same resources</li><li>Variables, tfvars and modules resolved</li><li>Nothing leaves the device</li></ul><span class="flow-more">Architecture</span></a></li>
+            <li><a class="flow-step core" href="#/docs/rules"><span class="flow-n">03 Check</span><h3>The engine</h3><ul><li>1,750 rules</li><li>Values the cloud rejects</li><li>Attack paths across resources</li><li>Plan risk, cost and secrets</li></ul><span class="flow-more">Rule catalog</span></a></li>
+            <li><a class="flow-step" href="#/policy"><span class="flow-n">04 Decide</span><h3>Your policy</h3><ul><li><code>.terraguard.yml</code></li><li>Custom rules and plugins</li><li>Waivers that expire</li><li>Pass or fail gate</li></ul><span class="flow-more">Policy as code</span></a></li>
+            <li><a class="flow-step" href="#/integrations"><span class="flow-n">05 Deliver</span><h3>Results</h3><ul><li>Browser and editors</li><li>CLI and pull requests</li><li>SARIF, JSON, JUnit, HTML</li><li>AI agents over MCP</li></ul><span class="flow-more">Integrations</span></a></li>
+          </ol>
+          <a class="flow-ai" href="#/ai"><span class="flow-badge">Optional</span><span><b>AI</b> explains and proposes a fix</span><svg class="ic sm" aria-hidden="true"><use href="#i-arrow"/></svg><span><b>the engine re-scans it</b></span><svg class="ic sm" aria-hidden="true"><use href="#i-arrow"/></svg><span>kept only if risk goes down</span></a>
+          <p class="flow-note"><svg class="ic sm" aria-hidden="true"><use href="#i-lock"/></svg>No network during a scan. Code stays on your device, runner or server.</p>
         </div>
       </div>
     </section>
@@ -342,48 +363,39 @@ resource "aws_db_instance" "main" {
       </div>
     </section>
 
-    <section class="section">
-      <div class="container">
+    <section class="section soft" id="compare">
+      <div class="container narrow-wide">
         <header class="section-head center">
-          <h2>Wherever you work</h2>
-          <p class="sub">The same engine and the same policy file everywhere.</p>
-        </header>
-        <ul class="integ-grid">
-          <li><a href="#/integrations"><span class="ii"><svg class="ic"><use href="#i-terminal"/></svg></span>CLI</a></li>
-          <li><a href="#/integrations"><img src="assets/brands/githubactions.svg" alt="" width="24" height="24" loading="lazy">GitHub Action</a></li>
-          <li><a href="#/integrations"><img src="assets/brands/gitlab.svg" alt="" width="24" height="24" loading="lazy">GitLab</a></li>
-          <li><a href="#/integrations"><img src="assets/brands/jenkins.svg" alt="" width="24" height="24" loading="lazy">Jenkins</a></li>
-          <li><a href="#/integrations"><span class="ii"><svg class="ic"><use href="#i-git"/></svg></span>pre-commit</a></li>
-          <li><a href="#/integrations"><img src="assets/brands/vscode.svg" alt="" width="24" height="24" loading="lazy">VS Code</a></li>
-          <li><a href="#/integrations"><img src="assets/brands/neovim.svg" alt="" width="24" height="24" loading="lazy">Neovim</a></li>
-          <li><a href="#/integrations"><img src="assets/brands/jetbrains.svg" alt="" width="24" height="24" loading="lazy">JetBrains</a></li>
-          <li><a href="#/integrations"><span class="ii"><svg class="ic"><use href="#i-spark"/></svg></span>MCP for AI agents</a></li>
-          <li><a href="#/integrations"><img src="assets/brands/kubernetes.svg" alt="" width="24" height="24" loading="lazy">Kubernetes admission</a></li>
-          <li><a href="#/integrations?deploy"><span class="ii"><svg class="ic"><use href="#i-server"/></svg></span>Self-hosted server</a></li>
-          <li><a href="#/app"><span class="ii"><svg class="ic"><use href="#i-code"/></svg></span>Browser</a></li>
-        </ul>
-      </div>
-    </section>
-
-    <section class="section soft">
-      <div class="container narrow">
-        <header class="section-head center">
+          <p class="kicker">Compare</p>
           <h2>An honest comparison</h2>
           <p class="sub">Use it next to the tools you already have.</p>
         </header>
+        <p class="cmp-legend"><span><i class="cmp cmp-y" role="img" aria-label="Yes"></i> Yes</span><span><i class="cmp cmp-p" role="img" aria-label="Partly"></i> Partly</span><span><i class="cmp cmp-n" role="img" aria-label="No"></i> No</span></p>
         <div class="table-wrap">
-          <table class="compare mini">
-            <thead><tr><th></th><th class="us">TerraGuard</th><th>Policy scanners</th><th>terraform validate</th></tr></thead>
+          <table class="compare pure">
+            <thead><tr><th></th><th class="us">TerraGuard</th><th>Checkov</th><th>Trivy</th><th>TFLint</th><th>terraform validate</th></tr></thead>
             <tbody>
-              <tr><td>Many IaC formats, one engine</td><td class="us">Yes</td><td>Yes</td><td>Terraform only</td></tr>
-              <tr><td>Predicts apply failures</td><td class="us">Without init</td><td>No</td><td>After init</td></tr>
-              <tr><td>Destructive changes and cost</td><td class="us">Yes</td><td>No</td><td>No</td></tr>
-              <tr><td>Runs in the browser</td><td class="us">Yes</td><td>No</td><td>No</td></tr>
-              <tr><td>Largest rule library</td><td class="us">No</td><td>Yes</td><td>No</td></tr>
+              <tr><td>Runs in the browser, no install</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Terraform and OpenTofu</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td></tr>
+              <tr><td>Kubernetes and Helm</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>CloudFormation and ARM</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Nutanix, vSphere and OpenShift</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Apply failures found without init</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Values the cloud API rejects</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Destroy and replace risk in a plan</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Cost of a plan</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Secrets in code</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Your own policies</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Auto-fix</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Waivers with expiry</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Kubernetes admission control</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Optional AI, local models too</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Largest rule library</td><td class="us"><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Free and open source</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td></tr>
             </tbody>
           </table>
         </div>
-        <p class="center-link"><a class="link-more" href="#/compare">Full comparison with Checkov, Trivy and TFLint <svg class="ic sm"><use href="#i-arrow"/></svg></a></p>
+        <p class="footnote">Based on public documentation as of November 2026. Corrections are welcome as a GitHub issue.</p>
       </div>
     </section>
 
@@ -628,56 +640,6 @@ waivers:
     </section>
   </div>
 
-  <div class="page" data-page="compare" hidden>
-    <section id="compare" class="section page-top">
-      <div class="container">
-        <header class="section-head">
-          <p class="kicker">Compare</p>
-          <h2>How TerraGuard fits with existing tools</h2>
-          <p class="sub">It covers the controls of the major scanners in one engine and adds apply-time validation, plan risk, cost, verified fixes and zero-install use.</p>
-        </header>
-        <div class="table-wrap">
-          <table class="compare">
-            <thead><tr><th></th><th class="us">TerraGuard</th><th>Checkov</th><th>Trivy (tfsec)</th><th>TFLint</th><th>terraform validate</th></tr></thead>
-            <tbody>
-              <tr><td>Runs in the browser, no install</td><td class="us">Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-              <tr><td>Formats</td><td class="us">Terraform, OpenTofu, Kubernetes, Helm, Kustomize, CloudFormation, SAM, Serverless, ARM, Bicep, Pulumi, Crossplane, Deployment Manager, Dockerfile, Compose, Ansible, OpenAPI, 5 CI systems</td><td>Similar, plus SCA and secrets</td><td>Terraform, CloudFormation, Kubernetes, Helm, Dockerfile, ARM</td><td>Terraform</td><td>Terraform</td></tr>
-              <tr><td>Security policy breadth</td><td class="us">1,750 rules</td><td>1,000+ policies</td><td>Hundreds of checks</td><td>Correctness focus</td><td>None</td></tr>
-              <tr><td>Values the cloud API rejects</td><td class="us">AWS, Azure and Google arguments</td><td>No</td><td>No</td><td class="better">Yes, deepest</td><td>No</td></tr>
-              <tr><td>Apply-time validation</td><td class="us">Common failures, no init</td><td>No</td><td>No</td><td class="better">Deep, via provider rulesets</td><td>Syntax and references, needs init</td></tr>
-              <tr><td>Plan destroy and replace risk</td><td class="us">Yes, with cause</td><td>Security checks only</td><td>Security checks only</td><td>No</td><td>No</td></tr>
-              <tr><td>Cost of a plan</td><td class="us">AWS, Azure, Google; offline; budget gate</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-              <tr><td>Your own policies</td><td class="us">YAML rules, Checkov-format graph YAML, Rego</td><td>Python, YAML</td><td>Rego</td><td>Go plugins</td><td>No</td></tr>
-              <tr><td>Cross-resource checks</td><td class="us">Attack paths and graph policies</td><td>Graph checks</td><td>No</td><td>No</td><td>No</td></tr>
-              <tr><td>Auto-fix</td><td class="us">Yes, plus verified AI fixes</td><td>Not in open source</td><td>No</td><td>Some rules</td><td>No</td></tr>
-              <tr><td>Waivers with expiry</td><td class="us">Reason, approver, expiry</td><td>Skip comments</td><td>Expiry in ignore comments</td><td>Ignore comments</td><td>No</td></tr>
-              <tr><td>Kubernetes admission control</td><td class="us">Built in</td><td>No</td><td>Via operator</td><td>No</td><td>No</td></tr>
-              <tr><td>Optional AI, including local models</td><td class="us">Yes</td><td>Paid platform</td><td>No</td><td>No</td><td>No</td></tr>
-              <tr><td>SARIF, JUnit, pre-commit, editors</td><td class="us">Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="footnote">Based on public documentation as of November 2026. Corrections are welcome as a GitHub issue.</p>
-      </div>
-    </section>
-    <section class="section soft">
-      <div class="container split">
-        <article class="card"><h3>Why teams pick TerraGuard</h3><ul class="plain">
-          <li><b>Feedback in milliseconds</b> in the browser or editor</li>
-          <li><b>The engine decides</b>; AI fixes are verified first</li>
-          <li><b>Adopt gradually</b> with baselines and diff-aware review</li>
-          <li><b>Runs anywhere for $0</b>, including air-gapped</li>
-        </ul></article>
-        <article class="card"><h3>Where others are stronger</h3><ul class="plain">
-          <li><b>Rule breadth:</b> Checkov and Trivy have larger, older libraries and bigger communities.</li>
-          <li><b>Provider values:</b> TFLint rulesets know more allowed values, such as every instance type.</li>
-          <li><b>Pricing depth:</b> Infracost covers more resources and usage patterns.</li>
-          <li><b>Platforms:</b> Sentinel, Spacelift and env0 also orchestrate runs; TerraGuard only checks.</li>
-        </ul></article>
-      </div>
-    </section>
-  </div>
-
   <div class="page" data-page="integrations" hidden>
     <section id="install" class="section page-top">
       <div class="container">
@@ -907,38 +869,10 @@ docker compose up -d     # http://127.0.0.1:8080</pre>
       <div class="container">
         <header class="section-head">
           <p class="kicker">Architecture</p>
-          <h2>From an AI prototype to a deterministic platform</h2>
-          <p class="sub">Phase 1 proved people want structured findings with fixes. Later phases made them reliable enough to block a merge.</p>
+          <h2>How information flows</h2>
+          <p class="sub">Every surface runs the same engine on the same model, so the browser, the editor, CI and the server agree.</p>
         </header>
-        <div class="phases">
-          <article class="card phase">
-            <p class="phase-tag">Phase 1 · April 2026</p>
-            <h3>AI-only prototype</h3>
-            <ul><li>Each scan sent the whole file to a paid model</li><li>Findings varied between runs</li><li>Needed a server and a key</li></ul>
-            <p class="verdict-line neg">Could not be trusted as a CI gate</p>
-          </article>
-          <article class="card phase">
-            <p class="phase-tag">Phase 2</p>
-            <h3>Deterministic engine</h3>
-            <ul><li>Go engine on HashiCorp's HCL parser, compiled to WebAssembly</li><li>Validation, plan risk, attack paths, auto-fix</li><li>Every format in one model</li></ul>
-            <p class="verdict-line pos">Fast, free, safe to gate merges</p>
-          </article>
-          <article class="card phase current">
-            <p class="phase-tag">3.0 · Now</p>
-            <h3>Teams and private cloud</h3>
-            <ul><li>Folders and repository zips in the browser</li><li>CODEOWNERS on findings, add-ons, HTML reports</li><li>Nutanix, vSphere and OpenShift</li><li>Signed releases with an SBOM</li></ul>
-            <p class="verdict-line">Contributions welcome</p>
-          </article>
-        </div>
-        <h3 class="sub-title">Engine modules</h3>
-        <div class="layers" role="img" aria-label="Layered module map: entry points call shared services, which call the engine packages.">
-          <div class="layer"><span class="layer-name">Entry points</span>
-            <div class="mods"><span>cmd/wasm<small>browser</small></span><span>cmd/terraguard<small>CLI</small></span><span>terraguard serve<small>web, API, admission</small></span><span>terraguard mcp<small>agent tools</small></span><span>terraguard lsp<small>editors</small></span><span>action.yml<small>CI gate</small></span></div></div>
-          <div class="layer"><span class="layer-name">Services</span>
-            <div class="mods"><span>internal/ai<small>route, fallback, redaction</small></span><span>internal/stats<small>anonymous counters</small></span></div></div>
-          <div class="layer core"><span class="layer-name">Engine</span>
-            <div class="mods"><span>parse.go<small>HCL</small></span><span>formats.go<small>every format, one model</small></span><span>rules*.go<small>1,750 rules</small></span><span>graphpolicy.go<small>cross-resource</small></span><span>schema, values<small>will it apply</small></span><span>plan.go<small>plan risk</small></span><span>cost.go<small>3 clouds</small></span><span>policy.go<small>waivers, custom</small></span><span>fix.go<small>hclwrite</small></span><span>verify.go<small>accept or reject</small></span><span>format.go<small>SARIF, JUnit, MD</small></span></div></div>
-        </div>
+        <div data-flow-slot></div>
       </div>
     </section>
     <section id="performance" class="section soft">
@@ -953,7 +887,7 @@ docker compose up -d     # http://127.0.0.1:8080</pre>
           <div class="metric"><b>0.25 s</b><span>200 files, 2,400 resources</span></div>
           <div class="metric"><b>~55 MB</b><span>peak memory for that scan</span></div>
           <div class="metric"><b>0</b><span>network calls during a scan</span></div>
-          <div class="metric"><b>84 of 84</b><span>labelled eval cases pass</span></div>
+          <div class="metric"><b>106 of 106</b><span>labelled eval cases pass</span></div>
           <div class="metric"><b>2.5 MB</b><span>engine download in the browser (gzip)</span></div>
         </div>
         <div id="live-stats" hidden></div>

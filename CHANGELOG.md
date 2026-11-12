@@ -4,6 +4,15 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- The site opens in the light theme by default; dark and system are one click away and remembered.
+- The comparison with Checkov, Trivy, TFLint and terraform validate is on the home page as a pure yes, partly or no table (`#/compare` scrolls to it).
+- "How it works": a clickable diagram of how information flows (files, one model, the engine, your policy, results, with the optional AI lane), on the home page and the Architecture page, which drops its history and module map.
+- The home page drops the duplicate integrations grid; Integrations has it.
+- More space between the logo and the menu, and gentle scroll motion (switched off for reduced motion).
+
 ## [3.0.1] - 2026-11-13
 
 ### Changed

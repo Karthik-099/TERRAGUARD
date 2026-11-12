@@ -63,15 +63,15 @@
   };
   let editor, monacoRef, models = {}, graph, appReady;
 
-  // Theme: system (default), light or dark; the choice is remembered.
+  // Theme: light (default), dark or system; the choice is remembered.
   const isDark = () => document.documentElement.dataset.theme === "dark";
   const systemDark = matchMedia("(prefers-color-scheme: dark)");
-  const THEME_MODES = ["system", "light", "dark"], THEME_ICON = { system: "monitor", light: "sun", dark: "moon" };
-  let themeMode = "system";
-  try { themeMode = THEME_MODES.includes(localStorage.getItem("tg.theme.v3")) ? localStorage.getItem("tg.theme.v3") : "system"; } catch {}
+  const THEME_MODES = ["light", "dark", "system"], THEME_ICON = { system: "monitor", light: "sun", dark: "moon" };
+  let themeMode = "light";
+  try { themeMode = THEME_MODES.includes(localStorage.getItem("tg.theme.v3")) ? localStorage.getItem("tg.theme.v3") : "light"; } catch {}
   function applyTheme(mode, save) {
     themeMode = mode;
-    if (save) try { mode === "system" ? localStorage.removeItem("tg.theme.v3") : localStorage.setItem("tg.theme.v3", mode); } catch {}
+    if (save) try { mode === "light" ? localStorage.removeItem("tg.theme.v3") : localStorage.setItem("tg.theme.v3", mode); } catch {}
     const next = mode === "system" ? (systemDark.matches ? "dark" : "light") : mode;
     document.documentElement.dataset.theme = next;
     for (const b of document.querySelectorAll("[data-theme-toggle]")) {
@@ -181,7 +181,7 @@
   }
 
   // Routing: product page <-> workspace
-  const PAGES = ["home", "whats-new", "product", "ai", "policy", "compare", "integrations", "docs", "architecture", "open-source"];
+  const PAGES = ["home", "whats-new", "product", "ai", "policy", "integrations", "docs", "architecture", "open-source"];
   const inApp = () => location.hash.startsWith("#/app") || location.hash.startsWith("#s=");
   function route() {
     const app = inApp();
@@ -194,9 +194,10 @@
       return;
     }
     let name = (location.hash.match(/^#\/([\w-]+)/) || [])[1];
-    // the old Enterprise page now lives under Integrations ("Run it anywhere")
-    const anchor = name === "enterprise" ? "deploy" : (location.hash.match(/\?([\w-]+)$/) || [])[1];
-    if (name === "enterprise") name = "integrations";
+    // Sections that used to be pages: Enterprise is under Integrations, Compare is on the home page.
+    const MOVED = { enterprise: ["integrations", "deploy"], compare: ["home", "compare"] };
+    const anchor = MOVED[name]?.[1] || (location.hash.match(/\?([\w-]+)$/) || [])[1];
+    if (MOVED[name]) name = MOVED[name][0];
     const page = PAGES.includes(name) ? name : "home";
     $$("#landing .page").forEach((p) => (p.hidden = p.dataset.page !== page));
     $$(".nav-links a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#/${page}`));
@@ -208,7 +209,7 @@
     // GitHub counts are fetched only on the page that shows them, and never when air-gapped.
     if (page === "open-source" && !LOCAL) renderGitHub();
     const target = anchor && document.getElementById(anchor);
-    if (target) requestAnimationFrame(() => target.scrollIntoView({ behavior: "instant" }));
+    if (target) requestAnimationFrame(() => target.scrollIntoView({ behavior: reduceMotion ? "instant" : "smooth" }));
     else scrollTo({ top: 0, behavior: "instant" });
   }
 
@@ -1918,6 +1919,9 @@ terraguard scan .`;
   // Product page motion: calm reveal on scroll, a header hairline once scrolled,
   // the mobile menu and the showcase tabs. Nothing moves for reduced motion.
   function setupMotion() {
+    // The architecture page shows the same flow diagram as the home page.
+    const slot = $("[data-flow-slot]"), flow = $("[data-flow]");
+    if (slot && flow) slot.replaceWith(flow.cloneNode(true));
     const header = $(".site-header");
     const onScroll = () => header.classList.toggle("scrolled", scrollY > 8);
     addEventListener("scroll", onScroll, { passive: true });
@@ -1943,7 +1947,7 @@ terraguard scan .`;
       });
     }
     if (reduceMotion) return;
-    const targets = $$("#landing .section-head, #landing .tile-card, #landing .feature-list li, #landing .trust article, #landing .integ-grid li, #landing .private, #landing .showcase, #landing .try-panel, #landing .card, #landing .stage, #landing .metric, #landing .table-wrap, #landing .pipeline li, #landing .install, #landing .hero-visual");
+    const targets = $$("#landing .section-head, #landing .tile-card, #landing .feature-list li, #landing .trust article, #landing .integ-grid li, #landing .private, #landing .showcase, #landing .try-panel, #landing .card, #landing .stage, #landing .metric, #landing .table-wrap, #landing .pipeline li, #landing .install, #landing .hero-visual, #landing .logo-strip li, #landing .compare tbody tr, #landing .news-group, #landing .private-logos li, #landing .flow > li, #landing .flow-ai");
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
@@ -1952,6 +1956,14 @@ terraguard scan .`;
         countUp(e.target);
       }
     }, { rootMargin: "0px 0px -6% 0px" });
+    // The hero glow drifts slower than the page, a light sense of depth.
+    const orbs = $$("#landing .orb");
+    let ticking = false;
+    addEventListener("scroll", () => {
+      if (ticking || scrollY > innerHeight * 1.5) return;
+      ticking = true;
+      requestAnimationFrame(() => { orbs.forEach((o, i) => (o.style.translate = `0 ${scrollY * (0.12 + 0.06 * (i % 3))}px`)); ticking = false; });
+    }, { passive: true });
     for (const el of targets) {
       const siblings = [...el.parentElement.children];
       el.style.setProperty("--d", `${Math.min(siblings.indexOf(el), 5) * 60}ms`);
