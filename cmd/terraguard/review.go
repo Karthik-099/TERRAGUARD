@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Karthik-099/TERRAGUARD/engine"
@@ -18,7 +20,8 @@ import (
 func runReview(args []string) (int, error) {
 	fset := flag.NewFlagSet("review", flag.ContinueOnError)
 	base := fset.String("base", "origin/main", "git revision to compare against (e.g. the PR base SHA)")
-	format := fset.String("format", "markdown", "stdout format: markdown or json")
+	format := fset.String("format", "markdown", "stdout format: markdown, json or github-review (pull-request review payload)")
+	out := fset.String("out", "", "write the --format output to this file instead of stdout")
 	mdOut := fset.String("markdown", "", "also write Markdown to this file")
 	jsonOut := fset.String("json", "", "also write JSON to this file")
 	failOn := fset.String("fail-on", "", "override the policy threshold")
@@ -87,10 +90,24 @@ func runReview(args []string) (int, error) {
 			}
 		}
 	}
-	if *format == "json" {
-		fmt.Println(string(js))
+	stdout := md
+	switch *format {
+	case "json":
+		stdout = string(js) + "\n"
+	case "github-review":
+		gr, err := githubReviewFromGit(rev, head.Files, *base)
+		if err != nil {
+			return 2, err
+		}
+		b, _ := json.MarshalIndent(gr, "", "  ")
+		stdout = string(b) + "\n"
+	}
+	if *out != "" {
+		if err := os.WriteFile(*out, []byte(stdout), 0o644); err != nil {
+			return 2, err
+		}
 	} else {
-		fmt.Print(md)
+		fmt.Print(stdout)
 	}
 	if !rev.Passed {
 		return 1, nil
@@ -142,4 +159,184 @@ func gitFilesAt(rev string, paths []string) (map[string]string, error) {
 		files[p] = src
 	}
 	return files, nil
+}
+
+// reviewMarker finds TerraGuard's own review and comments so the Action can
+// replace them instead of stacking duplicates.
+const reviewMarker = "<!-- terraguard-review -->"
+
+type ghComment struct {
+	Path      string `json:"path"`
+	Line      int    `json:"line"`
+	Side      string `json:"side"`
+	StartLine int    `json:"start_line,omitempty"`
+	StartSide string `json:"start_side,omitempty"`
+	Body      string `json:"body"`
+}
+
+// ghReview is the body of POST /repos/{owner}/{repo}/pulls/{n}/reviews.
+type ghReview struct {
+	Body     string      `json:"body"`
+	Event    string      `json:"event"`
+	Comments []ghComment `json:"comments"`
+}
+
+func githubReviewFromGit(rev *engine.Review, files map[string]string, base string) (ghReview, error) {
+	diff, err := git("diff", "-U0", "--relative", "--no-color", "--no-ext-diff", base, "--")
+	if err != nil {
+		return ghReview{}, err
+	}
+	prefix, err := git("rev-parse", "--show-prefix") // GitHub paths are relative to the repository root
+	if err != nil {
+		return ghReview{}, err
+	}
+	return buildGitHubReview(rev, files, addedLines(diff), strings.TrimSpace(prefix)), nil
+}
+
+var hunkRE = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
+
+// addedLines maps each file in a unified diff to its added (RIGHT side) lines.
+func addedLines(diff string) map[string]map[int]bool {
+	out := map[string]map[int]bool{}
+	var cur map[int]bool
+	for _, l := range strings.Split(diff, "\n") {
+		if name, ok := strings.CutPrefix(l, "+++ "); ok {
+			cur = nil
+			// Quoted names (unusual characters) and deletions get no inline comments.
+			if name, ok = strings.CutPrefix(name, "b/"); ok {
+				cur = map[int]bool{}
+				out[name] = cur
+			}
+			continue
+		}
+		if m := hunkRE.FindStringSubmatch(l); m != nil && cur != nil {
+			start, _ := strconv.Atoi(m[1])
+			n := 1
+			if m[2] != "" {
+				n, _ = strconv.Atoi(m[2])
+			}
+			for i := start; i < start+n; i++ {
+				cur[i] = true
+			}
+		}
+	}
+	return out
+}
+
+// buildGitHubReview puts each new finding on a changed line inline, with a
+// suggestion block when its safe fix only touches the changed lines around it.
+// Everything else is listed in the review body.
+func buildGitHubReview(rev *engine.Review, files map[string]string, added map[string]map[int]bool, prefix string) ghReview {
+	status := "passed"
+	if !rev.Passed {
+		status = "changes requested"
+	}
+	var body strings.Builder
+	fmt.Fprintf(&body, "%s\n## TerraGuard review: %s (%s risk tier)\n\n%d new finding(s) · %d resolved · %d pre-existing.\n",
+		reviewMarker, status, rev.Tier, len(rev.New), len(rev.Resolved), rev.Existing)
+	gr := ghReview{Event: "COMMENT", Comments: []ghComment{}}
+	var rest []engine.Finding
+	for _, f := range rev.New {
+		lines := added[f.File]
+		if f.Line <= 0 || !lines[f.Line] {
+			rest = append(rest, f)
+			continue
+		}
+		lo, hi := f.Line, f.Line // the run of changed lines around the finding
+		for lines[lo-1] {
+			lo--
+		}
+		for lines[hi+1] {
+			hi++
+		}
+		c := ghComment{Path: prefix + f.File, Line: f.Line, Side: "RIGHT"}
+		text := fmt.Sprintf("%s\n**%s** %s **%s**\n\n%s", reviewMarker, f.Severity, mdCode(f.RuleID), mdText(f.Title), mdText(f.Message))
+		if f.Remediation != "" {
+			text += "\n\nFix: " + mdText(f.Remediation)
+		}
+		if s, e, repl, ok := suggestion(files, f); ok && lo <= s && e <= hi {
+			c.Line = e
+			if s < e {
+				c.StartLine, c.StartSide = s, "RIGHT"
+			}
+			fence := strings.Repeat("`", max(3, longestRun(strings.Join(repl, "\n"), '`')+1))
+			text += "\n\n" + fence + "suggestion\n" + strings.Join(repl, "\n") + "\n" + fence
+		} else if ok {
+			text += "\n\nThe safe fix also changes lines outside this change; run `terraguard fix` to apply it."
+		}
+		c.Body = text
+		gr.Comments = append(gr.Comments, c)
+	}
+	if len(rest) > 0 {
+		body.WriteString("\nNot on a changed line:\n\n")
+		for i, f := range rest {
+			if i == 50 {
+				fmt.Fprintf(&body, "- and %d more\n", len(rest)-50)
+				break
+			}
+			fmt.Fprintf(&body, "- **%s** %s %s: %s\n", f.Severity, mdCode(f.RuleID), mdCode(fmt.Sprintf("%s:%d", prefix+f.File, f.Line)), mdText(f.Title))
+		}
+	}
+	gr.Body = body.String()
+	return gr
+}
+
+// suggestion returns the old line range s..e (1-based) a finding's fix
+// replaces and the replacement lines. A pure insertion is widened to the line
+// before it, because a suggestion must replace at least one line.
+func suggestion(files map[string]string, f engine.Finding) (s, e int, repl []string, ok bool) {
+	h, ok := engine.FixHunkFor(files, f) // never for secret findings
+	if !ok || h.File != f.File {
+		return 0, 0, nil, false
+	}
+	old := strings.Split(files[h.File], "\n")
+	s, e, repl = h.Start, h.End, h.Lines
+	if e < s {
+		if s > 1 {
+			s, e = s-1, s-1
+			repl = append([]string{old[s-1]}, repl...)
+		} else {
+			e = s
+			repl = append(append([]string{}, repl...), old[0])
+		}
+	}
+	return s, e, repl, true
+}
+
+func longestRun(s string, c byte) int {
+	best, n := 0, 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == c {
+			n++
+			best = max(best, n)
+		} else {
+			n = 0
+		}
+	}
+	return best
+}
+
+// mdText makes untrusted text inert in Markdown: one line, punctuation
+// that could open a code span, link, table cell, entity or HTML escaped, and
+// @mentions broken so a resource name cannot notify anyone.
+func mdText(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	var b strings.Builder
+	for _, r := range s {
+		if strings.ContainsRune("\\`*[]<>|~&", r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+		if r == '@' {
+			b.WriteString("&#8203;")
+		}
+	}
+	return b.String()
+}
+
+// mdCode is an inline code span that untrusted text cannot break out of.
+func mdCode(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	fence := strings.Repeat("`", longestRun(s, '`')+1)
+	return fence + " " + s + " " + fence
 }

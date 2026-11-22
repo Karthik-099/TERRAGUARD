@@ -1,0 +1,48 @@
+# path: databricks.yml
+# forbid: TG-DBX-CL-001, TG-DBX-CL-002, TG-DBX-CL-003, TG-DBX-CL-004, TG-DBX-CL-005, TG-DBX-SQL-001, TG-DBX-JOB-001
+bundle:
+  name: clean
+
+variables:
+  mode:
+    default: NONE
+  storage_key:
+    default: "{{secrets/lake/key}}"
+
+run_as:
+  service_principal_name: 8d23ae77-912e-4a19-81e4-b9c3f5cc9349
+
+resources:
+  clusters:
+    shared:
+      cluster_name: shared
+      spark_version: 15.4.x-scala2.12
+      autotermination_minutes: 30
+      # differs per target, so it is decided at deploy time
+      data_security_mode: ${var.mode}
+  jobs:
+    etl:
+      name: etl
+      job_clusters:
+        - job_cluster_key: main
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            num_workers: 2
+            data_security_mode: ${workspace.current_user.userName}
+            spark_conf:
+              fs.azure.account.key.prodlake.dfs.core.windows.net: ${var.storage_key}
+            init_scripts:
+              - volumes:
+                  destination: /Volumes/main/ops/scripts/setup.sh
+  sql_warehouses:
+    bi:
+      name: bi
+      cluster_size: Small
+      auto_stop_mins: 10
+
+targets:
+  dev:
+    default: true
+  prod:
+    variables:
+      mode: USER_ISOLATION

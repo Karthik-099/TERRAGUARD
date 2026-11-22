@@ -31,6 +31,7 @@ var secretRules = []Rule{
 	{ID: "TG-SECRET-013", Title: "Nutanix Prism credential committed", Severity: High, Category: CatSecurity, CWE: "CWE-798", Remediation: "Change the Prism password, remove it from git history, and pass it in with NUTANIX_PASSWORD or a sensitive variable."},
 	{ID: "TG-SECRET-014", Title: "Hardcoded password or secret value", Severity: High, Category: CatSecurity, CWE: "CWE-798", Remediation: "Rotate the value, remove it from git history, and read it from a secrets manager, a sensitive variable or a CI secret."},
 	{ID: "TG-SECRET-015", Title: "Secret-bearing file committed", Severity: High, Category: CatSecurity, CWE: "CWE-312", Remediation: "Remove the file from git history, rotate what it holds, and add its name to .gitignore."},
+	{ID: "TG-SECRET-016", Title: "Databricks personal access token committed", Severity: Critical, Category: CatSecurity, CWE: "CWE-798", Remediation: "Revoke the token in the workspace (Settings, Developer, Access tokens, or the Token Management API), remove it from git history, and use OAuth or a CI secret instead."},
 }
 
 type secretPattern struct {
@@ -43,6 +44,7 @@ type secretPattern struct {
 var secretPatterns = []secretPattern{
 	{"TG-SECRET-008", "Google service account private key", regexp.MustCompile(`"private_key"\s*:\s*"(-----BEGIN (?:RSA )?PRIVATE KEY-----\\n[A-Za-z0-9+/=]{40,})`), 1},
 	{"TG-SECRET-002", "GitHub token", regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82})\b`), 0},
+	{"TG-SECRET-016", "Databricks personal access token", regexp.MustCompile(`\b(dapi[0-9a-f]{32})(?:-\d+)?\b`), 1}, // Azure tokens add -2, -3 ...
 	{"TG-SECRET-003", "GitLab token", regexp.MustCompile(`\b(?:glpat|gldt|glrt|glptt|glsoat)-[0-9A-Za-z_-]{20,}`), 0},
 	{"TG-SECRET-005", "Slack webhook URL", regexp.MustCompile(`hooks\.slack\.com/services/T[A-Z0-9]{6,}/B[A-Z0-9]{6,}/([A-Za-z0-9]{20,})`), 1},
 	{"TG-SECRET-004", "Slack token", regexp.MustCompile(`\bxox[abposr]-[0-9]{6,}-[0-9A-Za-z-]{10,}`), 0},

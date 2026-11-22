@@ -1,0 +1,43 @@
+# path: databricks.yml
+# expect: TG-DBX-CL-001, TG-DBX-CL-002, TG-DBX-CL-004, TG-DBX-CL-005, TG-DBX-SQL-001, TG-DBX-JOB-001
+bundle:
+  name: insecure
+
+variables:
+  storage_key:
+    default: Qm9vdHN0cmFwS2V5Zm9yU3RvcmFnZTk4
+  mode:
+    default: NONE
+
+run_as:
+  user_name: alice@example.com
+
+resources:
+  clusters:
+    shared:
+      cluster_name: shared
+      spark_version: 15.4.x-scala2.12
+      autotermination_minutes: 0
+      data_security_mode: ${var.mode}
+  jobs:
+    etl:
+      name: etl
+      job_clusters:
+        - job_cluster_key: main
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            num_workers: 2
+            spark_conf:
+              fs.azure.account.key.prodlake.dfs.core.windows.net: ${var.storage_key}
+            init_scripts:
+              - dbfs:
+                  destination: dbfs:/init/setup.sh
+  sql_warehouses:
+    bi:
+      name: bi
+      cluster_size: Small
+      auto_stop_mins: 0
+
+targets:
+  dev:
+    default: true

@@ -12,6 +12,7 @@ on:
       - "examples/**"
       - "go.mod"
       - "go.sum"
+      - "Makefile"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -32,11 +33,13 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-      - run: make web
+      # Browser libraries are fetched here, checked against their pinned hashes and
+      # served from the site itself, so visitors' browsers contact no third-party host.
+      - run: make site
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
-          path: web
+          path: bin/site
 
   deploy:
     needs: build

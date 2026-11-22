@@ -69,7 +69,7 @@ flowchart TB
     P[HCL parser<br/>hashicorp/hcl] --> N[Normalized<br/>Resource model]
     PL[Plan JSON] --> N
     FP[Format parsers<br/>Kubernetes · CloudFormation · ARM<br/>Dockerfile · Compose · CI · Ansible · OpenAPI] --> N
-    N --> R[1,750 rules<br/>all formats]
+    N --> R[1,770 rules<br/>all formats]
     N --> GP[Graph policies<br/>connections between resources]
     N --> V[Schema and API value checks]
     N --> COST[Cost estimate]
@@ -263,7 +263,7 @@ sequenceDiagram
   participant S as Scan()
   participant P as Parse()
   participant MC as moduleChecks()
-  participant RR as Rules (1,750)
+  participant RR as Rules (1,770)
   participant PL as parsePlan()
   participant PO as applyPolicy()
   C->>S: Input{files, plan, config, fail_on}
@@ -367,13 +367,14 @@ comments. Fixes that force replacement say so.
 | **Vultr** | Firewall rules |
 | **Nutanix** | Provider TLS verification, Prism credentials in code, VM boot and guest tools, Flow policies allowing all, image sources over HTTP, NKE, storage containers, SNMP v1/v2, CAPX cluster manifests, API value checks (TG-VAL-023) |
 | **VMware vSphere** | Provider `allow_unverified_ssl`, port group promiscuous mode and forged transmits, VM EFI secure boot and hardware, host lockdown and SSH, HA/DRS, datastore checks, value checks (TG-VAL-024) |
+| **Databricks** | Cluster autotermination, isolation mode and local disk encryption, credentials in Spark config, DBFS init scripts, SQL warehouse auto stop, Unity Catalog grants to all users, token lifetimes, workspace security settings, open IP access lists, literal secrets, Asset Bundles, value checks (TG-VAL-025) |
 | **Red Hat** | OpenShift Routes, SecurityContextConstraints, BuildConfigs, ImageStreams, OAuth, RBAC; ROSA (`rhcs`) privacy, etcd encryption, FIPS, multi-AZ; ARO API and ingress exposure, FIPS, encryption at host |
 | **Kubernetes / Helm** | Privileged / host-namespace pods, mutable images, open LoadBalancers, plain-text secrets, unpinned charts |
 | **Any file** | 15 `TG-SECRET-*` rules: cloud keys, Git and chat tokens, private keys, JWTs, high-entropy passwords; secret-bearing files by name |
 | **Plugins** | Findings from `terraguard-<name>` executables, prefixed with the plugin name; see [PLUGINS.md](PLUGINS.md) |
 | **Any provider** | Syntax/references/duplicates, CIDRs, hardcoded secrets & key patterns, provider/module pinning, `required_version`, state backend, committed state, subdomain-takeover CNAMEs, cost |
 
-Run `terraguard rules` for the full catalog of 1,750 rules.
+Run `terraguard rules` for the full catalog of 1,770 rules.
 
 ---
 

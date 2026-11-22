@@ -37,6 +37,7 @@ Auto-fix edits Terraform only; findings in other formats have no fix.
 |---|---|
 | `terraguard scan [paths] [flags]` | Scan `.tf` and `.tfvars` files (default `.`) |
 | `terraguard review --base REV [paths]` | Report only what a change introduces or resolves, with a risk tier |
+| `terraguard report [paths] --framework soc2\|iso27001\|cis\|pci\|hipaa` | Audit evidence report grouped by framework control (HTML or JSON) |
 | `terraguard fix [paths]` | Apply safe, deterministic fixes in place |
 | `terraguard agent [paths] [--write]` | Deterministic fixes, then AI proposals that the engine verifies |
 | `terraguard pulse [roots]` | Control adoption, waivers and trend across many modules |
@@ -58,8 +59,9 @@ Auto-fix edits Terraform only; findings in other formats have no fix.
 | `terraguard drift [dir] --state FILE \| --live [--fail] [--format json]` | Inventory of code against state (not applied, not in code); `--live` runs a read-only `terraform plan -refresh-only` to list resources changed outside Terraform |
 | `terraguard fix [paths] --pr [--base BRANCH]` | Apply safe fixes, commit only the fixed files on a new branch, push it and open a pull request with gh (or print the command) |
 | `terraguard ui [path] [--no-browser]` | Open the workspace locally with the folder loaded from disk (loopback only, one-time token, read-only) |
-| `terraguard serve [--addr host:port] [--tls-cert F --tls-key F] [--admission-policy F]` | Self-host the web app, the HTTP API and the Kubernetes admission webhook (`/api/k8s/validate`) |
+| `terraguard serve [--addr host:port] [--tls-cert F --tls-key F] [--admission-policy F]` | Self-host the web app, the HTTP API and the Kubernetes admission webhook (`/api/k8s/validate`); flags below |
 | `terraguard mcp` | Run the MCP server over stdio |
+| `terraguard connect claude-code\|cursor\|vscode\|claude-ai\|print [--url https://host]` | Add TerraGuard to an MCP client; see below and [CONNECT.md](CONNECT.md) |
 | `terraguard sbom [paths] [--format cyclonedx\|json] [--out FILE]` | Offline CycloneDX 1.5 inventory: Terraform providers (locked versions), modules, container images and lockfile packages, with purls |
 | `terraguard vuln --sbom FILE` | Offline OSV scan of the packages in a CycloneDX JSON SBOM (from `terraguard sbom` or another tool) instead of lockfiles |
 | `terraguard version` | Print the version |
@@ -99,7 +101,7 @@ Every command accepts `-h` for its flags. Flags may appear before or after paths
 | Command | Flag | Meaning |
 |---|---|---|
 | review | `--base REV` | Git revision to compare with (default `origin/main`) |
-| review | `--format markdown\|json`, `--markdown FILE`, `--json FILE` | Outputs |
+| review | `--format markdown\|json\|github-review`, `--out FILE`, `--markdown FILE`, `--json FILE` | Outputs; `--out` writes the `--format` output to a file instead of stdout |
 | review | `--fail-on`, `--config`, `--ai`, `--schema` | As for scan |
 | agent | `--write` | Write accepted changes (default: dry run) |
 | agent | `--rounds N` | Maximum AI rounds (default 2) |
@@ -108,6 +110,60 @@ Every command accepts `-h` for its flags. Flags may appear before or after paths
 | pulse | `--json FILE`, `--markdown FILE`, `--format` | Outputs |
 | pulse | `--min-adoption N` | Exit 1 if any control's adoption is below N percent |
 | pulse | (CODEOWNERS) | With a CODEOWNERS file in a root, the report adds findings per owner (`owners` in JSON) |
+
+### review --format github-review
+
+Writes the body of GitHub's
+[create a review](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request)
+request: `body`, `event` (always `COMMENT`) and `comments`, each with `path`
+(relative to the repository root), `line`, `side` (`RIGHT`), `start_line` and
+`start_side` for a range, and `body`.
+
+- A new finding on a line the change added becomes an inline comment. Others are listed in `body`.
+- When the finding has a safe fix, TerraGuard applies that fix alone, keeps only the lines that differ, and adds them as a ` ```suggestion ` block if they sit inside the same run of changed lines. A fix that only inserts lines also replaces the line before it, since a suggestion must replace at least one line. A fix that reaches outside the change becomes a plain comment that says to run `terraguard fix`.
+- Secret findings never get a suggestion, and their values stay redacted.
+- Finding text is escaped, so a resource name cannot open a code fence, link or HTML comment, or @mention anyone. The fence around a suggestion is longer than any run of backticks inside it.
+- `body` and each comment start with the hidden marker `<!-- terraguard-review -->`.
+- The exit code is the same as for any review.
+
+### report flags
+
+| Flag | Meaning |
+|---|---|
+| `--framework soc2\|iso27001\|cis\|pci\|hipaa` | Framework to report on (required) |
+| `--format html\|json` | Output (default `html`) |
+| `--out FILE` | Write to a file instead of stdout |
+| `--config FILE` | Policy file, for waivers (default: found automatically) |
+
+The report groups checks by framework control, using the same theme mapping as
+the `compliance` section of the scan JSON. That mapping is coarse: each rule
+maps to one or more of eight themes (encryption at rest and in transit, network,
+access, secrets, logging, backup, change), and each theme maps to one control.
+The report says so, and lists the themes a framework has no control for.
+
+Each control has a status:
+
+| Status | Meaning |
+|---|---|
+| `fail` | At least one active finding of a mapped rule |
+| `pass` | No active finding, and at least one mapped rule applied (it judged a scanned resource type, or reported a finding that was waived) |
+| `not_assessed` | No mapped rule applied to the scanned code |
+
+Rules with no resource type (module, plan and secret checks) count as applied
+only when they report something, so a plan-only rule never makes a control look
+assessed when no plan was given. Each control lists its failing resources with
+file and line, and the waivers that matched its findings, with reason, approver
+and expiry. Expired waivers are flagged, and their findings are failures again.
+
+The header has the scan date (UTC), the TerraGuard version, the rules version,
+the number of files, and `files_sha256`: sha256 over the scanned files sorted by
+path, each written as `<len(path)>:<path><len(content)>:<content>`. It also
+states that the report is automated evidence, not a certification.
+
+The HTML is one self-contained, print-friendly file: inline CSS, no scripts and
+no external requests (a Content-Security-Policy blocks them), and every value
+is escaped. The JSON schema is `terraguard.compliance/v1`; fields are only added
+within a schema version.
 
 ### Exit codes
 
@@ -257,6 +313,41 @@ clears them. `Finding.owner` is unchanged: the team that owns the standard.
 API and WASM callers pass the file text as `code_owners` in the input, and
 `code_owners_root` when file keys carry a prefix the CODEOWNERS paths do not.
 
+### serve flags
+
+| Flag | Effect |
+|---|---|
+| `--addr host:port` | Listen address (default `127.0.0.1:8080`) |
+| `--tls-cert F --tls-key F` | Serve HTTPS with your own certificate |
+| `--domain HOST` | Automatic HTTPS: a Let's Encrypt certificate for `HOST` only, HTTPS on :443, the HTTP-01 challenge and a redirect to HTTPS on :80, HSTS. Turns on the MCP secret link. Refused with `TERRAGUARD_OFFLINE=true` |
+| `--cert-dir DIR` | Certificate cache and the stored MCP key (default `<user cache dir>/terraguard/autocert`) |
+| `--https-only` | Refuse plain-HTTP requests that do not come straight from loopback (behind a proxy: `X-Forwarded-Proto` must be `https`) |
+| `--rotate-mcp-key` | Replace the stored MCP key in `--cert-dir` and exit; restart the server to use it |
+| `--scan-timeout D` | Longest a scan may run in the API and remote MCP (default `30s`); longer gets 504 |
+| `--max-scans N` | Scans that may run at once (default GOMAXPROCS); more get 503 with `Retry-After` |
+| `--audit-log F`, `--admission-policy F` | Audit log and admission webhook policy |
+
+### connect
+
+`terraguard connect <client>` adds the local stdio server (`terraguard mcp`)
+to a client. With `--url https://host` it adds the remote server instead;
+plain `http` is refused unless the host is loopback.
+
+| Client | What it does |
+|---|---|
+| `claude-code` | Runs `claude mcp add` (`--scope user` by default, or `project`, `local`) when `claude` is on PATH, otherwise prints the command |
+| `cursor` | Merges an entry into `.cursor/mcp.json` in `--dir` (default `.`), or `~/.cursor/mcp.json` with `--global` |
+| `vscode` | Merges an entry into `.vscode/mcp.json` in `--dir`, or the user `mcp.json` (`<user config dir>/Code/User/mcp.json`) with `--global` |
+| `claude-ai` | Prints the secret link and the claude.ai settings steps; claude.ai connectors are added by hand |
+| `print` | Prints the Claude Code command and the Cursor and VS Code entries |
+
+Other entries, their order and the file's indentation are kept; the old file
+is saved as `.bak` and the new one is written atomically. Files with comments
+are refused, with the entry to paste by hand. No token is written to Cursor or
+VS Code files: Cursor reads `${env:TERRAGUARD_SERVER_TOKEN}` and VS Code
+prompts for it. Tokens and the secret link are masked unless `--show-secret`
+is given.
+
 ## HTTP API (`terraguard serve`)
 
 | Method and path | Auth | Body or response |
@@ -271,11 +362,14 @@ API and WASM callers pass the file text as `code_owners` in the input, and
 | `POST /api/stats/hit` | public | Anonymous counters from the web app; bounded |
 | `GET /metrics` | token | Prometheus metrics |
 | `POST /mcp` | token | Remote MCP server (streamable HTTP, stateless); see below |
+| `POST /mcp/<key>` | key in path | The same MCP server for clients that cannot send headers (claude.ai); see below |
 | `POST /api/run-task` | HMAC | HCP Terraform / Terraform Enterprise run task; enabled by `TERRAGUARD_RUN_TASK_HMAC_KEY` |
 
 "token" means `Authorization: Bearer $TERRAGUARD_SERVER_TOKEN` is required when
 the variable is set. Limits: request bodies 5 MB, 120 API requests and 20 AI
-requests per minute per client, timeouts on every connection.
+requests per minute per client, timeouts on every connection, at most
+`--max-scans` scans at once (503 with `Retry-After` beyond that) and
+`--scan-timeout` per scan (504).
 
 ```bash
 curl -s -X POST localhost:8080/api/scan \
@@ -295,6 +389,12 @@ curl -s -X POST localhost:8080/api/scan \
 | `generate_agents_md` | `path` or `files` | AGENTS.md |
 | `validate_rule` | `rule` (YAML) plus `files` or `path` | Validated rule and the resources it would flag |
 | `list_rules` | none | The rule catalog |
+| `explain_rule` | `id` | Title, severity, remediation, CWE, compliance themes and resource types |
+| `review_diff` | `base_files`, `head_files`, optional `config` | Findings the change introduces and resolves, risk tier, pass/fail |
+| `suggest_policy` | `standard`, `files` or `path`, optional `rule` | The rule-writing guide and resource types (no AI call on the server); with `rule`, the validated rule and its dry run |
+| `generate_sbom` | `files` or `path`, optional `format` (`json`) | CycloneDX JSON, or the component list |
+| `check_plan` | `plan` (`terraform show -json`), optional `config` | Plan summary, risk findings, verdict and cost change |
+| `estimate_cost` | `plan`, or `files` or `path`, optional `usage`, `prices` | Monthly cost before and after |
 
 ```bash
 claude mcp add terraguard -- terraguard mcp
@@ -312,6 +412,19 @@ claude mcp add --transport http terraguard https://terraguard.internal.example.c
   --header "Authorization: Bearer $TERRAGUARD_SERVER_TOKEN"
 ```
 
+When the server is reachable beyond loopback (a non-loopback `--addr`, or
+`TERRAGUARD_TRUST_PROXY=true`), `/mcp` needs the token; without a token or a
+key, MCP is refused.
+
+**Secret link.** `/mcp/<key>` serves the same tools for clients that cannot
+send a header. The key is `TERRAGUARD_MCP_KEY` (at least 32 characters from
+`A-Z a-z 0-9 - _`), or with `--domain` a random 256-bit key generated once and
+stored with mode 0600 in `--cert-dir`. A wrong key gets 404, like any unknown
+path; the key is compared in constant time and is never logged (the audit log
+records the route as `/mcp/<key>`). Print the link with
+`terraguard connect claude-ai --url https://host --show-secret`; replace it
+with `terraguard serve --rotate-mcp-key`.
+
 ## Environment variables
 
 All are optional. The CLI and server also read `./.env`.
@@ -326,7 +439,8 @@ All are optional. The CLI and server also read `./.env`.
 | `TERRAGUARD_AI_PROVIDER` | Provider to try first; also the explicit opt-in for paid providers |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | Paid providers, used only when named in the route or provider |
 | `TERRAGUARD_AI_LOCAL_ONLY` | `true` never calls a hosted provider |
-| `TERRAGUARD_SERVER_TOKEN` | Bearer token for the server API and metrics |
+| `TERRAGUARD_SERVER_TOKEN` | Bearer token for the server API, `/mcp` and metrics |
+| `TERRAGUARD_MCP_KEY` | Key for the MCP secret link `/mcp/<key>` (at least 32 random URL-safe characters); overrides the key `--domain` stores |
 | `TERRAGUARD_TRUST_PROXY` | `true` when behind a reverse proxy: client IP and SSO user from its headers |
 | `TERRAGUARD_AUDIT_LOG` | File for one JSON line per API call (metadata only) |
 | `TERRAGUARD_TELEMETRY_URL` | Opt-in anonymous usage counts from the CLI |
@@ -465,10 +579,24 @@ runs at a time, and applies `TERRAGUARD_RUN_TASK_CONFIG` if set.
 |---|---|
 | text | Terminal |
 | json | Automation; the full report |
-| sarif | GitHub code scanning and other SARIF viewers |
+| sarif | GitHub code scanning and other SARIF viewers. Results with a safe fix carry SARIF `fixes` (`artifactChanges` with one whole-line `replacements` entry); secret findings never do. GitHub accepts these, but its code scanning UI does not show them today; other SARIF viewers may |
 | junit | Test reports in GitLab, Jenkins, Azure DevOps, Bitbucket, CircleCI |
 | codequality | GitLab merge request widget |
 | markdown | Pull request comments |
+
+## GitHub Action inputs for pull-request reviews
+
+| Input | Default | Meaning |
+|---|---|---|
+| `pr-comments` | `false` | On `pull_request` events, run `terraguard review --format github-review` and post the result as one pull-request review with suggested fixes |
+
+With `pr-comments: true`:
+
+- The workflow needs `permissions: pull-requests: write` (and `contents: read`), and `actions/checkout` with `fetch-depth: 0` so the base commit is there. It works with `command: scan` or `review`.
+- It posts with `gh api` and the workflow's `GITHUB_TOKEN`, against the pull request's head commit. All inputs reach the script through environment variables.
+- It posts nothing when no new finding is on a changed line.
+- After posting, it deletes the inline comments of earlier TerraGuard reviews (found by the hidden marker, authored by `github-actions[bot]`) and replaces their summaries with "Superseded". GitHub does not allow deleting a submitted review.
+- If anything fails, such as a missing permission, a fork's read-only token, or a line GitHub will not accept, it prints a warning and the job goes on.
 
 ## Rules
 

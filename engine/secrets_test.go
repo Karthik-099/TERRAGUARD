@@ -150,7 +150,7 @@ func TestSecretFileNames(t *testing.T) {
 
 func TestSecretRulesCatalogued(t *testing.T) {
 	for _, r := range secretRules {
-		if ruleIndex[r.ID] == nil || RuleSince(r.ID) != "3.0" || len(ThemesFor(r.ID)) == 0 {
+		if ruleIndex[r.ID] == nil || RuleSince(r.ID) != "3.0" && RuleSince(r.ID) != "3.1" || len(ThemesFor(r.ID)) == 0 {
 			t.Errorf("%s: missing from the index, versions or themes", r.ID)
 		}
 	}

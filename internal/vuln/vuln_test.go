@@ -235,6 +235,9 @@ func TestOSEcosystem(t *testing.T) {
 		"ID=debian\nVERSION_ID=\"11\"\n":      "Debian:11",
 		"ID=fedora\nVERSION_ID=39\n":          "",
 		"ID=debian\nPRETTY_NAME=\"trixie\"\n": "",
+		// /etc/os-release as UBI 10 and CBL-Mariner 2.0 ship it.
+		"NAME=\"Red Hat Enterprise Linux\"\nVERSION=\"10.0 (Coughlan)\"\nID=\"rhel\"\nID_LIKE=\"centos fedora\"\nVERSION_ID=\"10.0\"\n": "Red Hat:enterprise_linux:10.0",
+		"NAME=\"Common Base Linux Mariner\"\nVERSION=\"2.0.20240609\"\nID=mariner\nVERSION_ID=\"2.0\"\n":                                "Azure Linux:2",
 	} {
 		if got := osEcosystem([]byte(in)); got != want {
 			t.Errorf("%q = %q, want %q", in, got, want)

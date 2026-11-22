@@ -24,6 +24,9 @@ const usage = `TerraGuard — Terraform security, validation and plan-risk analy
 Usage:
   terraguard scan [paths...] [flags]   Scan .tf/.tfvars files (default: .)
   terraguard review --base REV [paths] Review a change: new findings only, risk tier, resolved issues
+                                       (--format github-review: PR review JSON with suggested fixes)
+  terraguard report [paths] --framework soc2|iso27001|cis|pci|hipaa [--format html|json] [--out FILE]
+                                       Audit evidence report grouped by framework control
   terraguard fix  [paths...]           Apply safe auto-fixes in place
   terraguard docs [path]               Generate module README (inputs, outputs, resources)
   terraguard graph [paths] [--format mermaid|dot|json]
@@ -48,11 +51,14 @@ Usage:
   terraguard doctor [path]             Check the installation, the policy and optional tools
   terraguard ai                        Show the AI fallback route built from .env
   terraguard serve [--addr host:port]  Self-host the web app + API (keys stay server-side)
+  terraguard serve --domain HOST       Automatic HTTPS (Let's Encrypt) on :443 with the MCP secret link
+  terraguard serve --rotate-mcp-key    Replace the stored MCP secret-link key
   terraguard policy validate|test      Validate a policy (with extends) or run policy test fixtures
   terraguard policy suggest "standard" Draft a custom rule from plain English (AI drafts, engine validates)
   terraguard rules [--format json|markdown]
   terraguard plugins list | test NAME [path]   Plugins (terraguard-* on PATH) that add findings; see docs/PLUGINS.md
   terraguard mcp                       Run as an MCP server over stdio
+  terraguard connect CLIENT [--url U]  Add TerraGuard to claude-code, cursor, vscode or claude-ai (or print); see docs/CONNECT.md
   terraguard version
 
 Scan flags:
@@ -68,6 +74,8 @@ Scan flags:
   --plugins all|NAME,...              run terraguard-* plugins from PATH (also plugins: in the policy)
   --plugin-timeout 60s                stop each plugin after this long
   --group-by owner                    group text and markdown output by CODEOWNERS owner (unowned last)
+  --changed-only [--base REF]         scan only directories changed since REF (default origin/main)
+  --cache                             reuse the result of an identical earlier scan (also TERRAGUARD_CACHE=true)
 
 CODEOWNERS (.github/, root or docs/ of the scanned folder) sets code_owners on every finding.
 Files such as .env, *.pem, *.key, id_rsa and kubeconfig are reported by name; their content is never read.
@@ -140,6 +148,8 @@ func main() {
 		code, err = runPolicy(os.Args[2:])
 	case "review":
 		code, err = runReview(os.Args[2:])
+	case "report":
+		code, err = runReport(os.Args[2:])
 	case "plugins":
 		code, err = runPluginsCmd(os.Args[2:])
 	case "ai":
@@ -148,6 +158,8 @@ func main() {
 		err = runServe(os.Args[2:])
 	case "mcp":
 		err = runMCP()
+	case "connect":
+		err = runConnect(os.Args[2:])
 	case "version", "--version":
 		fmt.Println("terraguard", engine.Version)
 	case "help", "-h", "--help":
@@ -382,6 +394,9 @@ func runScan(args []string) (int, error) {
 	coverage := fs.Bool("coverage", false, "list every resource with the number of rules that checked it and which failed")
 	groupBy := fs.String("group-by", "", "owner: group text and markdown output by CODEOWNERS owner, unowned last")
 	noBuiltinSchema := fs.Bool("no-builtin-schema", false, "do not check arguments against the bundled aws, azurerm and google schemas")
+	changedOnly := fs.Bool("changed-only", false, "scan only the directories with a file changed since --base (git)")
+	changedBase := fs.String("base", "", "with --changed-only: git revision to compare against (default origin/main, else HEAD~1)")
+	useCache := fs.Bool("cache", false, "reuse the result of an identical earlier scan from the user cache folder (or TERRAGUARD_CACHE=true)")
 	var varFiles, skipPaths, only, skip, policyDirs, regoDirs, frameworks listFlag
 	fs.Var(&frameworks, "framework", "scan only these formats: terraform, kubernetes, cloudformation, arm, dockerfile, docker-compose, github-actions, gitlab-ci, azure-pipelines, circleci, bitbucket-pipelines, serverless, ansible, openapi (repeatable or comma-separated)")
 	fs.Var(&regoDirs, "rego", "folder of Rego policies (Conftest style: deny, violation and warn rules) to run as well (repeatable)")
@@ -401,6 +416,18 @@ func runScan(args []string) (int, error) {
 	in, err := buildInput(paths, *plan, *config, *failOn)
 	if err != nil {
 		return 2, err
+	}
+	if *changedOnly {
+		dirs, base, err := changedDirs(*changedBase)
+		if err != nil {
+			return 2, err
+		}
+		keepDirs(in.Files, dirs)
+		fmt.Fprintf(os.Stderr, "changed-only: %d director(ies) changed since %s: %s\n", len(dirs), base, strings.Join(dirs, ", "))
+		if len(in.Files) == 0 && in.Plan == "" {
+			fmt.Fprintln(os.Stderr, "changed-only: no scannable files changed; nothing to scan")
+			return 0, nil
+		}
 	}
 	if len(in.Files) == 0 && in.Plan == "" {
 		return 2, fmt.Errorf("no .tf or .tfvars files found in %v", paths)
@@ -459,7 +486,7 @@ func runScan(args []string) (int, error) {
 		}
 		in.Extra = append(in.Extra, pf...)
 	}
-	rep := engine.Scan(in)
+	rep := cachedScan(in, scanCacheOn(*useCache))
 	if *writeBaseline != "" {
 		if err := writeBaselineFile(*writeBaseline, rep); err != nil {
 			return 2, err
@@ -475,7 +502,7 @@ func runScan(args []string) (int, error) {
 			b, err := json.MarshalIndent(rep, "", "  ")
 			return string(b) + "\n", err
 		case "sarif":
-			b, err := engine.SARIF(rep)
+			b, err := engine.SARIFWithFixes(rep, in.Files)
 			return string(b) + "\n", err
 		case "markdown", "md":
 			if md == "" {

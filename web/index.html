@@ -6,7 +6,7 @@
 <title>TerraGuard: open-source infrastructure-as-code checker</title>
 <meta name="description" content="Catch misconfigurations, apply-time failures, destructive changes, secrets and cost in Terraform, Kubernetes, CloudFormation, ARM, Pulumi, Dockerfiles, CI pipelines and more. Open source. Runs in your browser, editor, CI and cluster.">
 <meta property="og:title" content="TerraGuard: catch infrastructure mistakes before they ship">
-<meta property="og:description" content="One open-source engine for Terraform, Kubernetes, CloudFormation, ARM, Pulumi, Docker, CI pipelines, Ansible and OpenAPI. 1,750 rules, will-it-apply checks, plan risk, cost and verified fixes. Free.">
+<meta property="og:description" content="One open-source engine for Terraform, Kubernetes, CloudFormation, ARM, Pulumi, Docker, CI pipelines, Ansible and OpenAPI. 1,770 rules, will-it-apply checks, plan risk, cost and verified fixes. Free.">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://giscus.app 'sha256-VpdsRO5q68zgt1AIjajLlzA2zK+oACdBAyIuL3zHakQ='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; frame-src https://giscus.app; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
@@ -106,14 +106,14 @@
       <div class="orb orb-peach" aria-hidden="true"></div>
       <div class="orb orb-sky" aria-hidden="true"></div>
       <div class="container hero-inner">
-        <a class="announce" href="#/whats-new"><span class="tag">New in 3.0</span>See what changed <svg class="ic sm"><use href="#i-arrow"/></svg></a>
+        <a class="announce" href="#/whats-new"><span class="tag">New in 3.1</span>See what changed <svg class="ic sm"><use href="#i-arrow"/></svg></a>
         <h1>Catch infrastructure mistakes before they ship.</h1>
         <p class="lead">One open-source engine checks Terraform, Kubernetes, CloudFormation, Dockerfiles, CI pipelines and more. In your browser, editor, CI and cluster.</p>
         <div class="cta-row">
           <a class="btn primary lg" href="#/app">Open workspace</a>
           <a class="btn lg" href="#/integrations">Install</a>
         </div>
-        <p class="facts"><span>1,750 rules</span><span>Nothing uploaded</span><span>MIT licensed</span></p>
+        <p class="facts"><span>1,770 rules</span><span>Nothing uploaded</span><span>MIT licensed</span></p>
       </div>
       <div class="container">
         <figure class="hero-visual" role="img" aria-label="Example result: four findings across a Terraform file, a Kubernetes manifest and a Dockerfile, and a verdict that apply is expected to fail.">
@@ -145,6 +145,7 @@
           <li><img src="assets/brands/vsphere.svg" alt="" width="28" height="28" loading="lazy"><span>vSphere</span></li>
           <li><img src="assets/brands/redhat.svg" alt="" width="28" height="28" loading="lazy"><span>Red Hat</span></li>
           <li><img src="assets/brands/openshift.svg" alt="" width="28" height="28" loading="lazy"><span>OpenShift</span></li>
+          <li><img src="assets/brands/databricks.svg" alt="" width="28" height="28" loading="lazy"><span>Databricks</span></li>
           <li><img src="assets/brands/kubernetes.svg" alt="" width="28" height="28" loading="lazy"><span>Kubernetes</span></li>
           <li><img src="assets/brands/helm.svg" alt="" width="28" height="28" loading="lazy"><span>Helm</span></li>
           <li><img src="assets/brands/pulumi.svg" alt="" width="28" height="28" loading="lazy"><span>Pulumi</span></li>
@@ -186,7 +187,7 @@
           <ol class="flow">
             <li><a class="flow-step" href="#/docs/guide"><span class="flow-n">01 Input</span><h3>Your files</h3><ul><li>Terraform, OpenTofu, plans</li><li>Kubernetes, Helm, OpenShift</li><li>CloudFormation, ARM, Bicep</li><li>Pulumi, Docker, CI pipelines</li></ul><span class="flow-more">Supported formats</span></a></li>
             <li><a class="flow-step" href="#/docs/architecture"><span class="flow-n">02 Parse</span><h3>One model</h3><ul><li>Every format becomes the same resources</li><li>Variables, tfvars and modules resolved</li><li>Nothing leaves the device</li></ul><span class="flow-more">Architecture</span></a></li>
-            <li><a class="flow-step core" href="#/docs/rules"><span class="flow-n">03 Check</span><h3>The engine</h3><ul><li>1,750 rules</li><li>Values the cloud rejects</li><li>Attack paths across resources</li><li>Plan risk, cost and secrets</li></ul><span class="flow-more">Rule catalog</span></a></li>
+            <li><a class="flow-step core" href="#/docs/rules"><span class="flow-n">03 Check</span><h3>The engine</h3><ul><li>1,770 rules</li><li>Values the cloud rejects</li><li>Attack paths across resources</li><li>Plan risk, cost and secrets</li></ul><span class="flow-more">Rule catalog</span></a></li>
             <li><a class="flow-step" href="#/policy"><span class="flow-n">04 Decide</span><h3>Your policy</h3><ul><li><code>.terraguard.yml</code></li><li>Custom rules and plugins</li><li>Waivers that expire</li><li>Pass or fail gate</li></ul><span class="flow-more">Policy as code</span></a></li>
             <li><a class="flow-step" href="#/integrations"><span class="flow-n">05 Deliver</span><h3>Results</h3><ul><li>Browser and editors</li><li>CLI and pull requests</li><li>SARIF, JSON, JUnit, HTML</li><li>AI agents over MCP</li></ul><span class="flow-more">Integrations</span></a></li>
           </ol>
@@ -386,6 +387,7 @@ resource "aws_db_instance" "main" {
               <tr><td>Cost of a plan</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Secrets in code</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Your own policies</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>Fix suggestions in pull requests</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Auto-fix</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Waivers with expiry</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Kubernetes admission control</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
@@ -414,12 +416,51 @@ resource "aws_db_instance" "main" {
     <section id="whats-new" class="section page-top">
       <div class="container narrow">
         <header class="section-head">
-          <p class="kicker">What's new in 3.0</p>
-          <h2>Private cloud, secrets, teams and a calmer app.</h2>
-          <p class="sub">62 new rules, 1,750 in all, across 26 providers. Policies pinned to <code>rules_version: "2.1"</code> keep their gate until you move the pin.</p>
+          <p class="kicker">What's new in 3.1</p>
+          <h2>Connect to Claude, Databricks, fixes in pull requests.</h2>
+          <p class="sub">20 new rules, 1,770 in all, across 27 providers. Policies pinned to <code>rules_version: "3.0"</code> keep their gate until you move the pin.</p>
           <div class="row"><a class="btn" href="https://github.com/Karthik-099/TERRAGUARD/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Full changelog</a><a class="btn ghost" href="https://github.com/Karthik-099/TERRAGUARD/blob/main/ROADMAP.md" target="_blank" rel="noopener">What is next</a></div>
         </header>
         <div class="news">
+          <article class="news-group">
+            <h3><span class="ii"><svg class="ic"><use href="#i-spark"/></svg></span>Connect to Claude and other agents</h3>
+            <ul>
+              <li><b>One-step connect</b><span>Claude Code, Cursor and VS Code, set up for you. Tokens stay out of config files.</span>
+<pre>terraguard connect claude-code</pre></li>
+              <li><b>HTTPS built in</b><span>A free certificate, renewed automatically; plain HTTP redirects. Ready for claude.ai custom connectors.</span>
+<pre>terraguard serve --domain mcp.example.com</pre></li>
+              <li><b>More agent tools</b><span>Review a diff, explain a rule, draft a policy, write an SBOM, check a plan.</span></li>
+            </ul>
+          </article>
+          <article class="news-group">
+            <h3><img src="assets/brands/databricks.svg" alt="" width="28" height="28" loading="lazy">Databricks</h3>
+            <ul>
+              <li><b>Terraform provider</b><span>Clusters, SQL warehouses, Unity Catalog grants, tokens, IP access lists, secrets.</span></li>
+              <li><b>Asset Bundles</b><span><code>databricks.yml</code> jobs, pipelines and clusters get the same rules.</span></li>
+              <li><b>Tokens and values</b><span>Personal access tokens found in any file; values the provider rejects block apply.</span></li>
+            </ul>
+          </article>
+          <article class="news-group">
+            <h3><span class="ii"><svg class="ic"><use href="#i-git"/></svg></span>Pull requests and audits</h3>
+            <ul>
+              <li><b>Fix suggestions</b><span>Findings on changed lines become review comments with an Apply suggestion button.</span>
+<pre>pr-comments: true</pre></li>
+              <li><b>Compliance evidence</b><span>SOC 2, ISO 27001, CIS, PCI DSS and HIPAA reports with controls, resources and waivers.</span>
+<pre>terraguard report . --framework soc2</pre></li>
+            </ul>
+          </article>
+          <article class="news-group">
+            <h3><span class="ii"><svg class="ic"><use href="#i-gauge"/></svg></span>Speed and fixes</h3>
+            <ul>
+              <li><b>Changed files only</b><span>Scan just the directories a branch touched.</span>
+<pre>terraguard scan . --changed-only</pre></li>
+              <li><b>Result cache</b><span>An identical repeat scan returns in milliseconds.</span>
+<pre>terraguard scan . --cache</pre></li>
+              <li><b>Same input, same output</b><span>Results no longer vary between runs; scans in <code>serve</code> have time and concurrency limits.</span></li>
+              <li><b>No third-party requests</b><span>The hosted site serves its own editor and graph libraries.</span></li>
+            </ul>
+          </article>
+          <p class="kicker news-sep">Also new in 3.0</p>
           <article class="news-group">
             <h3><img src="assets/brands/openshift.svg" alt="" width="28" height="28" loading="lazy">Private cloud and Red Hat</h3>
             <ul>
@@ -484,7 +525,7 @@ resource "aws_db_instance" "main" {
         <ol class="stages">
           <li class="stage">
             <div class="stage-head"><span class="stage-num">1</span><div><h3>Write</h3><p>You describe infrastructure as code.</p></div></div>
-            <div class="stage-cols"><div class="pain"><h4>What goes wrong</h4><ul><li>Public buckets, open ports, wildcard IAM, privileged pods</li><li>Secrets typed into code</li><li>Modules and images never pinned</li></ul></div><div class="gain"><h4>How TerraGuard helps</h4><ul><li>Findings as you type, with the line and the fix</li><li>1,750 rules across every format</li><li>One-click fixes; verified AI fixes</li></ul></div></div>
+            <div class="stage-cols"><div class="pain"><h4>What goes wrong</h4><ul><li>Public buckets, open ports, wildcard IAM, privileged pods</li><li>Secrets typed into code</li><li>Modules and images never pinned</li></ul></div><div class="gain"><h4>How TerraGuard helps</h4><ul><li>Findings as you type, with the line and the fix</li><li>1,770 rules across every format</li><li>One-click fixes; verified AI fixes</li></ul></div></div>
           </li>
           <li class="stage">
             <div class="stage-head"><span class="stage-num">2</span><div><h3>Init and validate</h3><p>Providers download; syntax and references are checked.</p></div></div>
@@ -763,9 +804,13 @@ waivers:
             <div data-panel="mcp" hidden>
               <h3>MCP for AI agents</h3>
               <p>Claude Code, Cursor and other MCP clients scan, fix and price changes before proposing them.</p>
-<pre>claude mcp add terraguard -- terraguard mcp</pre>
-<pre>{ "mcpServers": { "terraguard": { "command": "terraguard", "args": ["mcp"] } } }</pre>
-              <p>Remote: <code>terraguard serve</code> serves the same tools at <code>/mcp</code>, token-protected, inline files only.</p>
+<pre>terraguard connect claude-code</pre>
+<pre>terraguard connect cursor</pre>
+<pre>terraguard connect vscode</pre>
+              <p>Remote over HTTPS, for claude.ai custom connectors: run the server with a free certificate, then print the connector settings.</p>
+<pre>terraguard serve --domain mcp.example.com
+terraguard connect claude-ai --url https://mcp.example.com --show-secret</pre>
+              <p>Tokens stay out of config files. <a href="#/docs/connect">Connection guide</a></p>
             </div>
             <div data-panel="k8s" hidden>
               <h3>Kubernetes admission</h3>
@@ -848,6 +893,7 @@ docker compose up -d     # http://127.0.0.1:8080</pre>
           <p class="kicker">Documentation</p>
           <a href="#/docs/guide" data-doc="guide">Getting started</a>
           <a href="#/docs/reference" data-doc="reference">Reference: CLI, policy, API, MCP</a>
+          <a href="#/docs/connect" data-doc="connect">Connect to Claude and agents</a>
           <a href="#/docs/plugins" data-doc="plugins">Plugins and add-ons</a>
           <a href="#/docs/vuln" data-doc="vuln">Vulnerability scanning</a>
           <a href="#/docs/limits" data-doc="limits">Guarantees and limits</a>
@@ -924,7 +970,7 @@ docker compose up -d     # http://127.0.0.1:8080</pre>
   <footer class="site-footer">
     <div class="container foot">
       <div class="foot-brand"><img class="logo" src="assets/logo.svg" alt="" width="24" height="24"><span><b>Terra<span class="wm-accent">Guard</span></b><br><span class="muted">Open-source infrastructure checks. MIT licensed.</span></span></div>
-      <nav aria-label="Product"><b>Product</b><a href="#/app">Workspace</a><a href="#/whats-new">What's new in 3.0</a><a href="#/product">How it works</a><a href="#/integrations">Integrations</a><a href="#/policy">Policy</a><a href="#/ai">AI</a><a href="#/compare">Compare</a></nav>
+      <nav aria-label="Product"><b>Product</b><a href="#/app">Workspace</a><a href="#/whats-new">What's new in 3.1</a><a href="#/product">How it works</a><a href="#/integrations">Integrations</a><a href="#/policy">Policy</a><a href="#/ai">AI</a><a href="#/compare">Compare</a></nav>
       <nav aria-label="Resources"><b>Resources</b><a href="#/docs">Docs</a><a href="#/docs/rules">Rule catalog</a><a href="#/architecture">Architecture</a><a href="#/integrations?deploy">Self-hosting</a><a href="#/docs/security">Security</a></nav>
       <nav aria-label="Project"><b>Project</b><a href="#/open-source">Open source</a><a href="#/open-source?support">Support</a><a href="https://github.com/Karthik-099/TERRAGUARD" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/Karthik-099/TERRAGUARD/releases" target="_blank" rel="noopener">Releases</a></nav>
     </div>

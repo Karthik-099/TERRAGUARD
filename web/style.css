@@ -885,3 +885,4 @@ code, pre, .mono, kbd { font-variant-ligatures: none; }
 .compare.pure th:not(:first-child), .compare.pure td:not(:first-child) { text-align: center; }
 .compare.pure td:first-child { font-weight: 500; }
 .compare.pure td { padding-top: 12px; padding-bottom: 12px; }
+.news-sep { margin: 40px 0 4px; }

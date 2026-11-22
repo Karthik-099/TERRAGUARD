@@ -8,7 +8,7 @@ import (
 // RulesVersion is the rule set this build ships. A policy can pin
 // rules_version to an older set so an upgrade never fails CI overnight:
 // findings from newer rules are still reported, but they do not gate.
-const RulesVersion = "3.0"
+const RulesVersion = "3.1"
 
 // rulesV20 are the rules released in v2.0.0 and rulesV30 those released in
 // v3.0.0. When a release ships, its new rules get their own list here;
@@ -53,8 +53,19 @@ var rulesV30 = map[string]bool{
 	"TG-AZ-ARO-001": true, "TG-AZ-ARO-002": true, "TG-AZ-ARO-003": true, "TG-AZ-ARO-004": true,
 }
 
+// rulesV31 are the rules released in v3.1.0.
+var rulesV31 = map[string]bool{
+	"TG-DBX-CL-001": true, "TG-DBX-CL-002": true, "TG-DBX-CL-003": true, "TG-DBX-CL-004": true, "TG-DBX-CL-005": true,
+	"TG-DBX-SQL-001": true, "TG-DBX-UC-001": true, "TG-DBX-UC-002": true, "TG-DBX-IAM-001": true, "TG-DBX-IAM-002": true,
+	"TG-DBX-TOK-001": true, "TG-DBX-WS-001": true, "TG-DBX-NET-001": true, "TG-DBX-SEC-001": true, "TG-DBX-SEC-002": true,
+	"TG-DBX-ACC-001": true, "TG-DBX-ACC-002": true, "TG-DBX-JOB-001": true, "TG-VAL-025": true, "TG-SECRET-016": true,
+}
+
 // RuleSince returns the rule set version that introduced a rule.
 func RuleSince(id string) string {
+	if rulesV31[id] {
+		return "3.1"
+	}
 	if rulesV30[id] {
 		return "3.0"
 	}

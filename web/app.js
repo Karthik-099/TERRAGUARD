@@ -10,10 +10,10 @@
     aws: "AWS", google: "Google Cloud", azurerm: "Azure", cloudflare: "Cloudflare", digitalocean: "DigitalOcean",
     hcloud: "Hetzner", linode: "Akamai / Linode", openstack: "OpenStack / OVH", ovh: "OVHcloud", oci: "Oracle Cloud",
     alicloud: "Alibaba Cloud", vultr: "Vultr", kubernetes: "Kubernetes", helm: "Helm",
-    nutanix: "Nutanix", vsphere: "VMware vSphere", rhcs: "Red Hat OpenShift (ROSA)",
+    nutanix: "Nutanix", vsphere: "VMware vSphere", rhcs: "Red Hat OpenShift (ROSA)", databricks: "Databricks",
   };
   const BRANDS = { aws: "aws", google: "gcp", azurerm: "azure", cloudflare: "cloudflare", digitalocean: "digitalocean", oci: "oracle", kubernetes: "kubernetes", helm: "helm",
-    nutanix: "nutanix", vsphere: "vsphere", rhcs: "openshift" };
+    nutanix: "nutanix", vsphere: "vsphere", rhcs: "openshift", databricks: "databricks" };
   const brandIcon = (c) => BRANDS[c] ? `<img class="brand-ic" src="assets/brands/${BRANDS[c]}.svg" alt="" width="16" height="16">` : "";
   const CATEGORY = { security: "Security", validate: "Validation", reliability: "Reliability", "best-practice": "Best practice", "attack-path": "Attack path", plan: "Plan risk", policy: "Policy", cost: "Cost" };
   const EXAMPLES = { insecure: ["main.tf", "variables.tf", "terraform.tfvars", ".terraguard.yml"], "aws-network": ["main.tf"], multicloud: ["main.tf"], secure: ["main.tf"],
@@ -215,7 +215,7 @@
 
   // Documentation: the repository's Markdown, rendered in the site
   const DOCS = {
-    guide: "GUIDE.md", reference: "REFERENCE.md", plugins: "PLUGINS.md", vuln: "VULN.md", limits: "LIMITS.md", rules: "RULES.md", "self-hosting": "SELF_HOSTING.md",
+    guide: "GUIDE.md", connect: "CONNECT.md", reference: "REFERENCE.md", plugins: "PLUGINS.md", vuln: "VULN.md", limits: "LIMITS.md", rules: "RULES.md", "self-hosting": "SELF_HOSTING.md",
     security: "SECURITY.md", academy: "ACADEMY.md", architecture: "ARCHITECTURE.md", contributing: "CONTRIBUTING.md",
   };
   const DOC_SLUG = Object.fromEntries(Object.entries(DOCS).map(([k, v]) => [v, k]));
@@ -698,7 +698,7 @@
   const PROVIDER_COLOR = {
     aws: "#FF9900", google: "#4285F4", azurerm: "#0078D4", cloudflare: "#FBAD41", digitalocean: "#0080FF", hcloud: "#D50C2D",
     linode: "#00A95C", openstack: "#ED1944", ovh: "#123F6D", oci: "#C74634", alicloud: "#FF6A00", vultr: "#007BFC",
-    kubernetes: "#326CE5", helm: "#0F1689", nutanix: "#024DA1", vsphere: "#0091DA", rhcs: "#CC0000", module: "#8B5CF6",
+    kubernetes: "#326CE5", helm: "#0F1689", nutanix: "#024DA1", vsphere: "#0091DA", rhcs: "#CC0000", databricks: "#FF3621", module: "#8B5CF6",
   };
   // Own line icons per kind of resource (no vendor logos: they are trademarks).
   const KIND_ICON = {

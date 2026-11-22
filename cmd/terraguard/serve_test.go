@@ -1,14 +1,21 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func TestServerNeverExposesKeysAndCountsScans(t *testing.T) {
@@ -183,5 +190,150 @@ func TestServerRefusesCrossSiteAndRebinding(t *testing.T) {
 		if loopbackHost(in) != want {
 			t.Errorf("loopbackHost(%q) != %v", in, want)
 		}
+	}
+}
+
+func TestMCPSecretLink(t *testing.T) {
+	key := "Zq3vR8tLw2NcY7pK4mXa9HbE6sJd1FgU5oTiV0yW"
+	audit := &syncBuffer{}
+	srv := httptest.NewServer(newServerOpts(serverOpts{mcpKey: key, exposed: true, audit: audit}))
+	defer srv.Close()
+	ctx := context.Background()
+	connect := func(path string) (*mcp.ClientSession, error) {
+		c := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+		return c.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: srv.URL + path, DisableStandaloneSSE: true, MaxRetries: -1}, nil)
+	}
+	cs, err := connect("/mcp/" + key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "explain_rule", Arguments: map[string]any{"id": "TG-AWS-S3-001"}})
+	cs.Close()
+	if err != nil || res.IsError {
+		t.Fatalf("explain_rule over the secret link: %v %+v", err, res)
+	}
+	for _, path := range []string{"/mcp/" + strings.Repeat("x", 40), "/mcp/" + key[:39]} {
+		r, _ := http.Post(srv.URL+path, "application/json", strings.NewReader(`{}`))
+		if r.StatusCode != 404 {
+			t.Errorf("wrong key %s: status %d, want 404", path, r.StatusCode)
+		}
+	}
+	// Exposed with no token: bare /mcp is refused, not just warned about.
+	if r, _ := http.Post(srv.URL+"/mcp", "application/json", strings.NewReader(`{}`)); r.StatusCode != 403 {
+		t.Errorf("bare /mcp without a token: %d", r.StatusCode)
+	}
+	for i := 0; i < 100 && strings.Count(audit.String(), `"route":"/mcp/`) < 4; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if strings.Contains(audit.String(), key) || strings.Contains(audit.String(), "xxxxxxxx") || strings.Count(audit.String(), `"route":"/mcp/`) < 4 {
+		t.Fatalf("audit must redact the key: %s", audit.String())
+	}
+	// No key configured: the secret path does not exist.
+	h := newServerOpts(serverOpts{token: "t"})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/mcp/"+key, strings.NewReader(`{}`)))
+	if w.Code != 404 {
+		t.Fatalf("secret link without a key: %d", w.Code)
+	}
+}
+
+func TestMCPKeyStorage(t *testing.T) {
+	t.Setenv("TERRAGUARD_MCP_KEY", "short")
+	if _, err := mcpKey(false, ""); err == nil {
+		t.Fatal("a short TERRAGUARD_MCP_KEY was accepted")
+	}
+	t.Setenv("TERRAGUARD_MCP_KEY", "")
+	if k, _ := mcpKey(false, t.TempDir()); k != "" {
+		t.Fatal("no key without --domain or TERRAGUARD_MCP_KEY")
+	}
+	dir := filepath.Join(t.TempDir(), "certs")
+	k1, err := mcpKey(true, dir)
+	if err != nil || len(k1) < 32 {
+		t.Fatalf("key %d chars, %v", len(k1), err)
+	}
+	if st, _ := os.Stat(mcpKeyPath(dir)); st.Mode().Perm() != 0o600 {
+		t.Fatalf("key file mode %v", st.Mode().Perm())
+	}
+	if k2, _ := mcpKey(true, dir); k2 != k1 {
+		t.Fatal("the stored key must be reused")
+	}
+	if err := runServe([]string{"--rotate-mcp-key", "--cert-dir", dir}); err != nil {
+		t.Fatal(err)
+	}
+	if k3, _ := mcpKey(true, dir); k3 == k1 {
+		t.Fatal("rotate did not replace the key")
+	}
+	t.Setenv("TERRAGUARD_OFFLINE", "true")
+	if err := runServe([]string{"--domain", "tg.example.com", "--cert-dir", dir}); err == nil || !strings.Contains(err.Error(), "TERRAGUARD_OFFLINE") {
+		t.Fatalf("--domain with offline mode: %v", err)
+	}
+}
+
+func TestHTTPSRedirectAndRequireHTTPS(t *testing.T) {
+	// The :80 handler --domain uses; no certificate is requested for a redirect.
+	m := &autocert.Manager{Prompt: autocert.AcceptTOS, HostPolicy: autocert.HostWhitelist("tg.example.com")}
+	w := httptest.NewRecorder()
+	m.HTTPHandler(nil).ServeHTTP(w, httptest.NewRequest("GET", "http://tg.example.com/api/config?x=1", nil))
+	if w.Code != 302 || w.Header().Get("Location") != "https://tg.example.com/api/config?x=1" {
+		t.Fatalf("redirect: %d %q", w.Code, w.Header().Get("Location"))
+	}
+	h := requireHTTPS(newServer(""))
+	call := func(remote string, tls bool) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("GET", "/healthz", nil)
+		r.RemoteAddr = remote
+		if tls {
+			r.TLS = &tlsState
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	if c := call("203.0.113.5:4000", false).Code; c != 403 {
+		t.Errorf("plain HTTP from outside: %d", c)
+	}
+	if c := call("127.0.0.1:4000", false).Code; c != 200 {
+		t.Errorf("plain HTTP from loopback: %d", c)
+	}
+	if w := call("203.0.113.5:4000", true); w.Code != 200 || w.Header().Get("Strict-Transport-Security") == "" {
+		t.Errorf("HTTPS: %d, HSTS %q", w.Code, w.Header().Get("Strict-Transport-Security"))
+	}
+	t.Setenv("TERRAGUARD_TRUST_PROXY", "true")
+	r := httptest.NewRequest("GET", "/healthz", nil)
+	r.RemoteAddr = "127.0.0.1:4000"
+	r.Header.Set("X-Forwarded-Proto", "http")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Errorf("plain HTTP through a local proxy: %d", w.Code)
+	}
+}
+
+var tlsState = tls.ConnectionState{}
+
+func TestScanGateBusyAndTimeout(t *testing.T) {
+	g := newScanGate(1, 50*time.Millisecond)
+	release := make(chan struct{})
+	started := make(chan struct{})
+	go g.run(context.Background(), func() { close(started); <-release })
+	<-started
+	srv := httptest.NewServer(newServerOpts(serverOpts{gate: g}))
+	defer srv.Close()
+	r, err := http.Post(srv.URL+"/api/scan", "application/json", strings.NewReader(`{"files":{"a.tf":""}}`))
+	if err != nil || r.StatusCode != 503 || r.Header.Get("Retry-After") == "" {
+		t.Fatalf("busy: %v %v %q", err, r.StatusCode, r.Header.Get("Retry-After"))
+	}
+	close(release)
+	for i := 0; i < 100 && len(g.slots) > 0; i++ {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := g.run(context.Background(), func() { time.Sleep(200 * time.Millisecond) }); err != errScanTimeout {
+		t.Fatalf("timeout: %v", err)
+	}
+	if err := g.run(context.Background(), func() {}); err != errBusy {
+		t.Fatalf("a timed-out scan must keep its slot until it ends: %v", err)
+	}
+	time.Sleep(250 * time.Millisecond)
+	if err := g.run(context.Background(), func() {}); err != nil {
+		t.Fatalf("slot not released: %v", err)
 	}
 }

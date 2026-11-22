@@ -558,6 +558,10 @@ func rpmEcosystem(kv map[string]string) string {
 		return "Mageia:" + major
 	case "azurelinux":
 		return "Azure Linux:" + major
+	case "mariner": // CBL-Mariner 2.0 became Azure Linux 2; OSV has no data for 1.0
+		if major == "2" {
+			return "Azure Linux:2"
+		}
 	}
 	return ""
 }

@@ -1,7 +1,7 @@
 # TerraGuard developer commands. Requires only Go (see go.mod).
 BIN := bin/terraguard
 
-.PHONY: all build test web vendor serve evals policy-test worker-test secrets rules-doc clean
+.PHONY: all build test test-web web vendor site serve evals policy-test worker-test secrets rules-doc clean
 
 all: test build web
 
@@ -12,20 +12,46 @@ test:                 ## unit tests
 	go vet ./...
 	go test -race ./...
 
+test-web:             ## browser code tests (zip reader), Node 22
+	node --test web/test/*.test.mjs
+
 web:                  ## WebAssembly site into web/
 	GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o web/terraguard.wasm ./cmd/wasm
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" web/
 	rm -rf web/examples && cp -r examples web/examples
 	rm -rf web/docs && mkdir -p web/docs && cp docs/*.md SECURITY.md CONTRIBUTING.md web/docs/
 
-vendor:               ## copy browser libraries into web/vendor for air-gapped installs
+# $(call sri,FILE,URL): FILE must match the sha384 that web/app.js pins for URL.
+sri = want=$$(grep -o '"$(2)": "sha384-[^"]*"' web/app.js | sed 's/.*"sha384-//; s/"$$//'); \
+	got=$$(openssl dgst -sha384 -binary $(1) | openssl base64 -A); \
+	[ -n "$$want" ] && [ "$$want" = "$$got" ] || { echo "integrity check failed: $(1)" >&2; exit 1; }
+JSD := https://cdn.jsdelivr.net/npm
+# npm dist.integrity of monaco-editor 0.52.2: the tarball holds every editor file, not only loader.js.
+MONACO_SHA512 := GEQWEZmfkOGLdd3XK8ryrfWz3AIP8YymVXiPHEdewrUq7mh0qrKrfHLNCXcbB6sTnMLnOZ3ztSiKcciFUkIJwQ==
+
+vendor:               ## copy browser libraries into web/vendor, verified against the pinned hashes
 	rm -rf web/vendor && mkdir -p web/vendor
+	curl -fsSL -o web/vendor/monaco.tgz https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.52.2.tgz
+	[ "$$(openssl dgst -sha512 -binary web/vendor/monaco.tgz | openssl base64 -A)" = "$(MONACO_SHA512)" ] || { echo "integrity check failed: monaco-editor-0.52.2.tgz" >&2; exit 1; }
 	# Extract everything, then keep min/vs: busybox tar (Alpine) cannot extract a sub-path.
-	curl -fsSL https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.52.2.tgz | tar -xz -C web/vendor
+	tar -xzf web/vendor/monaco.tgz -C web/vendor && rm web/vendor/monaco.tgz
 	mkdir -p web/vendor/monaco/min && mv web/vendor/package/min/vs web/vendor/monaco/min/vs && rm -rf web/vendor/package
-	curl -fsSL -o web/vendor/cytoscape.min.js https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js
-	curl -fsSL -o web/vendor/marked.min.js https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js
-	curl -fsSL -o web/vendor/purify.min.js https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js
+	$(call sri,web/vendor/monaco/min/vs/loader.js,$(JSD)/monaco-editor@0.52.2/min/vs/loader.js)
+	curl -fsSL -o web/vendor/cytoscape.min.js $(JSD)/cytoscape@3.30.2/dist/cytoscape.min.js
+	$(call sri,web/vendor/cytoscape.min.js,$(JSD)/cytoscape@3.30.2/dist/cytoscape.min.js)
+	curl -fsSL -o web/vendor/marked.min.js $(JSD)/marked@12.0.2/marked.min.js
+	$(call sri,web/vendor/marked.min.js,$(JSD)/marked@12.0.2/marked.min.js)
+	curl -fsSL -o web/vendor/purify.min.js $(JSD)/dompurify@3.1.6/dist/purify.min.js
+	$(call sri,web/vendor/purify.min.js,$(JSD)/dompurify@3.1.6/dist/purify.min.js)
+
+site: web vendor      ## the GitHub Pages site in bin/site: every file from its own origin, no third-party host
+	rm -rf bin/site && mkdir -p bin && cp -r web bin/site && rm -rf bin/site/test bin/site/embed.go
+	sed -i 's|assetsBase: ""|assetsBase: "vendor"|' bin/site/config.js
+	# giscus is the only other host; without its IDs nothing loads it, so the policy drops it too.
+	if grep -q 'repoId: ""' bin/site/config.js; then sed -i "/http-equiv=\"Content-Security-Policy\"/{s| https://giscus.app;|;|g; s| https://giscus.app||g; s|frame-src;|frame-src 'none';|}" bin/site/index.html; fi
+	sed -i '/http-equiv="Content-Security-Policy"/s| https://cdn.jsdelivr.net||g' bin/site/index.html
+	grep -q 'assetsBase: "vendor"' bin/site/config.js
+	! grep 'http-equiv="Content-Security-Policy"' bin/site/index.html | grep -q jsdelivr
 
 serve: build          ## self-hosted app on http://127.0.0.1:8080 (reads .env)
 	$(BIN) serve

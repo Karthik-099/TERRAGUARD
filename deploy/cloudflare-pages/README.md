@@ -8,15 +8,15 @@ run in each visitor's browser; nothing is uploaded.
 ## Build
 
 ```bash
-make web                 # builds web/terraguard.wasm and copies examples and docs
+make site                # builds the WebAssembly engine and the site in bin/site, with its editor and graph libraries served locally
 ```
 
-The `web/` folder is the whole site.
+`bin/site` is the whole site; it makes no third-party requests.
 
 ## Deploy once
 
 ```bash
-npx wrangler pages deploy web --project-name terraguard
+npx wrangler pages deploy bin/site --project-name terraguard
 ```
 
 ## Deploy from CI

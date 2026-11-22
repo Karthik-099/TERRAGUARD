@@ -4,7 +4,20 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.1.0] - 2026-11-23
+
+Rule set 3.1 adds 20 rules (1,770 in all, 27 providers). Policies pinned to
+`rules_version: "3.0"` keep their gate until the pin moves.
+
+### Added
+- **HTTPS MCP:** `terraguard serve --domain HOST` gets and renews a free Let's Encrypt certificate, redirects plain HTTP and sends HSTS; `--https-only` for your own certificates; `--cert-dir`.
+- **Connect to agents:** `terraguard connect claude-code|cursor|vscode|claude-ai|print` sets up the client (Claude Code through `claude mcp add`; Cursor and VS Code config merged with a backup, tokens read from the environment or prompted, never written); claude.ai custom connectors use the bearer token as a request header or the secret link `/mcp/<key>` (`TERRAGUARD_MCP_KEY`, `--rotate-mcp-key`). See docs/CONNECT.md.
+- **MCP tools:** `review_diff`, `explain_rule`, `suggest_policy`, `generate_sbom`, `check_plan`.
+- **Databricks:** 18 `TG-DBX-*` rules for clusters and policies, SQL warehouses, Unity Catalog grants, permissions, tokens, workspace settings, IP access lists, secrets, account workspaces and jobs; Databricks Asset Bundles (`databricks.yml`) as a format; provider value checks (TG-VAL-025, blocking); personal access tokens (TG-SECRET-016).
+- **Fix suggestions in pull requests:** the Action's `pr-comments: true` posts one review whose comments on changed lines carry an Apply suggestion block; `review --format github-review`; SARIF results carry `fixes`.
+- **Compliance evidence:** `terraguard report --framework soc2|iso27001|cis|pci|hipaa --format html|json`: controls with pass, fail or not assessed, failing resources, waivers with approver and expiry, a hash of the scanned files.
+- **Speed:** `scan --changed-only [--base REF]` and a result cache (`--cache`, `TERRAGUARD_CACHE=true`).
+- `make site` builds the hosted site with its libraries served locally; `make test-web` tests the browser zip reader.
 
 ### Changed
 - The site opens in the light theme by default; dark and system are one click away and remembered.
@@ -12,6 +25,16 @@ All notable changes are documented here. The format follows
 - "How it works": a clickable diagram of how information flows (files, one model, the engine, your policy, results, with the optional AI lane), on the home page and the Architecture page, which drops its history and module map.
 - The home page drops the duplicate integrations grid; Integrations has it.
 - More space between the logo and the menu, and gentle scroll motion (switched off for reduced motion).
+- The hosted site (GitHub Pages and Cloudflare Pages) makes no third-party requests.
+
+### Fixed
+- The same input now always gives the same output: the variable a finding names and the order of graph edges no longer vary between runs.
+- Azure Linux 2 (CBL-Mariner) images are matched against OSV.
+
+### Security
+- `serve` limits each scan in time (`--scan-timeout`) and how many run at once (`--max-scans`); an exposed server with no token or key refuses MCP.
+- Docker base images are pinned by digest.
+- The repository secret check also looks for Databricks tokens.
 
 ## [3.0.1] - 2026-11-13
 

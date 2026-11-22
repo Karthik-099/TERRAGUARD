@@ -13,7 +13,12 @@ var sarifLevel = map[Severity]string{Critical: "error", High: "error", Medium: "
 var secScore = map[Severity]string{Critical: "9.5", High: "8.0", Medium: "5.5", Low: "3.0", Info: "1.0"}
 
 // SARIF renders SARIF 2.1.0 for GitHub code scanning (inline PR annotations).
-func SARIF(r *Report) ([]byte, error) {
+func SARIF(r *Report) ([]byte, error) { return SARIFWithFixes(r, nil) }
+
+// SARIFWithFixes is SARIF plus a `fixes` entry (artifactChanges with one
+// replacement) for every active finding whose safe fix applies to files.
+// Secret findings never carry a fix.
+func SARIFWithFixes(r *Report, files map[string]string) ([]byte, error) {
 	type obj = map[string]any
 	var rules []obj
 	ruleIdx := map[string]int{}
@@ -44,6 +49,9 @@ func SARIF(r *Report) ([]byte, error) {
 			"partialFingerprints": obj{"terraguardFindingKey/v1": fingerprint(key)}}
 		if len(f.CodeOwners) > 0 {
 			res["properties"] = obj{"code_owners": f.CodeOwners}
+		}
+		if h, ok := FixHunkFor(files, f); ok && !f.Waived {
+			res["fixes"] = []obj{sarifFix(f, h, files[f.File])}
 		}
 		if f.Waived {
 			res["suppressions"] = []obj{{"kind": "external", "justification": f.WaiverReason}}
@@ -379,6 +387,81 @@ func Checkstyle(r *Report) ([]byte, error) {
 	}
 	b, err := xml.MarshalIndent(doc, "", "  ")
 	return append([]byte(xml.Header), b...), err
+}
+
+// FixHunk is the line range a finding's fix replaces and the lines that replace it.
+type FixHunk struct {
+	File  string   `json:"file"`
+	Start int      `json:"start"` // first replaced line, 1-based
+	End   int      `json:"end"`   // last replaced line; Start-1 when the fix only inserts before Start
+	Lines []string `json:"lines"` // replacement lines, without line endings
+}
+
+// IsSecretRule reports rules whose findings quote (redacted) credentials;
+// they never get a machine fix in SARIF or a PR suggestion.
+func IsSecretRule(id string) bool {
+	if strings.HasPrefix(id, "TG-SECRET-") {
+		return true
+	}
+	for _, t := range themesOf(id) {
+		if t == "secrets" {
+			return true
+		}
+	}
+	return false
+}
+
+// FixHunkFor applies f's fix alone to its file and returns the one hunk that
+// differs (common leading and trailing lines trimmed).
+func FixHunkFor(files map[string]string, f Finding) (FixHunk, bool) {
+	if f.Fix == nil || IsSecretRule(f.RuleID) {
+		return FixHunk{}, false
+	}
+	src, ok := files[f.Fix.File]
+	if !ok {
+		return FixHunk{}, false
+	}
+	changed, errs := ApplyFixes(map[string]string{f.Fix.File: src}, []*Fix{f.Fix})
+	out, ok := changed[f.Fix.File]
+	if len(errs) > 0 || !ok || out == src {
+		return FixHunk{}, false
+	}
+	a, b := strings.Split(src, "\n"), strings.Split(out, "\n")
+	p := 0
+	for p < len(a) && p < len(b) && a[p] == b[p] {
+		p++
+	}
+	q := 0
+	for q < len(a)-p && q < len(b)-p && a[len(a)-1-q] == b[len(b)-1-q] {
+		q++
+	}
+	return FixHunk{File: f.Fix.File, Start: p + 1, End: len(a) - q, Lines: append([]string{}, b[p:len(b)-q]...)}, true
+}
+
+// sarifFix replaces whole lines Start..End (with their line endings).
+func sarifFix(f Finding, h FixHunk, src string) map[string]any {
+	type obj = map[string]any
+	text := ""
+	for _, l := range h.Lines {
+		text += l + "\n"
+	}
+	end := obj{"endLine": h.End + 1, "endColumn": 1}
+	if lines := strings.Split(src, "\n"); h.End >= len(lines) { // last line has no newline
+		end = obj{"endLine": h.End, "endColumn": len(lines[len(lines)-1]) + 1}
+		text = strings.TrimSuffix(text, "\n")
+	}
+	region := obj{"startLine": h.Start, "startColumn": 1}
+	for k, v := range end {
+		region[k] = v
+	}
+	desc := f.Fix.Description
+	if desc == "" {
+		desc = f.Remediation
+	}
+	return obj{"description": obj{"text": desc}, "artifactChanges": []obj{{
+		"artifactLocation": obj{"uri": h.File},
+		"replacements":     []obj{{"deletedRegion": region, "insertedContent": obj{"text": text}}},
+	}}}
 }
 
 func fingerprint(key string) string {

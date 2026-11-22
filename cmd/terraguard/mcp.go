@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/Karthik-099/TERRAGUARD/engine"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -71,17 +73,30 @@ func jsonResult(v any) (*mcp.CallToolResult, any, error) {
 
 // runMCP serves the tools over stdio for local agents.
 func runMCP() error {
-	if err := newMCPServer(true).Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+	if err := newMCPServer(true, nil).Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		return fmt.Errorf("mcp: %w", err)
 	}
 	return nil
 }
 
+// addTool runs every tool under the scan gate (nil for the local server).
+func addTool[In any](s *mcp.Server, g *scanGate, t *mcp.Tool, h mcp.ToolHandlerFor[In, any]) {
+	mcp.AddTool(s, t, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
+		var res *mcp.CallToolResult
+		var out any
+		var err error
+		if gerr := g.run(ctx, func() { res, out, err = h(ctx, req, in) }); gerr != nil {
+			return nil, nil, gerr
+		}
+		return res, out, err
+	})
+}
+
 // newMCPServer: local=false (the /mcp endpoint) never touches the server's disk.
-func newMCPServer(local bool) *mcp.Server {
+func newMCPServer(local bool, gate *scanGate) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "terraguard", Version: engine.Version}, nil)
 
-	mcp.AddTool(s, &mcp.Tool{Name: "scan_terraform", Description: "Scan infrastructure code (Terraform and OpenTofu, Kubernetes manifests, CloudFormation and SAM, Serverless, ARM, Dockerfile, docker-compose, CI pipelines, Ansible, OpenAPI) for security issues, apply-time validation errors, attack paths and plan risks. Returns findings with exact lines and remediation."},
+	addTool(s, gate, &mcp.Tool{Name: "scan_terraform", Description: "Scan infrastructure code (Terraform and OpenTofu, Kubernetes manifests, CloudFormation and SAM, Serverless, ARM, Dockerfile, docker-compose, CI pipelines, Ansible, OpenAPI) for security issues, apply-time validation errors, attack paths and plan risks. Returns findings with exact lines and remediation."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, a scanArgs) (*mcp.CallToolResult, any, error) {
 			in, err := a.input(local)
 			if err != nil {
@@ -90,7 +105,7 @@ func newMCPServer(local bool) *mcp.Server {
 			return jsonResult(engine.Scan(in))
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "estimate_cost", Description: "Estimate the monthly cost of a Terraform plan (before and after) or of Terraform code, for AWS, Azure and Google Cloud, offline from bundled list prices; usage-based charges from an optional usage file."},
+	addTool(s, gate, &mcp.Tool{Name: "estimate_cost", Description: "Estimate the monthly cost of a Terraform plan (before and after) or of Terraform code, for AWS, Azure and Google Cloud, offline from bundled list prices; usage-based charges from an optional usage file."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, a costArgs) (*mcp.CallToolResult, any, error) {
 			opts := engine.CostOptions{Usage: a.Usage, Prices: a.Prices}
 			if a.Plan != "" {
@@ -121,7 +136,7 @@ func newMCPServer(local bool) *mcp.Server {
 			return jsonResult(est)
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "fix_terraform", Description: "Apply TerraGuard's deterministic auto-fixes. Returns the fixed file contents; with path+write=true also writes them."},
+	addTool(s, gate, &mcp.Tool{Name: "fix_terraform", Description: "Apply TerraGuard's deterministic auto-fixes. Returns the fixed file contents; with path+write=true also writes them."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, a fixArgs) (*mcp.CallToolResult, any, error) {
 			in, err := a.input(local)
 			if err != nil {
@@ -142,7 +157,7 @@ func newMCPServer(local bool) *mcp.Server {
 			return jsonResult(map[string]any{"changed_files": changed, "skipped": skipped})
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "generate_docs", Description: "Generate terraform-docs style Markdown (inputs, outputs, providers, resources) for a module."},
+	addTool(s, gate, &mcp.Tool{Name: "generate_docs", Description: "Generate terraform-docs style Markdown (inputs, outputs, providers, resources) for a module."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, a scanArgs) (*mcp.CallToolResult, any, error) {
 			in, err := a.input(local)
 			if err != nil {
@@ -151,7 +166,7 @@ func newMCPServer(local bool) *mcp.Server {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: engine.Docs(in.Files)}}}, nil, nil
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "generate_agents_md", Description: "Generate an AGENTS.md describing the repository's providers, commands, guardrails, waivers and boundaries for coding agents."},
+	addTool(s, gate, &mcp.Tool{Name: "generate_agents_md", Description: "Generate an AGENTS.md describing the repository's providers, commands, guardrails, waivers and boundaries for coding agents."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, a scanArgs) (*mcp.CallToolResult, any, error) {
 			in, err := a.input(local)
 			if err != nil {
@@ -160,7 +175,7 @@ func newMCPServer(local bool) *mcp.Server {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: engine.AgentsMD(in.Files, in.Config)}}}, nil, nil
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "validate_rule", Description: "Validate a proposed custom rule (YAML for one custom_rules item) and dry-run it. Rejects anything that is not exactly one rule, built-in TG- IDs and rules without resource_types. Use it before suggesting a .terraguard.yml change."},
+	addTool(s, gate, &mcp.Tool{Name: "validate_rule", Description: "Validate a proposed custom rule (YAML for one custom_rules item) and dry-run it. Rejects anything that is not exactly one rule, built-in TG- IDs and rules without resource_types. Use it before suggesting a .terraguard.yml change."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, a struct {
 			scanArgs
 			Rule string `json:"rule" jsonschema:"YAML for one custom rule: id, title, severity, resource_types, where, assert or attribute plus one operator"`
@@ -172,9 +187,102 @@ func newMCPServer(local bool) *mcp.Server {
 			return jsonResult(engine.DraftRule(a.Rule, in))
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "list_rules", Description: "List every TerraGuard rule with severity, category and remediation."},
+	addTool(s, gate, &mcp.Tool{Name: "list_rules", Description: "List every TerraGuard rule with severity, category and remediation."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 			return jsonResult(engine.Catalog())
+		})
+
+	addTool(s, gate, &mcp.Tool{Name: "explain_rule", Description: "Explain one TerraGuard rule by ID: title, severity, category, remediation, CWE, compliance themes and the resource types it checks."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, a struct {
+			ID string `json:"id" jsonschema:"rule ID, for example TG-AWS-S3-001"`
+		}) (*mcp.CallToolResult, any, error) {
+			for _, r := range engine.Catalog() {
+				if strings.EqualFold(r.ID, strings.TrimSpace(a.ID)) {
+					return jsonResult(r)
+				}
+			}
+			return nil, nil, fmt.Errorf("no rule %q; list_rules shows every ID", a.ID)
+		})
+
+	addTool(s, gate, &mcp.Tool{Name: "review_diff", Description: "Review a change: scan the base and head versions of the files and return only the findings the change introduces or resolves, with a risk tier and pass/fail. Send both versions inline."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, a struct {
+			Base   map[string]string `json:"base_files" jsonschema:"files before the change, keyed by file name"`
+			Head   map[string]string `json:"head_files" jsonschema:"files after the change, keyed by file name"`
+			Config string            `json:"config,omitempty" jsonschema:".terraguard.yml the change is judged by (the base branch policy)"`
+		}) (*mcp.CallToolResult, any, error) {
+			if len(a.Head) == 0 && len(a.Base) == 0 {
+				return nil, nil, errors.New("send base_files and head_files")
+			}
+			var changed []string
+			for name, src := range a.Head {
+				if old, ok := a.Base[name]; !ok || old != src {
+					changed = append(changed, name)
+				}
+			}
+			for name := range a.Base {
+				if _, ok := a.Head[name]; !ok {
+					changed = append(changed, name)
+				}
+			}
+			base := engine.Scan(engine.Input{Files: a.Base, Config: a.Config})
+			head := engine.Scan(engine.Input{Files: a.Head, Config: a.Config})
+			rev := engine.NewReview(base, head, engine.ChangedTerraform(changed))
+			rev.Silenced = engine.SilencedBy(base, head)
+			return jsonResult(rev)
+		})
+
+	addTool(s, gate, &mcp.Tool{Name: "suggest_policy", Description: "Turn a plain-English standard into a custom rule without any AI call on the server: returns the rule-writing guide and the resource types in the files, so you can draft one rule; send it back as rule to validate and dry-run it."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, a struct {
+			scanArgs
+			Standard string `json:"standard" jsonschema:"the standard in plain English, for example: production databases keep 14 days of backups"`
+			Rule     string `json:"rule,omitempty" jsonschema:"your drafted YAML for one custom rule; when set, it is validated and dry-run"`
+		}) (*mcp.CallToolResult, any, error) {
+			in, err := a.input(local)
+			if err != nil {
+				return nil, nil, err
+			}
+			out := map[string]any{"standard": a.Standard, "guide": engine.RuleDraftPrompt, "resource_types": engine.ResourceTypes(in.Files),
+				"next": "Draft exactly one custom rule as YAML following the guide, then call suggest_policy (or validate_rule) again with rule set."}
+			if strings.TrimSpace(a.Rule) != "" {
+				out["draft"] = engine.DraftRule(a.Rule, in)
+			}
+			return jsonResult(out)
+		})
+
+	addTool(s, gate, &mcp.Tool{Name: "generate_sbom", Description: "List the infrastructure components in the files (providers, modules, container images, charts) as a CycloneDX JSON SBOM, or as a plain component list with format=json."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, a struct {
+			scanArgs
+			Format string `json:"format,omitempty" jsonschema:"cyclonedx (default) or json"`
+		}) (*mcp.CallToolResult, any, error) {
+			in, err := a.input(local)
+			if err != nil {
+				return nil, nil, err
+			}
+			comps := engine.SBOMComponents(in.Files)
+			if a.Format == "json" {
+				return jsonResult(comps)
+			}
+			b, err := engine.CycloneDX(comps, time.Now().UTC().Format(time.RFC3339))
+			if err != nil {
+				return nil, nil, err
+			}
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(b)}}}, nil, nil
+		})
+
+	addTool(s, gate, &mcp.Tool{Name: "check_plan", Description: "Check a Terraform plan (terraform show -json tfplan): counts of creates, updates, deletes and replacements, each change, drift, the risk findings (destructive changes, public exposure), the will-it-apply verdict and the cost change."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, a struct {
+			Plan   string `json:"plan" jsonschema:"output of terraform show -json tfplan"`
+			Config string `json:"config,omitempty" jsonschema:".terraguard.yml contents"`
+		}) (*mcp.CallToolResult, any, error) {
+			if strings.TrimSpace(a.Plan) == "" {
+				return nil, nil, errors.New("send plan: the output of terraform show -json tfplan")
+			}
+			rep := engine.Scan(engine.Input{Plan: a.Plan, Config: a.Config})
+			if rep.Plan == nil {
+				return nil, nil, fmt.Errorf("not a plan: %s", strings.Join(rep.Errors, "; "))
+			}
+			return jsonResult(map[string]any{"plan": rep.Plan, "passed": rep.Passed, "score": rep.Score, "grade": rep.Grade,
+				"verdict": rep.Verdict, "summary": rep.Summary, "findings": rep.Findings, "cost": rep.Cost})
 		})
 
 	return s

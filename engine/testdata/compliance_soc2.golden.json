@@ -1,0 +1,136 @@
+{
+  "schema": "terraguard.compliance/v1",
+  "framework": "SOC 2 (TSC 2017)",
+  "framework_key": "soc2",
+  "generated_at": "2026-11-23T12:00:00Z",
+  "terraguard_version": "X",
+  "rules_version": "X",
+  "files_sha256": "1f719f105a127e6433915e85bb35ffdb2c082ea24691631242482bc590a1b3e3",
+  "file_count": 2,
+  "disclaimer": "Automated evidence from static analysis of infrastructure code. This is not a certification, an audit opinion or proof of compliance; an assessor must review it together with evidence from the running environment, processes and people.",
+  "mapping_notes": [
+    "The mapping is coarse: TerraGuard maps each rule to one or more of 8 control themes, and each theme to a single control of the framework. A pass means no mapped check failed, not that the control is met.",
+    "Controls not listed are not assessed by TerraGuard at all. Rules without an explicit theme are mapped by their CWE."
+  ],
+  "summary": {
+    "pass": 1,
+    "fail": 1,
+    "not_assessed": 5
+  },
+  "controls": [
+    {
+      "id": "A1.2",
+      "themes": [
+        "Backup \u0026 recovery"
+      ],
+      "status": "not_assessed",
+      "rules_mapped": 0,
+      "rules_applied": [],
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "id": "CC6.1",
+      "themes": [
+        "Encryption at rest",
+        "Secrets \u0026 credentials"
+      ],
+      "status": "fail",
+      "rules_mapped": 0,
+      "rules_applied": [
+        "TG-AWS-EBS-001"
+      ],
+      "failures": [
+        {
+          "rule_id": "TG-AWS-EBS-001",
+          "severity": "HIGH",
+          "title": "EBS volume not encrypted",
+          "resource": "aws_ebs_volume.data",
+          "file": "main.tf",
+          "line": 4,
+          "message": "Volume is not encrypted."
+        }
+      ],
+      "waivers": [
+        {
+          "rule_id": "TG-AWS-EBS-001",
+          "resource": "aws_ebs_volume.data",
+          "file": "main.tf",
+          "line": 4,
+          "reason": "migration",
+          "approved_by": "ops-lead",
+          "expires": "2026-10-01",
+          "expired": true
+        }
+      ]
+    },
+    {
+      "id": "CC6.3",
+      "themes": [
+        "Least privilege \u0026 access control"
+      ],
+      "status": "pass",
+      "rules_mapped": 0,
+      "rules_applied": [
+        "TG-AWS-S3-002"
+      ],
+      "failures": [],
+      "waivers": [
+        {
+          "rule_id": "TG-AWS-S3-002",
+          "resource": "aws_s3_bucket.logs",
+          "file": "s3.tf",
+          "line": 9,
+          "reason": "log bucket",
+          "approved_by": "sec-team",
+          "expires": "2027-01-31",
+          "expired": false
+        }
+      ]
+    },
+    {
+      "id": "CC6.6",
+      "themes": [
+        "Network exposure"
+      ],
+      "status": "not_assessed",
+      "rules_mapped": 0,
+      "rules_applied": [],
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "id": "CC6.7",
+      "themes": [
+        "Encryption in transit"
+      ],
+      "status": "not_assessed",
+      "rules_mapped": 0,
+      "rules_applied": [],
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "id": "CC7.2",
+      "themes": [
+        "Audit logging"
+      ],
+      "status": "not_assessed",
+      "rules_mapped": 0,
+      "rules_applied": [],
+      "failures": [],
+      "waivers": []
+    },
+    {
+      "id": "CC8.1",
+      "themes": [
+        "Change \u0026 supply-chain integrity"
+      ],
+      "status": "not_assessed",
+      "rules_mapped": 0,
+      "rules_applied": [],
+      "failures": [],
+      "waivers": []
+    }
+  ]
+}

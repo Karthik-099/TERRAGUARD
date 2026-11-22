@@ -65,6 +65,8 @@ func detectFormat(name, src string) string {
 		return FormatBitbucket
 	case lower == "serverless.yml" || lower == "serverless.yaml":
 		return FormatServerless
+	case lower == "databricks.yml" || lower == "databricks.yaml":
+		return FormatDAB
 	case strings.HasPrefix(lower, "docker-compose") || strings.HasPrefix(lower, "compose.") && (strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".yaml")):
 		return FormatCompose
 	}
@@ -78,6 +80,8 @@ func detectFormat(name, src string) string {
 		head = head[:8192]
 	}
 	switch {
+	case isYAML && dabResourcesRE.MatchString(head):
+		return FormatDAB
 	case isYAML && isDeploymentManager(head):
 		return FormatDeploymentManager
 	case isCrossplane(head):

@@ -12,6 +12,7 @@ patterns=(
   'gh[pousr]_[A-Za-z0-9]{36}'            # GitHub
   'xox[baprs]-[A-Za-z0-9-]{10,}'         # Slack
   '(AKIA|ASIA)[0-9A-Z]{16}'              # AWS access key id
+  'dapi[0-9a-f]{32}'                     # Databricks personal access token
   '-----BEGIN ([A-Z]+ )?PRIVATE KEY-----'
 )
 # Files staged for commit (pre-commit) or all tracked files (CI).

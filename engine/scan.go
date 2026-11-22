@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -416,6 +418,10 @@ func buildGraph(m *Module, fs []Finding) Graph {
 			}
 		}
 	}
+	// b.Refs comes from map walks; sort so the same input gives the same graph.
+	slices.SortFunc(g.Edges, func(a, b Edge) int {
+		return cmp.Or(strings.Compare(a.Source, b.Source), strings.Compare(a.Target, b.Target))
+	})
 	return g
 }
 

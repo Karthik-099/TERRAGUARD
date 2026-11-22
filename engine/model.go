@@ -2,14 +2,16 @@
 package engine
 
 import (
+	"maps"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-const Version = "3.0.1"
+const Version = "3.1.0"
 
 type Severity string
 
@@ -107,9 +109,10 @@ func (r *Resource) via(path string) string {
 	if v := r.Via[path]; v != "" {
 		return v
 	}
-	for k, v := range r.Via {
+	// Sorted, so the same input always names the same variable.
+	for _, k := range slices.Sorted(maps.Keys(r.Via)) {
 		if strings.HasPrefix(k, path+".") || stripIndexes(k) == path {
-			return v
+			return r.Via[k]
 		}
 	}
 	return ""

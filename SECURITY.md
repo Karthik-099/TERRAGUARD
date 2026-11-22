@@ -65,7 +65,10 @@ log with metadata only, and a non-root, read-only distroless container.
 | A scanned repository injects command-line flags | Paths that start with `-` are passed to helm, kustomize and bicep as `./-name`; git receives file names after `--` |
 | A crafted container image exhausts memory in `vuln image` | Nothing is extracted to disk; per-file, per-layer and total size caps, a file-count cap and a layer-count cap |
 | A redirect leaks AI keys or downgrades a download | AI calls never follow redirects (custom gateway headers would be forwarded); `vuln update` follows HTTPS redirects only |
-| A remote AI agent abuses the MCP endpoint | `/mcp` needs the server token, is rate limited, accepts inline files only and refuses `path` and `write`, so it cannot read or change the server's disk |
+| A remote AI agent abuses the MCP endpoint | `/mcp` needs the server token, is rate limited, accepts inline files only and refuses `path` and `write`, so it cannot read or change the server's disk. Beyond loopback, MCP without a token or key is refused, not just warned about |
+| The MCP secret link (`/mcp/<key>`) is guessed or leaks | The key is at least 32 characters (256 random bits when generated), stored with mode 0600, compared in constant time; a wrong key gets the same 404 as an unknown path. The audit log and metrics record the route as `/mcp/<key>`, never the key, and `connect` masks it unless `--show-secret`. Anyone holding the link can use the tools, so treat it like a password and replace it with `serve --rotate-mcp-key` |
+| Traffic to a public server is read or downgraded | `--domain` gets a Let's Encrypt certificate for that one host name (`HostPolicy`), redirects plain HTTP to HTTPS and sends HSTS; `--https-only` refuses plain HTTP that does not come from loopback; `connect` refuses a non-HTTPS URL unless the host is loopback |
+| Large or slow scans exhaust a server | Each scan in the API and remote MCP has a deadline (`--scan-timeout`, 30 s) and at most `--max-scans` (GOMAXPROCS) run at once; more get 503 with `Retry-After`. A scan past its deadline keeps its slot until it ends, so CPU use stays bounded |
 | A forged run-task request makes the server fetch internal URLs | Run tasks are HMAC-verified; plan downloads and callbacks go only to the configured Terraform host over HTTPS, redirects included |
 | A compromised GitHub Action or dependency | Every action is pinned to a commit SHA; CodeQL, dependency review, govulncheck and staticcheck run on every change |
 | Committed state files expose secrets | Detected without being read; the web app never loads their contents |
@@ -77,8 +80,8 @@ Known limits, by design:
 
 - `drift --live`, `scan --helm`, `--kustomize` and `--bicep`, and `preflight --live` run external tools (terraform or tofu, helm, kustomize, bicep, cloud CLIs) on the repository with the user's own credentials. A `terraform plan` can run the repository's external data sources. Use them only on code you trust.
 - The local `ui` and the language server follow symbolic links inside the opened folder.
-- `terraguard serve` on a non-loopback address without a token only warns; set `TERRAGUARD_SERVER_TOKEN` for any shared deployment.
-- There is no per-request CPU limit on scans in `serve` beyond the size cap, timeouts and rate limit.
+- `terraguard serve` on a non-loopback address without a token only warns for the web API (MCP is refused); set `TERRAGUARD_SERVER_TOKEN` for any shared deployment.
+- A scan past `--scan-timeout` returns to the caller at once, but Go cannot stop it, so it runs to the end in the background while holding its slot.
 - `vuln update` trusts the OSV download on TLS alone; OSV does not sign its exports.
 - Docker base images are pinned by tag, not digest.
 

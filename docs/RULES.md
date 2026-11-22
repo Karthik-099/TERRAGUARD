@@ -1176,6 +1176,24 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-COST-001` | LOW | cost | gp2 volume: gp3 is cheaper and faster |  | 2.0 |
 | `TG-COST-002` | INFO | cost | Previous-generation instance type |  | 2.0 |
 | `TG-COST-003` | LOW | cost | Logs are retained forever |  | 2.0 |
+| `TG-DBX-ACC-001` | LOW | security | Workspace does not use customer-managed keys |  | 3.1 |
+| `TG-DBX-ACC-002` | LOW | security | Workspace has no private access settings |  | 3.1 |
+| `TG-DBX-CL-001` | LOW | cost | Cluster never terminates when idle |  | 3.1 |
+| `TG-DBX-CL-002` | MEDIUM | security | Cluster runs without user isolation |  | 3.1 |
+| `TG-DBX-CL-003` | LOW | security | Cluster local disk encryption is turned off |  | 3.1 |
+| `TG-DBX-CL-004` | HIGH | security | Spark configuration holds a literal credential |  | 3.1 |
+| `TG-DBX-CL-005` | MEDIUM | security | Cluster runs an init script from DBFS |  | 3.1 |
+| `TG-DBX-IAM-001` | MEDIUM | security | All workspace users can manage the object |  | 3.1 |
+| `TG-DBX-IAM-002` | MEDIUM | security | All users can use or manage a service principal or group |  | 3.1 |
+| `TG-DBX-JOB-001` | LOW | best-practice | Job or pipeline runs as a user |  | 3.1 |
+| `TG-DBX-NET-001` | MEDIUM | security | IP access list allows every address |  | 3.1 |
+| `TG-DBX-SEC-001` | HIGH | security | Secret value is written in the code |  | 3.1 |
+| `TG-DBX-SEC-002` | MEDIUM | security | All users can manage or write a secret scope |  | 3.1 |
+| `TG-DBX-SQL-001` | LOW | cost | SQL warehouse never stops when idle |  | 3.1 |
+| `TG-DBX-TOK-001` | MEDIUM | security | Personal access token is long-lived |  | 3.1 |
+| `TG-DBX-UC-001` | MEDIUM | security | Broad write or admin privilege granted to all users |  | 3.1 |
+| `TG-DBX-UC-002` | MEDIUM | security | Delta Sharing recipient tokens never expire |  | 3.1 |
+| `TG-DBX-WS-001` | MEDIUM | security | Workspace configuration weakens a security control |  | 3.1 |
 | `TG-DNS-001` | LOW | security | CNAME to a takeover-prone hostname |  | 2.0 |
 | `TG-DNS-002` | LOW | security | DNSSEC is not enabled |  | 2.0 |
 | `TG-DNS-003` | LOW | security | Public DNS zone without DNSSEC |  | 2.0 |
@@ -1681,6 +1699,7 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-SECRET-013` | HIGH | security | Nutanix Prism credential committed |  | 3.0 |
 | `TG-SECRET-014` | HIGH | security | Hardcoded password or secret value |  | 3.0 |
 | `TG-SECRET-015` | HIGH | security | Secret-bearing file committed |  | 3.0 |
+| `TG-SECRET-016` | CRITICAL | security | Databricks personal access token committed |  | 3.1 |
 | `TG-SLS-IAM-201` | HIGH | security | Function role allows every action |  | 2.1 |
 | `TG-SLS-LAMBDA-201` | HIGH | security | Function environment holds AWS credentials |  | 2.1 |
 | `TG-STATE-001` | MEDIUM | reliability | Remote state is unencrypted or unlocked |  | 2.0 |
@@ -1725,6 +1744,7 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-VAL-022` | HIGH | validate | Value Google Cloud rejects | yes | 2.1 |
 | `TG-VAL-023` | HIGH | validate | Value the Nutanix provider rejects | yes | 3.0 |
 | `TG-VAL-024` | HIGH | validate | Value the vSphere provider rejects | yes | 3.0 |
+| `TG-VAL-025` | HIGH | validate | Value the Databricks provider rejects | yes | 3.1 |
 | `TG-VS-CL-001` | MEDIUM | reliability | Compute cluster has vSphere HA off |  | 3.0 |
 | `TG-VS-DS-001` | LOW | reliability | Datastore cluster has Storage DRS off |  | 3.0 |
 | `TG-VS-HOST-001` | LOW | security | ESXi host is not in lockdown mode |  | 3.0 |

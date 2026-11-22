@@ -140,12 +140,38 @@ terraguard review --base origin/main .
 GitHub Actions:
 
 ```yaml
-- uses: Karthik-099/TERRAGUARD@v3.0.1
+- uses: Karthik-099/TERRAGUARD@v3.1.0
   with:
     command: review          # scan | review | pulse
     path: infra
     fail-on: HIGH
 ```
+
+### PR suggestions
+
+Add `pr-comments: true` to get each new finding as a review comment on the
+line that introduced it. When TerraGuard has a safe fix, the comment carries a
+GitHub suggestion, so the author can apply it with "Commit suggestion":
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+steps:
+  - uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
+  - uses: Karthik-099/TERRAGUARD@v3.1.0
+    with:
+      command: review
+      path: infra
+      pr-comments: true
+```
+
+Each run replaces the previous TerraGuard review. Secrets never get a
+suggestion. If posting fails, for example on a fork without write access, the
+job prints a warning and continues. To see the payload locally:
+`terraguard review --base origin/main --format github-review`.
 
 GitLab, Jenkins, Bitbucket, CircleCI, Atlantis, AWS CodeBuild, Azure Pipelines
 and Google Cloud Build templates are in [`templates/`](https://github.com/Karthik-099/TERRAGUARD/tree/main/templates).

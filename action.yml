@@ -39,6 +39,9 @@ inputs:
   comment:
     description: Post/update a single sticky PR comment with the report.
     default: "true"
+  pr-comments:
+    description: "On pull_request events, post findings on changed lines as one pull-request review, with a GitHub suggestion when TerraGuard has a safe fix. Needs `permissions: pull-requests: write` and actions/checkout with fetch-depth 0. Replaces the previous TerraGuard review; a failure to post only prints a warning."
+    default: "false"
   sarif:
     description: Upload SARIF to GitHub code scanning (inline annotations, Security tab).
     default: "true"
@@ -172,6 +175,55 @@ runs:
         else
           gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$body"
         fi
+
+    - name: PR review with suggested fixes
+      if: inputs.pr-comments == 'true' && inputs.command != 'pulse' && inputs.command != 'preflight' && github.event_name == 'pull_request'
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.pull_request.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        TG_PATH: ${{ inputs.path }}
+        TG_CONFIG: ${{ inputs.config }}
+        TG_BASE: ${{ inputs.base || github.event.pull_request.base.sha }}
+      run: |
+        # Never fail the job here: every problem is a warning.
+        set +e
+        warn() { echo "::warning title=TerraGuard::$1"; }
+        marker='<!-- terraguard-review -->'
+        bot='github-actions[bot]'
+        pulls="repos/$GITHUB_REPOSITORY/pulls"
+        review="$RUNNER_TEMP/terraguard-review.json"
+        args=(review "$TG_PATH" --base "${TG_BASE:-origin/main}" --format github-review --out "$review")
+        [ -n "$TG_CONFIG" ] && args+=(--config "$TG_CONFIG")
+        "$RUNNER_TEMP/terraguard" "${args[@]}" > /dev/null
+        if ! jq -e '.event == "COMMENT"' "$review" > /dev/null 2>&1; then
+          warn "Could not build the pull-request review (is the base commit fetched? use fetch-depth: 0)."
+          exit 0
+        fi
+        new_id=""
+        if [ "$(jq '.comments | length' "$review")" -gt 0 ]; then
+          jq --arg c "$HEAD_SHA" '. + {commit_id: $c}' "$review" > "$review.post"
+          new_id=$(gh api -X POST "$pulls/$PR/reviews" --input "$review.post" --jq '.id')
+          [ -n "$new_id" ] || warn "Could not post the pull-request review. It needs permissions: pull-requests: write, and lines that are in the pull request's diff."
+        else
+          echo "No new finding on a changed line; no review posted."
+        fi
+        # Then retire older TerraGuard reviews: delete their inline comments and mark their summaries superseded.
+        [ -n "$new_id" ] || new_id=0
+        gh api "$pulls/$PR/comments" --paginate | jq -r --arg m "$marker" --arg b "$bot" --argjson keep "$new_id" \
+          '.[] | select(.user.login == $b and (.body | contains($m)) and .pull_request_review_id != $keep) | .id' |
+          while read -r id; do
+            gh api -X DELETE "$pulls/comments/$id" > /dev/null || warn "Could not delete an earlier TerraGuard review comment."
+          done
+        gh api "$pulls/$PR/reviews" --paginate | jq -r --arg m "$marker" --arg b "$bot" --argjson keep "$new_id" \
+          '.[] | select(.user.login == $b and (.body | contains($m)) and .id != $keep) | .id' |
+          while read -r id; do
+            gh api -X PUT "$pulls/$PR/reviews/$id" -f body='<!-- terraguard-review-superseded -->Superseded by a newer TerraGuard review.' > /dev/null ||
+              warn "Could not mark an earlier TerraGuard review as superseded."
+          done
+        exit 0
 
     - name: Policy gate
       if: inputs.command != 'pulse' && inputs.command != 'preflight' && steps.scan.outputs.passed != 'true'
