@@ -285,5 +285,67 @@ func newMCPServer(local bool, gate *scanGate) *mcp.Server {
 				"verdict": rep.Verdict, "summary": rep.Summary, "findings": rep.Findings, "cost": rep.Cost})
 		})
 
+	addTool(s, gate, &mcp.Tool{Name: "plan_hpe_migration", Description: "Plan a move from the HPE GreenLake provider (HPE/hpegl) to HPE/hpe: every hpegl_* resource and data source with its hpe_* replacement (or none), import IDs, the provider block change and HPE's tfmigrator commands. A report; changes nothing."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, a scanArgs) (*mcp.CallToolResult, any, error) {
+			in, err := a.input(local)
+			if err != nil {
+				return nil, nil, err
+			}
+			return jsonResult(engine.HPEMigration(in.Files))
+		})
+
+	for _, p := range mcpPrompts {
+		text := p.text
+		s.AddPrompt(&mcp.Prompt{Name: p.name, Description: p.desc}, func(context.Context, *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			return &mcp.GetPromptResult{Description: p.desc, Messages: []*mcp.PromptMessage{{Role: "user", Content: &mcp.TextContent{Text: text}}}}, nil
+		})
+	}
+
+	s.AddResource(&mcp.Resource{URI: "terraguard://rules", Name: "rules", Description: "Every TerraGuard rule: ID, severity, category, remediation, CWE and resource types.", MIMEType: "application/json"},
+		func(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return jsonResource(req.Params.URI, engine.Catalog())
+		})
+	s.AddResourceTemplate(&mcp.ResourceTemplate{URITemplate: "terraguard://rules/{id}", Name: "rule", Description: "One TerraGuard rule by ID, for example terraguard://rules/TG-HPE-STATE-001.", MIMEType: "application/json"},
+		func(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			id := strings.TrimPrefix(req.Params.URI, "terraguard://rules/")
+			for _, r := range engine.Catalog() {
+				if strings.EqualFold(r.ID, id) {
+					return jsonResource(req.Params.URI, r)
+				}
+			}
+			return nil, mcp.ResourceNotFoundError(req.Params.URI)
+		})
+
 	return s
+}
+
+func jsonResource(uri string, v any) (*mcp.ReadResourceResult, error) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: uri, MIMEType: "application/json", Text: string(b)}}}, nil
+}
+
+// mcpPrompts are short, step-by-step guides that name the tools to call.
+var mcpPrompts = []struct{ name, desc, text string }{
+	{"review_hpe_terraform", "Review HPE Terraform (HPE/hpe, HPE/hpegl): scan, explain, fix, verify.",
+		"Review this HPE Terraform configuration with TerraGuard.\n" +
+			"1. Call scan_terraform on the files (send them inline as files).\n" +
+			"2. For each TG-HPE-*, TG-VAL-026 and TG-SCHEMA-* finding, call explain_rule and say in one line what is wrong and why it matters.\n" +
+			"3. Call fix_terraform for the safe fixes; propose a change for the rest.\n" +
+			"4. Call scan_terraform again on the changed files and report what is fixed and what remains. Never claim a fix the re-scan does not confirm."},
+	{"plan_greenlake_migration", "Plan a move from HPE GreenLake (HPE/hpegl) to HPE/hpe with HPE's tfmigrator.",
+		"Plan the move of this Terraform from the HPE GreenLake provider (HPE/hpegl) to HPE/hpe.\n" +
+			"1. Call plan_hpe_migration on the files.\n" +
+			"2. List each hpegl resource with its replacement; call out every item marked without a replacement.\n" +
+			"3. Show the provider block change it reports.\n" +
+			"4. Give the tfmigrator commands from the report exactly as written; do not add flags.\n" +
+			"5. After migration, call scan_terraform on the migrated files and check that terraform plan shows only imports."},
+	{"harden_before_apply", "Scan, fix and verify before terraform apply.",
+		"Harden this configuration before terraform apply.\n" +
+			"1. Call scan_terraform (add plan when a terraform show -json plan is available; check_plan reads it alone).\n" +
+			"2. Call fix_terraform and apply the safe fixes.\n" +
+			"3. Call scan_terraform again on the fixed files.\n" +
+			"4. Repeat until nothing blocking remains or nothing changes, then report the verdict and what is left, with rule IDs."},
 }

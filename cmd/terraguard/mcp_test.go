@@ -125,3 +125,54 @@ func TestRemoteMCPNewTools(t *testing.T) {
 		t.Error("check_plan accepted something that is not a plan")
 	}
 }
+
+func TestRemoteMCPPromptsResourcesAndMigration(t *testing.T) {
+	srv := httptest.NewServer(newServer("s3cret"))
+	defer srv.Close()
+	ctx := context.Background()
+	c := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	cs, err := c.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: srv.URL + "/mcp", HTTPClient: &http.Client{Transport: bearer("s3cret")}, DisableStandaloneSSE: true, MaxRetries: -1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+
+	prompts, err := cs.ListPrompts(ctx, nil)
+	if err != nil || len(prompts.Prompts) != 3 {
+		t.Fatalf("prompts: %v %+v", err, prompts)
+	}
+	p, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "plan_greenlake_migration"})
+	if err != nil || !strings.Contains(p.Messages[0].Content.(*mcp.TextContent).Text, "plan_hpe_migration") {
+		t.Fatalf("get prompt: %v %+v", err, p)
+	}
+
+	res, err := cs.ListResources(ctx, nil)
+	if err != nil || len(res.Resources) != 1 || res.Resources[0].URI != "terraguard://rules" {
+		t.Fatalf("resources: %v %+v", err, res)
+	}
+	tmpl, err := cs.ListResourceTemplates(ctx, nil)
+	if err != nil || len(tmpl.ResourceTemplates) != 1 {
+		t.Fatalf("resource templates: %v %+v", err, tmpl)
+	}
+	cat, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "terraguard://rules"})
+	if err != nil || !strings.Contains(cat.Contents[0].Text, "TG-HPE-MIG-001") {
+		t.Fatalf("read catalog: %v", err)
+	}
+	one, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "terraguard://rules/TG-HPE-STATE-001"})
+	if err != nil || !strings.Contains(one.Contents[0].Text, `"remediation"`) {
+		t.Fatalf("read one rule: %v", err)
+	}
+	if _, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "terraguard://rules/TG-NOPE"}); err == nil {
+		t.Error("unknown rule resource must be an error")
+	}
+
+	call, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "plan_hpe_migration", Arguments: map[string]any{
+		"files": map[string]string{"main.tf": "resource \"hpegl_vmaas_instance\" \"a\" {\n  name = \"a\"\n}\n"}}})
+	if err != nil || call.IsError || !strings.Contains(call.Content[0].(*mcp.TextContent).Text, `"replacement": "hpe_morpheus_instance"`) {
+		t.Fatalf("plan_hpe_migration: %v %+v", err, call)
+	}
+	call, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "plan_hpe_migration", Arguments: map[string]any{"path": "/etc"}})
+	if err == nil && !call.IsError {
+		t.Fatal("remote plan_hpe_migration read a server path")
+	}
+}

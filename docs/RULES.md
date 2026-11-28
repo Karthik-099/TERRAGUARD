@@ -1444,6 +1444,19 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-GL-PROJECT-102` | LOW | security | GitLab project accepts unsigned commits |  | 2.1 |
 | `TG-GL-PROJECT-201` | LOW | security | GitLab project requires fewer than two merge approvals |  | 2.1 |
 | `TG-HELM-001` | MEDIUM | security | Helm chart version is not pinned |  | 2.0 |
+| `TG-HPE-IAM-001` | MEDIUM | security | Active Directory identity source connects without SSL |  | 3.2 |
+| `TG-HPE-IAM-002` | HIGH | security | SAML identity source does not validate assertion signatures |  | 3.2 |
+| `TG-HPE-LB-001` | LOW | security | Load balancer virtual server serves HTTP without TLS |  | 3.2 |
+| `TG-HPE-LB-002` | MEDIUM | security | Load balancer SSL profile allows TLS 1.0 or 1.1 |  | 3.2 |
+| `TG-HPE-METAL-001` | HIGH | security | Metal host user data sets a plaintext password |  | 3.2 |
+| `TG-HPE-MIG-001` | INFO | best-practice | hpegl VMaaS type has a replacement in the HPE provider |  | 3.2 |
+| `TG-HPE-NET-001` | HIGH | security | HPE firewall rule opens admin ports to any source |  | 3.2 |
+| `TG-HPE-PRV-001` | HIGH | security | HPE provider skips TLS certificate checks |  | 3.2 |
+| `TG-HPE-PRV-002` | HIGH | security | HPE provider credential written in the configuration |  | 3.2 |
+| `TG-HPE-SEC-001` | HIGH | security | HPE credential resource holds a literal secret |  | 3.2 |
+| `TG-HPE-STATE-001` | MEDIUM | security | HPE resource stores a secret in Terraform state |  | 3.2 |
+| `TG-HPE-TLS-001` | MEDIUM | security | HPE integration skips TLS certificate checks |  | 3.2 |
+| `TG-HPE-TLS-002` | MEDIUM | security | HPE endpoint receives credentials over plain HTTP |  | 3.2 |
 | `TG-HTTP-CORE-301` | HIGH | security | SecureString SSM parameter is sent to an external URL |  | 2.1 |
 | `TG-HZ-FW-001` | HIGH | security | Hetzner firewall open to the internet |  | 2.0 |
 | `TG-HZ-SRV-001` | MEDIUM | security | Hetzner server has no firewall |  | 2.0 |
@@ -1745,6 +1758,7 @@ Some rule definitions are derived from Apache-2.0 sources; see NOTICE.
 | `TG-VAL-023` | HIGH | validate | Value the Nutanix provider rejects | yes | 3.0 |
 | `TG-VAL-024` | HIGH | validate | Value the vSphere provider rejects | yes | 3.0 |
 | `TG-VAL-025` | HIGH | validate | Value the Databricks provider rejects | yes | 3.1 |
+| `TG-VAL-026` | HIGH | validate | Value the HPE provider rejects | yes | 3.2 |
 | `TG-VS-CL-001` | MEDIUM | reliability | Compute cluster has vSphere HA off |  | 3.0 |
 | `TG-VS-DS-001` | LOW | reliability | Datastore cluster has Storage DRS off |  | 3.0 |
 | `TG-VS-HOST-001` | LOW | security | ESXi host is not in lockdown mode |  | 3.0 |

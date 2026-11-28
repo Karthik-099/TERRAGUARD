@@ -63,6 +63,7 @@ Auto-fix edits Terraform only; findings in other formats have no fix.
 | `terraguard mcp` | Run the MCP server over stdio |
 | `terraguard connect claude-code\|cursor\|vscode\|claude-ai\|print [--url https://host]` | Add TerraGuard to an MCP client; see below and [CONNECT.md](CONNECT.md) |
 | `terraguard sbom [paths] [--format cyclonedx\|json] [--out FILE]` | Offline CycloneDX 1.5 inventory: Terraform providers (locked versions), modules, container images and lockfile packages, with purls |
+| `terraguard migrate hpegl [paths] [--format text\|json\|markdown]` | Every `hpegl_*` resource and data source with file, line and its `hpe_*` replacement (or none), import IDs, the provider block change and HPE's tfmigrator commands, from HPE's migration guides; a report that always exits 0. See [HPE.md](HPE.md#migrate-from-greenlake) |
 | `terraguard vuln --sbom FILE` | Offline OSV scan of the packages in a CycloneDX JSON SBOM (from `terraguard sbom` or another tool) instead of lockfiles |
 | `terraguard version` | Print the version |
 
@@ -95,13 +96,18 @@ Every command accepts `-h` for its flags. Flags may appear before or after paths
 | `--baseline FILE` | Report baselined findings as waived; gate only on new ones |
 | `--ai` | Add an advisory AI remediation plan to the Markdown report |
 | `--group-by owner` | Group `text` and `markdown` output into one section per CODEOWNERS owner, with counts; unowned findings last |
+| `--snippets MODE` | Provider documentation examples: `auto` (default) detects them by path, `on` treats every `.tf` file as a standalone snippet, `off` scans them as modules; see below |
+
+### Provider documentation examples
+
+Terraform providers keep registry examples in the tfplugindocs layout: `examples/provider/*.tf`, and `examples/<kind>/<name>/*.tf` for `resources`, `data-sources`, `functions`, `ephemeral-resources` and `actions`. Each file is a standalone snippet: a folder can hold alternatives that declare the same address, and snippets use variables they never declare. With `--snippets auto` (or `snippets:` in the policy) TerraGuard scans each such file as its own scope: no duplicate check across files, no undeclared-reference, unused-object, description or type checks, no module-level checks (backend, `required_version`, provider pinning), and no missing-argument finding in a block that says it leaves arguments out with a `# ...` comment or in a context block of another type than the one the folder documents (the `aws_eks_cluster` a `tls_certificate` example reads from). Resource security rules, secret rules, value checks and schema checks still run, and a duplicate inside one file is still reported. Other folders under `examples/`, such as `examples/e2e/` or `examples/complete/`, are real modules and keep every check.
 
 ### review, agent and pulse flags
 
 | Command | Flag | Meaning |
 |---|---|---|
 | review | `--base REV` | Git revision to compare with (default `origin/main`) |
-| review | `--format markdown\|json\|github-review`, `--out FILE`, `--markdown FILE`, `--json FILE` | Outputs; `--out` writes the `--format` output to a file instead of stdout |
+| review | `--format markdown\|json\|github-review\|gitlab-review`, `--out FILE`, `--markdown FILE`, `--json FILE` | Outputs; `--out` writes the `--format` output to a file instead of stdout |
 | review | `--fail-on`, `--config`, `--ai`, `--schema` | As for scan |
 | agent | `--write` | Write accepted changes (default: dry run) |
 | agent | `--rounds N` | Maximum AI rounds (default 2) |
@@ -125,6 +131,30 @@ request: `body`, `event` (always `COMMENT`) and `comments`, each with `path`
 - Finding text is escaped, so a resource name cannot open a code fence, link or HTML comment, or @mention anyone. The fence around a suggestion is longer than any run of backticks inside it.
 - `body` and each comment start with the hidden marker `<!-- terraguard-review -->`.
 - The exit code is the same as for any review.
+
+### review --format gitlab-review
+
+The same findings, suggestions, escaping and secret handling as
+`github-review`, in the shape of GitLab's
+[merge request discussions](https://docs.gitlab.com/api/discussions/):
+
+```json
+{
+  "body": "<!-- terraguard-review -->\n## TerraGuard review: passed (lite risk tier)\n...",
+  "discussions": [
+    {
+      "body": "<!-- terraguard-review -->\n**MEDIUM** ` TG-AWS-EBS-001 ` ...\n\n```suggestion:-1+0\n...\n```",
+      "position": {"base_sha": "...", "start_sha": "...", "head_sha": "...", "position_type": "text",
+                   "old_path": "infra/main.tf", "new_path": "infra/main.tf", "new_line": 6}
+    }
+  ]
+}
+```
+
+- `body` is the summary, with findings that are not on a changed line; post it as a thread without a position. Each entry of `discussions` is the body of one `POST /projects/:id/merge_requests/:iid/discussions`.
+- `new_line` is the last line the fix replaces, and the suggestion is ` ```suggestion:-A+0 `: it replaces the `A` lines above the commented line and the line itself.
+- `base_sha` and `start_sha` are `--base` resolved to a commit and `head_sha` is `HEAD`. The GitLab CI template replaces all three with the merge request's `diff_refs`.
+- `body` and each discussion start with the hidden marker `<!-- terraguard-review -->`.
 
 ### report flags
 
@@ -200,7 +230,7 @@ A JSON Schema for editors is at [`schema/terraguard.schema.json`](https://github
 
 | Key | Type | Meaning |
 |---|---|---|
-| `extends` | list | Policy packs to inherit, base first: relative paths or https URLs |
+| `extends` | list | Policy packs to inherit, base first: relative paths, https URLs or built-in packs `terraguard:minimal`, `terraguard:recommended`, `terraguard:strict` and `terraguard:hpe` (fail on HIGH; TG-HPE-STATE-001, TG-HPE-PRV-002 and TG-HPE-SEC-001 cannot be waived or disabled) |
 | `fail_on` | severity | Lowest severity that fails the gate (default `HIGH`) |
 | `max_findings` | map | Risk budget per severity, e.g. `{ MEDIUM: 20 }` |
 | `disable` | list | Rule IDs or globs to turn off, e.g. `TG-COST-*` |
@@ -211,6 +241,7 @@ A JSON Schema for editors is at [`schema/terraguard.schema.json`](https://github
 | `unwaivable` | list | Rule IDs or globs that inline ignores and waivers cannot silence |
 | `data` | map of lists | Named lists, e.g. `regions: [eu-west-1]`, used by custom rules with `in_data` / `not_in_data` |
 | `rules_version` | string | Pin the gating rule set, e.g. `"2.0"`: findings from rules added later are reported but do not fail the gate |
+| `snippets` | string | `auto` (default), `on` or `off`: how provider documentation examples are scanned; `--snippets` overrides it |
 | `max_waiver_days` | number | Waivers with no expiry, or one further out than this, are not applied (reported as TG-POL-002) |
 
 ### Custom rules
@@ -395,6 +426,18 @@ curl -s -X POST localhost:8080/api/scan \
 | `generate_sbom` | `files` or `path`, optional `format` (`json`) | CycloneDX JSON, or the component list |
 | `check_plan` | `plan` (`terraform show -json`), optional `config` | Plan summary, risk findings, verdict and cost change |
 | `estimate_cost` | `plan`, or `files` or `path`, optional `usage`, `prices` | Monthly cost before and after |
+| `plan_hpe_migration` | `files` or `path` | The `terraguard migrate hpegl` report as JSON |
+
+Prompts, each a few numbered steps that name the tools above:
+
+| Prompt | Steps |
+|---|---|
+| `review_hpe_terraform` | Scan, explain the HPE findings, fix, re-scan to verify |
+| `plan_greenlake_migration` | `plan_hpe_migration`, call out items with no replacement, the provider change and the tfmigrator commands as written, re-scan after |
+| `harden_before_apply` | Scan, fix, re-scan until nothing blocking remains |
+
+Resources: `terraguard://rules` (the rule catalog as JSON) and the template
+`terraguard://rules/{id}` (one rule, for example `terraguard://rules/TG-HPE-STATE-001`).
 
 ```bash
 claude mcp add terraguard -- terraguard mcp

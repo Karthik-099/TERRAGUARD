@@ -1,0 +1,98 @@
+{
+  "items": [
+    {
+      "address": "hpegl_vmaas_instance.web",
+      "mode": "managed",
+      "type": "hpegl_vmaas_instance",
+      "file": "main.tf",
+      "line": 11,
+      "replacement": "hpe_morpheus_instance",
+      "notes": [
+        "Schema differs: generated from state with an import block.",
+        "config_vmware.nested_virtualization must be \"on\" or \"off\" (HPE provider 2.0.0 or later)."
+      ]
+    },
+    {
+      "address": "hpegl_vmaas_router_nat_rule.snat",
+      "mode": "managed",
+      "type": "hpegl_vmaas_router_nat_rule",
+      "file": "main.tf",
+      "line": 17,
+      "replacement": "hpe_morpheus_network_router_nat",
+      "notes": [
+        "Schema differs: generated from state with an import block.",
+        "Import ID: {router_id}.{id}."
+      ]
+    },
+    {
+      "address": "hpegl_metal_host.db",
+      "mode": "managed",
+      "type": "hpegl_metal_host",
+      "file": "main.tf",
+      "line": 22,
+      "notes": [
+        "No replacement in HPE's hpegl to HPE guide, which covers hpegl VMaaS types only."
+      ]
+    }
+  ],
+  "replaceable": 2,
+  "no_replacement": 1,
+  "providers": [
+    {
+      "file": "main.tf",
+      "line": 1,
+      "mode": "glcs",
+      "mapping": [
+        {
+          "from": "iam_service_url",
+          "to": "morpheus.pce_identity.issuer_url"
+        },
+        {
+          "from": "vmaas.location",
+          "to": "morpheus.pce_identity.location"
+        },
+        {
+          "from": "vmaas.space_name",
+          "to": "morpheus.pce_identity.space"
+        },
+        {
+          "from": "vmaas.broker_url",
+          "to": "morpheus.pce_identity.broker_url"
+        },
+        {
+          "from": "(new)",
+          "to": "morpheus.pce_identity.client_id = var.hpe_pce_client_id"
+        },
+        {
+          "from": "(new)",
+          "to": "morpheus.pce_identity.client_secret = var.hpe_pce_client_secret"
+        }
+      ],
+      "notes": [
+        "GreenLake IAM, connected (iam_version = \"glcs\", the default)."
+      ]
+    }
+  ],
+  "notes": [
+    "Prerequisites: Terraform >= 1.5.0 (import blocks) and the HPE provider >= 2.0.0: required_providers { hpe = { source = \"HPE/hpe\", version = \">= 2.0.0\" } }.",
+    "Every hpegl VMaaS resource has a different schema in the HPE provider; tfmigrator generates each new resource from state with an import block. After the import, terraform plan must show no changes.",
+    "tfmigrator migrate-providers writes the hpe provider block, credential variable blocks and credentials.auto.tfvars.",
+    "Environment: iam_version falls back to HPEGL_IAM_VERSION (default glcs) and decides the generated block. The HPE provider docs document no environment variables for the morpheus block."
+  ],
+  "commands": [
+    "terraform show -json > state.json",
+    "tfmigrator migrate --state state.json --working-dir . --var-file terraform.tfvars --original .",
+    "cd migrated/final",
+    "terraform init",
+    "terraform fmt",
+    "terraform validate",
+    "terraform plan",
+    "terraform apply --refresh-only",
+    "terraform apply"
+  ],
+  "guides": [
+    "docs/guides/hpegl_to_hpe_migration.md",
+    "docs/guides/tfmigrator_migration.md",
+    "docs/guides/tfmigrator_troubleshooting.md"
+  ]
+}

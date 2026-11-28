@@ -33,7 +33,9 @@ type Config struct {
 	// Data holds named lists, such as approved regions, that custom rules use
 	// with in_data and not_in_data.
 	Data map[string][]any `yaml:"data,omitempty" json:"data,omitempty"`
-	only []string         // set per run by --check
+	// Snippets: auto, on or off; see Input.Snippets.
+	Snippets string   `yaml:"snippets,omitempty" json:"snippets,omitempty"`
+	only     []string // set per run by --check
 }
 
 // Waiver is an auditable exception: who accepted which risk, why, until when.
@@ -108,6 +110,9 @@ func ParseConfig(src string) (*Config, error) {
 	c.FailOn = ParseSeverity(string(c.FailOn))
 	if c.FailOn.Rank() == 0 && c.FailOn != "NONE" {
 		return nil, fmt.Errorf(".terraguard.yml: fail_on must be CRITICAL, HIGH, MEDIUM, LOW, INFO or NONE (got %q)", c.FailOn)
+	}
+	if c.Snippets != "" && c.Snippets != "auto" && c.Snippets != "on" && c.Snippets != "off" {
+		return nil, fmt.Errorf(".terraguard.yml: snippets must be auto, on or off (got %q)", c.Snippets)
 	}
 	budgets := map[Severity]int{}
 	for k, v := range c.MaxFindings {
@@ -228,6 +233,9 @@ func mergeInto(base, child *Config) {
 	}
 	if child.RulesVersion != "" {
 		base.RulesVersion = child.RulesVersion
+	}
+	if child.Snippets != "" {
+		base.Snippets = child.Snippets
 	}
 	base.Unwaivable = append(base.Unwaivable, child.Unwaivable...)
 	for k, v := range child.Data {

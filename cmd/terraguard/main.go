@@ -24,7 +24,7 @@ const usage = `TerraGuard — Terraform security, validation and plan-risk analy
 Usage:
   terraguard scan [paths...] [flags]   Scan .tf/.tfvars files (default: .)
   terraguard review --base REV [paths] Review a change: new findings only, risk tier, resolved issues
-                                       (--format github-review: PR review JSON with suggested fixes)
+                                       (--format github-review|gitlab-review: PR/MR comments with suggested fixes)
   terraguard report [paths] --framework soc2|iso27001|cis|pci|hipaa [--format html|json] [--out FILE]
                                        Audit evidence report grouped by framework control
   terraguard fix  [paths...]           Apply safe auto-fixes in place
@@ -44,9 +44,11 @@ Usage:
   terraguard vuln --sbom bom.json      offline OSV scan of the packages in a CycloneDX SBOM
   terraguard sbom [paths] [--format cyclonedx|json] [--out FILE]
                                        CycloneDX 1.5 inventory: providers, modules, images, packages (offline)
+  terraguard migrate hpegl [paths] [--format text|json|markdown]
+                                       hpegl_* to hpe_* replacements, provider block changes, tfmigrator steps (exit 0)
   terraguard ui [path]                 Open the workspace on this machine with a folder loaded from disk
   terraguard lsp                       Language server for any editor (diagnostics and quick fixes over stdio)
-  terraguard init [path] [--pack recommended|strict|minimal]   Policy, CI workflow and pre-commit in one step
+  terraguard init [path] [--pack recommended|strict|minimal|hpe]   Policy, CI workflow and pre-commit in one step
   terraguard explain RULE-ID           Everything about one rule: why, fix, compliance, aliases
   terraguard doctor [path]             Check the installation, the policy and optional tools
   terraguard ai                        Show the AI fallback route built from .env
@@ -132,6 +134,8 @@ func main() {
 		code, err = runVuln(os.Args[2:])
 	case "sbom":
 		err = runSBOM(os.Args[2:])
+	case "migrate":
+		err = runMigrate(os.Args[2:])
 	case "drift":
 		code, err = runDrift(os.Args[2:])
 	case "ui":
@@ -397,6 +401,7 @@ func runScan(args []string) (int, error) {
 	changedOnly := fs.Bool("changed-only", false, "scan only the directories with a file changed since --base (git)")
 	changedBase := fs.String("base", "", "with --changed-only: git revision to compare against (default origin/main, else HEAD~1)")
 	useCache := fs.Bool("cache", false, "reuse the result of an identical earlier scan from the user cache folder (or TERRAGUARD_CACHE=true)")
+	snippets := fs.String("snippets", "", "provider documentation examples (examples/resources/<type>/*.tf and the like): auto (default, or snippets in the policy) detects them by path and scans each file standalone, on treats every .tf file so, off scans them as modules")
 	var varFiles, skipPaths, only, skip, policyDirs, regoDirs, frameworks listFlag
 	fs.Var(&frameworks, "framework", "scan only these formats: terraform, kubernetes, cloudformation, arm, dockerfile, docker-compose, github-actions, gitlab-ci, azure-pipelines, circleci, bitbucket-pipelines, serverless, ansible, openapi (repeatable or comma-separated)")
 	fs.Var(&regoDirs, "rego", "folder of Rego policies (Conftest style: deny, violation and warn rules) to run as well (repeatable)")
@@ -441,6 +446,10 @@ func runScan(args []string) (int, error) {
 		return 2, err
 	}
 	in.NoBuiltinSchema, in.Coverage = *noBuiltinSchema, *coverage
+	if s := *snippets; s != "" && s != "auto" && s != "on" && s != "off" {
+		return 2, fmt.Errorf("--snippets %q: use auto, on or off", s)
+	}
+	in.Snippets = *snippets
 	if in.GraphPolicies, err = readPolicyDirs(policyDirs); err != nil {
 		return 2, err
 	}

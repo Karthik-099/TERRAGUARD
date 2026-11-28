@@ -40,6 +40,10 @@ type Input struct {
 	// CodeOwnersRoot is the Files key prefix (a directory) the CODEOWNERS
 	// patterns are relative to; empty means the keys already are.
 	CodeOwnersRoot string `json:"code_owners_root,omitempty"`
+	// Snippets: auto (default) treats provider documentation examples
+	// (examples/resources/<type>/*.tf and the like) as standalone snippets,
+	// on treats every .tf file so, off none. Overrides the policy's snippets.
+	Snippets string `json:"snippets,omitempty"`
 }
 
 type Report struct {
@@ -156,7 +160,8 @@ func Scan(in Input) *Report {
 	rep.Trace.ParseMs = since(t)
 	t = time.Now()
 	resources := m.Resources
-	findings := moduleChecks(m)
+	snip := snippetFunc(cmp.Or(in.Snippets, cfg.Snippets))
+	findings := moduleChecks(m, snip)
 	if strings.TrimSpace(in.Schema) != "" {
 		if s, err := parseSchemas(in.Schema); err != nil {
 			rep.Errors = append(rep.Errors, err.Error())
@@ -168,6 +173,8 @@ func Scan(in Input) *Report {
 			findings = append(findings, schemaChecksSkip(m, s, otherProvider(m))...)
 		}
 	}
+	findings = dropElided(findings, m, snip)
+	findings = append(findings, embeddedFindings(m, in)...) // templates inside HPE Morpheus blueprints
 	rep.Trace.ChecksMs = since(t)
 	rep.Trace.CustomRules = len(cfg.CustomRules)
 	if strings.TrimSpace(in.Plan) != "" {

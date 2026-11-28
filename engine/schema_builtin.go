@@ -36,7 +36,7 @@ var bundled = sync.OnceValue(func() *bundledSchemas {
 	return &s
 })
 
-var bundledPrefixRE = regexp.MustCompile(`^(aws|azurerm|google)_`)
+var bundledPrefixRE = regexp.MustCompile(`^(aws|azurerm|google|hpe|hpegl)_`)
 
 var lockRE = regexp.MustCompile(`provider\s+"([^"]+)"\s*\{[^}]*?version\s*=\s*"([^"]+)"`)
 
@@ -112,7 +112,8 @@ func builtinSchemaFor(m *Module) *providerSchemas {
 				case string:
 					ver = t
 				}
-				constraints[fullSource(src)] = append(constraints[fullSource(src)], ver)
+				src = strings.ToLower(fullSource(src)) // sources are case-insensitive: "HPE/hpe"
+				constraints[src] = append(constraints[src], ver)
 			}
 		}
 	}

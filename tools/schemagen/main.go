@@ -4,6 +4,10 @@
 //
 //	terraform providers schema -json > schema.json
 //	go run ./tools/schemagen -in schema.json -versions aws=6.71.0,azurerm=5.12.0,google=8.9.0
+//
+// To add providers without re-downloading the others, merge into the current file:
+//
+//	go run ./tools/schemagen -in hpe.json -base engine/schemas/providers.json.gz -versions hpe/hpe=2.3.0,hpe/hpegl=0.4.20
 package main
 
 import (
@@ -48,7 +52,8 @@ type provider struct {
 func main() {
 	in := flag.String("in", "schema.json", "terraform providers schema -json output")
 	out := flag.String("out", "engine/schemas/providers.json.gz", "output file")
-	versions := flag.String("versions", "", "provider=version,... of the schemas, for version gating")
+	versions := flag.String("versions", "", "provider=version,... (or namespace/provider=version) of the schemas, for version gating")
+	base := flag.String("base", "", "existing bundled file whose providers and versions are kept unless -in replaces them")
 	flag.Parse()
 	b, err := os.ReadFile(*in)
 	if err != nil {
@@ -61,9 +66,36 @@ func main() {
 		log.Fatal(err)
 	}
 	vs := map[string]string{}
+	if *base != "" {
+		var old struct {
+			Providers map[string]provider `json:"provider_schemas"`
+			Versions  map[string]string   `json:"versions"`
+		}
+		f, err := os.Open(*base)
+		if err != nil {
+			log.Fatal(err)
+		}
+		zr, err := gzip.NewReader(f)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := json.NewDecoder(zr).Decode(&old); err != nil {
+			log.Fatal(err)
+		}
+		f.Close()
+		for k, p := range old.Providers {
+			if _, ok := s.Providers[k]; !ok {
+				s.Providers[k] = p
+				vs[k] = old.Versions[k]
+			}
+		}
+	}
 	for _, kv := range strings.Split(*versions, ",") {
 		if k, v, ok := strings.Cut(kv, "="); ok {
-			vs["registry.terraform.io/hashicorp/"+k] = v
+			if !strings.Contains(k, "/") {
+				k = "hashicorp/" + k
+			}
+			vs["registry.terraform.io/"+strings.ToLower(k)] = v
 		}
 	}
 	for _, p := range s.Providers {

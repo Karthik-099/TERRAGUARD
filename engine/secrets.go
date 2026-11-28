@@ -249,19 +249,8 @@ func lineSecret(lines []string, i int, line string, hcl, inNutanix bool) (string
 		}
 		return p.id, fmt.Sprintf("%s (%s) is committed.", p.name, redact(v))
 	}
-	if m := pemHeaderRE.FindStringIndex(line); m != nil && !isKnownFake(line) {
-		rest := strings.TrimPrefix(line[m[1]:], `\n`)
-		if !pemBodyRE.MatchString(rest) {
-			for j := i + 1; j < len(lines) && j <= i+3; j++ {
-				if t := strings.TrimSpace(lines[j]); t != "" {
-					rest = t
-					break
-				}
-			}
-		}
-		if b := pemBodyRE.FindString(rest); b != "" && entropy(b) >= 4.0 {
-			return "TG-SECRET-011", "A private key (" + strings.TrimSpace(line[m[0]:m[1]]) + ") is committed."
-		}
+	if m := pemHeaderRE.FindStringIndex(line); m != nil && !isKnownFake(line) && pemKeyBody(lines, i, line[m[1]:]) {
+		return "TG-SECRET-011", "A private key (" + strings.TrimSpace(line[m[0]:m[1]]) + ") is committed."
 	}
 	if commentRE.MatchString(line) {
 		return "", ""
@@ -293,6 +282,23 @@ func lineSecret(lines []string, i int, line string, hcl, inNutanix bool) (string
 	return "", ""
 }
 
+// pemKeyBody reports whether a private key header on lines[i], followed by
+// rest, has a real key body: random base64 on the same line (after a literal
+// \n) or on the next non-blank line, not a truncated placeholder like "MIIE...".
+func pemKeyBody(lines []string, i int, rest string) bool {
+	rest = strings.TrimPrefix(rest, `\n`)
+	if !pemBodyRE.MatchString(rest) {
+		for j := i + 1; j < len(lines) && j <= i+3; j++ {
+			if t := strings.TrimSpace(lines[j]); t != "" {
+				rest = t
+				break
+			}
+		}
+	}
+	b := pemBodyRE.FindString(rest)
+	return b != "" && entropy(b) >= 4.0
+}
+
 // awsPairSecret finds a secret access key next to a key ID: on the same line
 // after it, or in a secret-named assignment within 4 lines.
 func awsPairSecret(lines []string, i int, after string) string {
@@ -322,6 +328,10 @@ func jwtHeader(seg string) bool {
 	return alg != "" && !strings.EqualFold(alg, "none")
 }
 
+// hpeSecretRules report a secret on an HPE resource or provider block more
+// precisely than TG-SEC-001 and TG-SECRET-014, so they replace them on that line.
+var hpeSecretRules = map[string]bool{"TG-HPE-PRV-002": true, "TG-HPE-SEC-001": true, "TG-HPE-STATE-001": true}
+
 // supersedeOldSecrets keeps one finding per secret: a specific token rule
 // replaces TG-SEC-001 and TG-SEC-002 (the older pattern list) on the same
 // line, and the generic TG-SECRET-014 yields to TG-SEC-001, which reports the
@@ -329,18 +339,21 @@ func jwtHeader(seg string) bool {
 func supersedeOldSecrets(fs []Finding) []Finding {
 	at := func(f Finding) string { return fmt.Sprintf("%s:%d", f.File, f.Line) }
 	named := func(f Finding) string { k, _, _ := strings.Cut(f.Message, " is set"); return f.File + "|" + k }
-	specific, sec001 := map[string]bool{}, map[string]bool{}
+	specific, sec001, hpe := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, f := range fs {
 		switch {
 		case f.RuleID == "TG-SEC-001":
 			sec001[at(f)], sec001[named(f)] = true, true
 		case strings.HasPrefix(f.RuleID, "TG-SECRET-") && f.RuleID != "TG-SECRET-014":
 			specific[at(f)] = true
+		case hpeSecretRules[f.RuleID]:
+			specific[at(f)], hpe[at(f)] = true, true
 		}
 	}
 	out := fs[:0]
 	for _, f := range fs {
 		if ((f.RuleID == "TG-SEC-001" || f.RuleID == "TG-SEC-002") && specific[at(f)]) ||
+			(f.RuleID == "TG-SECRET-014" && hpe[at(f)]) ||
 			(f.RuleID == "TG-SECRET-014" && (sec001[at(f)] || sec001[named(f)])) {
 			continue
 		}

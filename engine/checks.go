@@ -101,14 +101,17 @@ func newFinding(id string, sev Severity, msg, resource, file string, line int) F
 		Resource: resource, File: file, Line: line, Remediation: r.Remediation, CWE: r.CWE, Blocking: r.Blocking}
 }
 
-func moduleChecks(m *Module) []Finding {
+// moduleChecks: snip marks provider documentation snippets (nil for none);
+// they get no cross-file or module-level checks, see snippets.go.
+func moduleChecks(m *Module, snip func(string) bool) []Finding {
 	var out []Finding
+	ns := withoutSnippets(m, snip)
 	out = append(out, m.Syntax...)
-	out = append(out, declarationChecks(m)...)
+	out = append(out, declarationChecks(m, snip)...)
 	out = append(out, secretChecks(m)...)
-	out = append(out, pinningChecks(m)...)
+	out = append(out, pinningChecks(ns)...)
 	out = append(out, graphChecks(m)...)
-	out = append(out, stateChecks(m)...)
+	out = append(out, stateChecks(ns)...)
 	out = append(out, providerTLSChecks(m)...)
 	return out
 }
@@ -170,25 +173,30 @@ func stateChecks(m *Module) []Finding {
 	return out
 }
 
-// declarationChecks runs per directory: each folder is its own module.
-func declarationChecks(m *Module) []Finding {
+// declarationChecks runs per directory: each folder is its own module, and
+// each snippet file is its own scope.
+func declarationChecks(m *Module, snip func(string) bool) []Finding {
 	var out []Finding
-	subs := splitByDir(m)
+	subs := splitByDir(m, snip)
 	dirs := make([]string, 0, len(subs))
 	for d := range subs {
 		dirs = append(dirs, d)
 	}
 	sort.Strings(dirs) // stable output order
 	for _, d := range dirs {
-		out = append(out, dirDeclarationChecks(subs[d])...)
+		out = append(out, dirDeclarationChecks(subs[d], snip != nil && snip(d))...)
 	}
 	return append(out, moduleCallChecks(m)...)
 }
 
-func splitByDir(m *Module) map[string]*Module {
+// splitByDir keys scopes by directory, or by file for snippets.
+func splitByDir(m *Module, snip func(string) bool) map[string]*Module {
 	subs := map[string]*Module{}
 	get := func(file string) *Module {
 		d := path.Dir(file)
+		if snip != nil && snip(file) {
+			d = file
+		}
 		if subs[d] == nil {
 			subs[d] = &Module{Files: m.Files, Locals: map[string]int{}, LocalFile: map[string]string{}, Tfvars: map[string]map[string]int{}, Provided: m.Provided}
 		}
@@ -259,7 +267,9 @@ func moduleCallChecks(m *Module) []Finding {
 	return out
 }
 
-func dirDeclarationChecks(m *Module) []Finding {
+// dirDeclarationChecks: a snippet assumes context it does not declare, so
+// undeclared references, unused objects and interface checks are skipped.
+func dirDeclarationChecks(m *Module, snippet bool) []Finding {
 	var out []Finding
 	declared := map[string]bool{}
 	firstSeen := map[string]string{}
@@ -287,7 +297,9 @@ func dirDeclarationChecks(m *Module) []Finding {
 	used := map[string]bool{}
 	reported := map[string]bool{}
 	for _, b := range m.Blocks {
-		for _, ref := range b.Refs {
+		refs := append([]Ref(nil), b.Refs...)
+		sort.SliceStable(refs, func(i, j int) bool { return refs[i].Line < refs[j].Line }) // Refs follow map order; report the first use
+		for _, ref := range refs {
 			used[ref.Addr] = true
 			root, _, _ := strings.Cut(ref.Addr, ".")
 			checkable := root == "var" || root == "local" || root == "module" || root == "data" || strings.Contains(root, "_")
@@ -295,7 +307,7 @@ func dirDeclarationChecks(m *Module) []Finding {
 			if b.Kind == "moved" || b.Kind == "removed" || b.Kind == "import" {
 				checkable = false
 			}
-			if !checkable || declared[ref.Addr] || reported[ref.Addr+b.File] {
+			if snippet || !checkable || declared[ref.Addr] || reported[ref.Addr+b.File] {
 				continue
 			}
 			reported[ref.Addr+b.File] = true
@@ -304,7 +316,7 @@ func dirDeclarationChecks(m *Module) []Finding {
 	}
 
 	for _, b := range m.Blocks {
-		if b.Kind == "output" && len(b.Labels) == 1 && b.Attrs["description"] == nil {
+		if !snippet && b.Kind == "output" && len(b.Labels) == 1 && b.Attrs["description"] == nil {
 			out = append(out, newFinding("TG-TF-004", "", fmt.Sprintf("Output %q has no description.", b.Labels[0]), "output."+b.Labels[0], b.File, b.Line))
 		}
 	}
@@ -327,13 +339,13 @@ func dirDeclarationChecks(m *Module) []Finding {
 		if len(m.Tfvars) > 0 && !hasDefault && !tfvarsSet[name] && !m.Provided[path.Dir(b.File)+"|"+name] {
 			out = append(out, newFinding("TG-VAL-008", "", fmt.Sprintf("Variable %q has no default and is not set in any .tfvars file.", name), b.Address(), b.File, b.Line))
 		}
-		if b.Attrs["description"] == nil {
+		if !snippet && b.Attrs["description"] == nil {
 			out = append(out, newFinding("TG-TF-004", "", fmt.Sprintf("Variable %q has no description.", name), b.Address(), b.File, b.Line))
 		}
-		if !used["var."+name] {
+		if !snippet && !used["var."+name] {
 			out = append(out, newFinding("TG-VAL-010", "", fmt.Sprintf("Variable %q is declared but never referenced.", name), b.Address(), b.File, b.Line))
 		}
-		if b.Attrs["type"] == nil {
+		if !snippet && b.Attrs["type"] == nil {
 			out = append(out, newFinding("TG-TF-006", "", fmt.Sprintf("Variable %q has no type, so any value is accepted.", name), b.Address(), b.File, b.Line))
 		}
 		if secretVarRE.MatchString(name) && !secretMetaRE.MatchString(name) {
@@ -348,12 +360,12 @@ func dirDeclarationChecks(m *Module) []Finding {
 		}
 	}
 	for _, n := range sortedKeys(m.Locals) {
-		if !used["local."+n] {
+		if !snippet && !used["local."+n] {
 			out = append(out, newFinding("TG-TF-007", "", fmt.Sprintf("Local %q is declared but never used.", n), "local."+n, m.LocalFile[n], m.Locals[n]))
 		}
 	}
 	for _, b := range m.Blocks {
-		if b.Kind == "data" && len(b.Labels) == 2 && !used[b.Address()] {
+		if !snippet && b.Kind == "data" && len(b.Labels) == 2 && !used[b.Address()] {
 			out = append(out, newFinding("TG-TF-008", "", b.Address()+" is read but never used; it still runs on every plan.", b.Address(), b.File, b.Line))
 		}
 		if b.body != nil {
@@ -419,9 +431,10 @@ func secretChecks(m *Module) []Finding {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		for i, line := range strings.Split(string(m.Files[name]), "\n") {
+		lines := strings.Split(string(m.Files[name]), "\n")
+		for i, line := range lines {
 			for _, p := range credPatterns {
-				if p.re.MatchString(line) {
+				if loc := p.re.FindStringIndex(line); loc != nil && (p.name != "private key" || pemKeyBody(lines, i, line[loc[1]:])) {
 					out = append(out, newFinding("TG-SEC-002", "", fmt.Sprintf("Looks like a %s is committed in %s.", p.name, name), "", name, i+1))
 				}
 			}

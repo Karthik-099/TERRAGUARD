@@ -26,6 +26,17 @@ nothing to run.
 
 ![TerraGuard workspace](docs/screenshot.png)
 
+## New in 3.2: HPE
+
+- **HPE Terraform provider** (Morpheus, VM Essentials, OpsRamp) and the **HPE GreenLake provider**: 14 rules, including passwords that would be stored in Terraform state where a write-only field exists, with a one-command fix.
+- **Checks before apply** for every HPE resource from the bundled provider schemas, and values the provider rejects at plan time.
+- **GreenLake migration hints** that name the `hpe_morpheus_*` replacement for each `hpegl_vmaas_*` resource.
+- **Templates inside Morpheus blueprints** (Terraform, CloudFormation, ARM, Kubernetes) scanned with the same rules.
+- **`terraguard migrate hpegl`** lists each GreenLake resource with its replacement and HPE's tfmigrator commands; **`extends: [terraguard:hpe]`** turns on the HPE pack.
+- **AI agents:** MCP prompts for reviewing HPE Terraform and planning a GreenLake migration.
+- **GitLab merge requests** get the same Apply suggestion fixes as GitHub pull requests.
+- **Provider repositories** scan cleanly: documentation examples are checked one file at a time. See [docs/HPE.md](docs/HPE.md).
+
 ## New in 3.1
 
 - **Connect to Claude in one step.** `terraguard connect claude-code` (also Cursor, VS Code); `terraguard serve --domain HOST` gives HTTPS with a free certificate for claude.ai custom connectors. Five more MCP tools. See [docs/CONNECT.md](docs/CONNECT.md).
@@ -49,6 +60,7 @@ See [CHANGELOG.md](CHANGELOG.md) for everything, and [ROADMAP.md](ROADMAP.md) fo
 
 ## Contents
 
+- [New in 3.2: HPE](#new-in-32-hpe)
 - [New in 3.1](#new-in-31)
 - [New in 3.0](#new-in-30)
 - [The problem](#the-problem)
@@ -72,7 +84,7 @@ discovered too late:
 
 | Stage | What goes wrong | How TerraGuard helps |
 |---|---|---|
-| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 1,770 rules with exact lines and fixes, verified AI fixes |
+| **Write** | Public buckets, open security groups, wildcard IAM, hardcoded secrets, unpinned modules | Diagnostics on save, 1,784 rules with exact lines and fixes, verified AI fixes |
 | **Init** | Unpinned providers; local, unencrypted or unlocked state; committed `*.tfstate` | Pinning, backend and state-file checks |
 | **Validate** | `terraform validate` needs init and credentials, and misses provider-side errors | Syntax, reference and apply-time checks with no init |
 | **Plan** | A destroy or replace of a database hides in a long plan | Plan risk with the attribute that forced replacement; rules on resolved values |
@@ -96,6 +108,7 @@ discovered too late:
 | OpenAPI | 2.0 and 3.x, YAML or JSON | Security schemes, transport, input limits |
 | Pulumi, Crossplane, Deployment Manager | `Pulumi.yaml`, stack exports, Crossplane managed resources, GDM configs | Mapped to the matching Terraform types so the same rules apply |
 | OpenShift | Routes, SCCs, BuildConfigs, ImageStreams, OAuth, DeploymentConfigs | DeploymentConfigs also get every Kubernetes pod rule |
+| HPE | `hpe` (Morpheus, VM Essentials, OpsRamp) and `hpegl` resources; templates inside Morpheus blueprints | Secrets in state, TLS, credentials, identity, firewall, value and schema checks, GreenLake migration hints |
 | Databricks | `databricks` resources; Asset Bundles (`databricks.yml`) | Clusters, SQL warehouses, Unity Catalog grants, tokens, secrets, value checks |
 | Nutanix, vSphere, Red Hat | `nutanix`, `vsphere`, `rhcs` and `azurerm_redhat_openshift_cluster` resources; CAPX manifests | Provider TLS, VM hardening, Flow policies, ROSA and ARO exposure and encryption |
 | Any file | Every text file in the scan | Secret scanning; secret-bearing files (`.env`, `*.pem`, `id_rsa`, `kubeconfig`) flagged by name and never read |
@@ -108,7 +121,7 @@ scan to some formats.
 | Capability | Details |
 |---|---|
 | **Will it apply?** | Syntax, duplicates, undeclared references, `count` + `for_each`, invalid CIDRs, S3 bucket names, port ranges, deprecated Lambda runtimes, missing tfvars, unknown or missing provider arguments, and values the AWS API rejects (1,322 arguments checked against the published API models). No `terraform init`. |
-| **Security and correctness rules** | 1,770 rules across every format above and 27 cloud and platform providers |
+| **Security and correctness rules** | 1,784 rules across every format above and 29 cloud and platform providers |
 | **Cost** | `terraguard cost`: offline monthly estimate for AWS, Azure and Google Cloud, usage-based charges from a usage file, your own negotiated prices, a budget gate, and the change shown in every pull request |
 | **Your own policies** | YAML rules in `.terraguard.yml`, graph policies in Checkov's YAML format, Rego (Conftest style), plain-English drafts |
 | **Coverage** | Every resource with the number of checks that ran on it, which passed and which failed, and the resource types no rule is written for, in the CLI (`--coverage`), the report and the workspace |
@@ -184,7 +197,7 @@ flowchart TB
   subgraph Engine["engine/ (Go, no I/O)"]
     P[HCL parser] --> N[Normalized resource model]
     PL[Plan JSON] --> N
-    N --> R[1,770 rules] & M[Module and graph checks]
+    N --> R[1,784 rules] & M[Module and graph checks]
     R & M --> POL[Policy: packs, budgets, baselines, waivers]
     POL --> REP[Report, verdict, compliance]
     REP --> OUT[SARIF / JUnit / Code Quality / JSON / Markdown]
@@ -430,7 +443,7 @@ never call a public AI service.
 | Neovim, JetBrains, any LSP editor | `terraguard lsp`; [editors/nvim](editors/nvim), [editors/jetbrains](editors/jetbrains) |
 | Plugins | `terraguard-<name>` executables, see [docs/PLUGINS.md](docs/PLUGINS.md) |
 | pre-commit | `.pre-commit-hooks.yaml`: hooks `terraguard` and `terraguard-fix` |
-| GitHub Actions | `uses: Karthik-099/TERRAGUARD@v3.1.0` with `command: scan`, `review` or `pulse` |
+| GitHub Actions | `uses: Karthik-099/TERRAGUARD@v3.2.0` with `command: scan`, `review` or `pulse` |
 | GitLab CI | [templates/gitlab-ci.yml](templates/gitlab-ci.yml): Code Quality and JUnit in the merge request |
 | Jenkins | [templates/Jenkinsfile](templates/Jenkinsfile) |
 | Any CI | JSON, SARIF, JUnit or Markdown output; exit codes |
@@ -449,7 +462,7 @@ fmt, validate, OIDC plan, TerraGuard gate, approval and apply.
 | Formats | Terraform, OpenTofu, Kubernetes, Helm, Kustomize, CloudFormation, SAM, Serverless, ARM, Bicep, Dockerfile, Compose, Ansible, OpenAPI, 5 CI systems | Similar, plus SCA and secrets | Terraform, CloudFormation, Kubernetes, Helm, Dockerfile, ARM | Terraform | Terraform |
 | Values the cloud API rejects | 1,322 AWS arguments | No | No | Yes, deepest | No |
 | Kubernetes admission control | Built in | No | Via operator | No | No |
-| Security policy breadth | 1,770 rules, checked against reference fixtures | 1,000+ policies | Hundreds | Correctness focus | None |
+| Security policy breadth | 1,784 rules, checked against reference fixtures | 1,000+ policies | Hundreds | Correctness focus | None |
 | Your own policies | YAML rules, Checkov-format graph YAML, Rego | Python, YAML | Rego | Go plugins | No |
 | Cost of a plan | Offline estimate, budget gate | No | No | No | No |
 | Apply-time validation | Common failures | No | No | Deep, provider rulesets | Syntax and references |
@@ -505,6 +518,7 @@ Also on the website: [karthik-099.github.io/TERRAGUARD/#/docs](https://karthik-0
 - [docs/GUIDE.md](docs/GUIDE.md): getting started, from a first scan to a pull-request gate
 - [docs/REFERENCE.md](docs/REFERENCE.md): CLI, policy file, HTTP API, MCP tools, environment variables
 - [docs/RULES.md](docs/RULES.md): every rule, generated from the engine
+- [docs/HPE.md](docs/HPE.md): HPE Morpheus, OpsRamp and GreenLake
 - [docs/CONNECT.md](docs/CONNECT.md): connect Claude Code, claude.ai, Cursor and VS Code
 - [docs/PLUGINS.md](docs/PLUGINS.md): write a plugin in any language
 - [docs/VULN.md](docs/VULN.md): offline vulnerability scanning and SBOMs
@@ -545,7 +559,7 @@ or join the [discussions](https://github.com/Karthik-099/TERRAGUARD/discussions)
 ## Trademarks
 
 AWS, Azure, Google Cloud, Cloudflare, Terraform and other product names are
-trademarks of their owners and are used here only to say which providers
+trademarks of their owners (including HPE, Morpheus, OpsRamp and GreenLake, which belong to Hewlett Packard Enterprise) and are used here only to say which providers
 TerraGuard supports. TerraGuard is an independent project, not affiliated with
 or endorsed by any of them. The resource icons in the graph are original line
 drawings, not vendor logos.

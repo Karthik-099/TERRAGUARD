@@ -62,6 +62,12 @@ func applyFix(src string, fx *Fix) (string, error) {
 		}
 		body = nb.Body()
 	}
+	if fx.New != "" { // rename the attribute, keeping its value and comments
+		if body.GetAttribute(fx.New) != nil || !body.RenameAttribute(fx.Path[len(fx.Path)-1], fx.New) {
+			return "", fmt.Errorf("cannot rename %s to %s", fx.Path[len(fx.Path)-1], fx.New)
+		}
+		return string(f.Bytes()), nil
+	}
 	var v cty.Value
 	switch t := fx.Value.(type) {
 	case bool:

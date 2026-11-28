@@ -336,7 +336,7 @@ var coreRules = []Rule{
 								ip, n, err := net.ParseCIDR(s)
 								if err != nil {
 									hits = append(hits, Hit{Path: p, Msg: fmt.Sprintf("%q is not a valid CIDR.", s)})
-								} else if !ip.Equal(n.IP) {
+								} else if !ip.Equal(n.IP) && !(r.Type == "hpegl_vmaas_network" && p == "cidr") { // documented as the gateway CIDR, e.g. 10.0.0.1/24
 									hits = append(hits, Hit{Path: p, Msg: fmt.Sprintf("%q has host bits set; the canonical form is %s.", s, n.String())})
 								}
 							}

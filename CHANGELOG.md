@@ -4,6 +4,33 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [3.2.0] - 2026-11-28
+
+HPE: the HPE Terraform provider (Morpheus, VM Essentials, OpsRamp) and the HPE
+GreenLake provider. Rule set 3.2 adds 14 rules (1,784 in all, 29 providers).
+Policies pinned to `rules_version: "3.1"` keep their gate until the pin moves.
+
+### Added
+- **HPE rules** (`TG-HPE-*`): secrets stored in Terraform state where a write-only field exists, with a fix that renames to `_wo`; certificate checks turned off in providers and integrations; literal credentials in provider blocks, Cypher secrets, credentials and OpsRamp credential sets; credentials sent over `http://`; Active Directory without SSL and SAML without signature validation; firewall rules open to the internet; plain HTTP virtual servers and legacy TLS profiles; plain-text passwords in bare-metal user data.
+- **HPE GreenLake migration hints** (TG-HPE-MIG-001, informational): each `hpegl_vmaas_*` resource or data source with a direct `hpe_morpheus_*` replacement, pointing to HPE's tfmigrator and migration guide.
+- **HPE schemas:** unknown, missing and deprecated arguments for HPE/hpe 2.3.0 and HPE/hpegl 0.4.20 without `terraform init`; values the provider rejects at plan time (TG-VAL-026, blocking).
+- **Templates inside Morpheus app blueprints and spec templates** (Terraform, CloudFormation, ARM, Kubernetes) are scanned with the same rules, with findings on the right line.
+- **Provider documentation examples** (`examples/resources/<type>/`, `examples/data-sources/<type>/` and the other tfplugindocs folders) are checked one file at a time; `--snippets auto|on|off` and `snippets:` in the policy.
+- docs/HPE.md.
+- **`terraguard migrate hpegl`:** a report of every `hpegl_*` resource and data source with its `hpe_*` replacement, import ID formats, the provider block mapping and HPE's tfmigrator commands.
+- **Policy pack `terraguard:hpe`:** gates at HIGH and makes secrets in state, literal provider credentials and literal HPE secrets unwaivable.
+- **Morpheus gate example** (examples/hpe/morpheus-gate): a provisioning workflow task that installs a checksum-verified TerraGuard and scans before provisioning.
+- **MCP:** a `plan_hpe_migration` tool; prompts `review_hpe_terraform`, `plan_greenlake_migration` and `harden_before_apply`; the rule catalog as resources (`terraguard://rules`, `terraguard://rules/{id}`).
+- **GitLab merge request suggestions:** `terraguard review --format gitlab-review` and an opt-in `terraguard-mr-comments` job in templates/gitlab-ci.yml (`TERRAGUARD_MR_COMMENTS: "true"`, a masked `TERRAGUARD_GITLAB_TOKEN`) that posts findings as threads with **Apply suggestion** fixes.
+
+### Fixed
+- Scanning a provider repository no longer reports alternative documentation examples as duplicate declarations or their context as undeclared references (HPE's examples: 231 blocking findings before, 8 real ones after).
+- TG-SEC-002 no longer reports truncated placeholder keys such as `MIIEpAIBAAKCAQEA...`; it uses the same key-body test as TG-SECRET-011.
+- TG-VAL-003 always reports the first use of an undeclared name, so its line no longer varies between runs.
+- Several findings of one rule on the same line are always listed in the same order.
+- `hpegl_vmaas_network.cidr` is a gateway address, so host bits there are not reported.
+- Auto-fix can rename an attribute (keeping comments) and refuses when the new name is already set.
+
 ## [3.1.0] - 2026-11-23
 
 Rule set 3.1 adds 20 rules (1,770 in all, 27 providers). Policies pinned to

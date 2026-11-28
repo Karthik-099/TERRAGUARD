@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Karthik-099/TERRAGUARD/engine"
+	"gopkg.in/yaml.v3"
 )
 
 func TestReviewAgainstGitBase(t *testing.T) {
@@ -188,5 +189,127 @@ func TestMarkdownEscaping(t *testing.T) {
 	}
 	if got := addedLines("+++ b/a.tf\n@@ -0,0 +1,3 @@\n+x\n@@ -9 +12 @@\n+++ /dev/null\n@@ -1 +0,0 @@\n"); len(got) != 1 || !got["a.tf"][3] || !got["a.tf"][12] || got["a.tf"][4] {
 		t.Errorf("addedLines = %v", got)
+	}
+}
+
+func TestGitLabReviewPayload(t *testing.T) {
+	t.Chdir(t.TempDir())
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	run("init", "-q")
+	os.MkdirAll("infra", 0o755)
+	os.WriteFile("infra/main.tf", []byte("resource \"aws_kms_key\" \"k\" {\n  enable_key_rotation = true\n}\n"), 0o644)
+	run("add", ".")
+	run("commit", "-qm", "base")
+	// Unaligned attributes: the fix realigns both lines, so the suggestion spans two.
+	head := "resource \"aws_kms_key\" \"k\" {\n  enable_key_rotation = true\n}\nresource \"aws_ebs_volume\" \"v\" {\n  size = 10\n  availability_zone = \"us-east-1a\"\n}\n"
+	os.WriteFile("infra/main.tf", []byte(head), 0o644)
+	run("add", ".")
+	run("commit", "-qm", "head")
+	baseSHA, headSHA := run("rev-parse", "HEAD~1"), run("rev-parse", "HEAD")
+
+	t.Chdir("infra")
+	out := filepath.Join(t.TempDir(), "review.json")
+	if _, err := runReview([]string{"--base", "HEAD~1", "--format", "gitlab-review", "--out", out, "."}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(out)
+	var gl glReview
+	if err := json.Unmarshal(b, &gl); err != nil {
+		t.Fatalf("%v\n%s", err, b)
+	}
+	if !strings.HasPrefix(gl.Body, reviewMarker) {
+		t.Fatalf("bad summary: %q", gl.Body)
+	}
+	var d *glDiscussion
+	for i := range gl.Discussions {
+		if strings.Contains(gl.Discussions[i].Body, "TG-AWS-EBS-001") {
+			d = &gl.Discussions[i]
+		}
+	}
+	if d == nil || !strings.HasPrefix(d.Body, reviewMarker) {
+		t.Fatalf("no EBS discussion in:\n%s", b)
+	}
+	want := glPosition{BaseSHA: baseSHA, StartSHA: baseSHA, HeadSHA: headSHA, PositionType: "text", OldPath: "infra/main.tf", NewPath: "infra/main.tf", NewLine: 6}
+	if d.Position != want {
+		t.Fatalf("position = %+v, want %+v", d.Position, want)
+	}
+	_, sug, ok := strings.Cut(d.Body, "```suggestion:-1+0\n")
+	if !ok {
+		t.Fatalf("want a two-line suggestion ending on the commented line:\n%s", d.Body)
+	}
+	sug, _, _ = strings.Cut(sug, "\n```")
+
+	// Replacing lines new_line-1..new_line with the suggestion must give the fixed file.
+	rep := engine.Scan(engine.Input{Files: map[string]string{"main.tf": head}})
+	var fixes []*engine.Fix
+	for _, f := range rep.Findings {
+		if f.RuleID == "TG-AWS-EBS-001" {
+			fixes = append(fixes, f.Fix)
+		}
+	}
+	fixed, errs := engine.ApplyFixes(map[string]string{"main.tf": head}, fixes)
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	old := strings.Split(head, "\n")
+	got := strings.Join(append(append(append([]string{}, old[:4]...), strings.Split(sug, "\n")...), old[6:]...), "\n")
+	if got != fixed["main.tf"] {
+		t.Fatalf("suggestion %q does not reproduce the fix:\n%s\nwant:\n%s", sug, got, fixed["main.tf"])
+	}
+}
+
+func TestGitLabReviewSecretsAndEscaping(t *testing.T) {
+	files := map[string]string{"main.tf": ebsVolume}
+	secret := engine.Finding{RuleID: "TG-SECRET-002", Severity: engine.Critical, Title: "GitHub token committed", Message: "GitHub token (ghp_...) is committed.",
+		File: "main.tf", Line: 2, Fix: &engine.Fix{File: "main.tf", Block: "resource.aws_ebs_volume.v", Path: []string{"tags"}, Value: "x"}}
+	evil := engine.Finding{RuleID: "TG-X", Severity: engine.Low, Title: "x\n```\n<!-- a --> @org/team [a](javascript:1)", File: "main.tf", Line: 3}
+	rev := &engine.Review{Passed: false, Tier: "full", New: []engine.Finding{secret, evil}}
+	gl := buildGitLabReview(rev, files, map[string]map[int]bool{"main.tf": {1: true, 2: true, 3: true, 4: true}}, "", "b", "h")
+	if len(gl.Discussions) != 2 {
+		t.Fatalf("want 2 discussions, got %+v", gl.Discussions)
+	}
+	if s := gl.Discussions[0]; strings.Contains(s.Body, "suggestion") || s.Position.NewLine != 2 {
+		t.Errorf("a secret finding must be a plain comment on its line: %+v", s)
+	}
+	if e := gl.Discussions[1].Body; !strings.Contains(e, "\\`\\`\\`") || strings.Contains(e, "\n```") || strings.Contains(e, "@org") || !strings.Contains(e, "\\<!-- a") {
+		t.Errorf("finding text not escaped: %q", e)
+	}
+}
+
+func TestGitLabTemplateParses(t *testing.T) {
+	src, err := os.ReadFile("../../templates/gitlab-ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]struct {
+		AllowFailure bool `yaml:"allow_failure"`
+		Rules        []struct {
+			If string `yaml:"if"`
+		} `yaml:"rules"`
+		Script []string `yaml:"script"`
+	}
+	if err := yaml.Unmarshal(src, &doc); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := doc["terraguard-mr-comments"]
+	if !ok || !job.AllowFailure || len(job.Rules) != 1 || len(job.Script) != 1 {
+		t.Fatalf("bad merge request job: %+v", job)
+	}
+	for _, want := range []string{`$CI_PIPELINE_SOURCE == "merge_request_event"`, `$TERRAGUARD_MR_COMMENTS == "true"`, "$TERRAGUARD_GITLAB_TOKEN"} {
+		if !strings.Contains(job.Rules[0].If, want) {
+			t.Errorf("job must be opt-in with %s: %q", want, job.Rules[0].If)
+		}
+	}
+	if !strings.Contains(job.Script[0], "--format gitlab-review") {
+		t.Errorf("job does not build the payload: %s", job.Script[0])
 	}
 }

@@ -18,6 +18,9 @@ var PolicyPacks = map[string]string{
 	// wildcard IAM, privileged workloads and script injection cannot be waived.
 	"strict": "fail_on: MEDIUM\nmax_waiver_days: 30\ninline_ignores: false\n" +
 		"unwaivable: [TG-SEC-*, TG-SECRET-*, TG-STATE-002, TG-AWS-S3-001, TG-AWS-RDS-001, TG-AWS-IAM-001, TG-GCP-GCS-001, TG-K8S-001, TG-GHA-002]\n",
+	// hpe: block high risk, so TG-HPE-*, TG-VAL-026 and TG-SCHEMA-* gate (every rule runs by
+	// default and the pack disables none); secrets in code or state cannot be waived or disabled.
+	"hpe": "fail_on: HIGH\nmax_waiver_days: 90\nunwaivable: [TG-HPE-STATE-001, TG-HPE-PRV-002, TG-HPE-SEC-001]\n",
 }
 
 const packPrefix = "terraguard:"

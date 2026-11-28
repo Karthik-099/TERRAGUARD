@@ -20,7 +20,7 @@ import (
 func runReview(args []string) (int, error) {
 	fset := flag.NewFlagSet("review", flag.ContinueOnError)
 	base := fset.String("base", "origin/main", "git revision to compare against (e.g. the PR base SHA)")
-	format := fset.String("format", "markdown", "stdout format: markdown, json or github-review (pull-request review payload)")
+	format := fset.String("format", "markdown", "stdout format: markdown, json, github-review (pull-request review payload) or gitlab-review (merge request discussions)")
 	out := fset.String("out", "", "write the --format output to this file instead of stdout")
 	mdOut := fset.String("markdown", "", "also write Markdown to this file")
 	jsonOut := fset.String("json", "", "also write JSON to this file")
@@ -95,11 +95,28 @@ func runReview(args []string) (int, error) {
 	case "json":
 		stdout = string(js) + "\n"
 	case "github-review":
-		gr, err := githubReviewFromGit(rev, head.Files, *base)
+		added, prefix, err := reviewDiff(*base)
 		if err != nil {
 			return 2, err
 		}
-		b, _ := json.MarshalIndent(gr, "", "  ")
+		b, _ := json.MarshalIndent(buildGitHubReview(rev, head.Files, added, prefix), "", "  ")
+		stdout = string(b) + "\n"
+	case "gitlab-review":
+		added, prefix, err := reviewDiff(*base)
+		if err != nil {
+			return 2, err
+		}
+		// The CI template replaces these with the merge request's diff_refs when it can read them.
+		baseSHA, err := git("rev-parse", "--verify", *base+"^{commit}")
+		if err != nil {
+			return 2, err
+		}
+		headSHA, err := git("rev-parse", "--verify", "HEAD")
+		if err != nil {
+			return 2, err
+		}
+		gl := buildGitLabReview(rev, head.Files, added, prefix, strings.TrimSpace(baseSHA), strings.TrimSpace(headSHA))
+		b, _ := json.MarshalIndent(gl, "", "  ")
 		stdout = string(b) + "\n"
 	}
 	if *out != "" {
@@ -181,16 +198,56 @@ type ghReview struct {
 	Comments []ghComment `json:"comments"`
 }
 
-func githubReviewFromGit(rev *engine.Review, files map[string]string, base string) (ghReview, error) {
+// reviewDiff returns the lines the change added, keyed by path, and the
+// prefix that makes those paths repository-relative.
+func reviewDiff(base string) (map[string]map[int]bool, string, error) {
 	diff, err := git("diff", "-U0", "--relative", "--no-color", "--no-ext-diff", base, "--")
 	if err != nil {
-		return ghReview{}, err
+		return nil, "", err
 	}
-	prefix, err := git("rev-parse", "--show-prefix") // GitHub paths are relative to the repository root
+	prefix, err := git("rev-parse", "--show-prefix") // review paths are relative to the repository root
 	if err != nil {
-		return ghReview{}, err
+		return nil, "", err
 	}
-	return buildGitHubReview(rev, files, addedLines(diff), strings.TrimSpace(prefix)), nil
+	return addedLines(diff), strings.TrimSpace(prefix), nil
+}
+
+// glPosition places a merge request discussion on an added line.
+type glPosition struct {
+	BaseSHA      string `json:"base_sha"`
+	StartSHA     string `json:"start_sha"`
+	HeadSHA      string `json:"head_sha"`
+	PositionType string `json:"position_type"`
+	OldPath      string `json:"old_path"`
+	NewPath      string `json:"new_path"`
+	NewLine      int    `json:"new_line"`
+}
+
+// glDiscussion is the body of POST /projects/:id/merge_requests/:iid/discussions.
+type glDiscussion struct {
+	Body     string     `json:"body"`
+	Position glPosition `json:"position"`
+}
+
+// glReview is what the GitLab CI template posts: body as one overview
+// thread, then each discussion.
+type glReview struct {
+	Body        string         `json:"body"`
+	Discussions []glDiscussion `json:"discussions"`
+}
+
+// buildGitLabReview is the GitHub review in GitLab's shape. GitLab anchors a
+// multi-line suggestion on the commented line: -A+B covers A lines above it
+// and B below, and the comment sits on the last line of the fix.
+func buildGitLabReview(rev *engine.Review, files map[string]string, added map[string]map[int]bool, prefix, baseSHA, headSHA string) glReview {
+	gr := buildReview(rev, files, added, prefix, func(s, e int) string { return fmt.Sprintf("suggestion:-%d+0", e-s) })
+	out := glReview{Body: gr.Body, Discussions: []glDiscussion{}}
+	for _, c := range gr.Comments {
+		out.Discussions = append(out.Discussions, glDiscussion{Body: c.Body, Position: glPosition{
+			BaseSHA: baseSHA, StartSHA: baseSHA, HeadSHA: headSHA, PositionType: "text", OldPath: c.Path, NewPath: c.Path, NewLine: c.Line,
+		}})
+	}
+	return out
 }
 
 var hunkRE = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
@@ -227,6 +284,13 @@ func addedLines(diff string) map[string]map[int]bool {
 // suggestion block when its safe fix only touches the changed lines around it.
 // Everything else is listed in the review body.
 func buildGitHubReview(rev *engine.Review, files map[string]string, added map[string]map[int]bool, prefix string) ghReview {
+	return buildReview(rev, files, added, prefix, func(int, int) string { return "suggestion" })
+}
+
+// buildReview is shared by the GitHub and GitLab payloads; info is the
+// suggestion fence's info string for a fix replacing lines s..e (the comment
+// sits on line e).
+func buildReview(rev *engine.Review, files map[string]string, added map[string]map[int]bool, prefix string, info func(s, e int) string) ghReview {
 	status := "passed"
 	if !rev.Passed {
 		status = "changes requested"
@@ -260,7 +324,7 @@ func buildGitHubReview(rev *engine.Review, files map[string]string, added map[st
 				c.StartLine, c.StartSide = s, "RIGHT"
 			}
 			fence := strings.Repeat("`", max(3, longestRun(strings.Join(repl, "\n"), '`')+1))
-			text += "\n\n" + fence + "suggestion\n" + strings.Join(repl, "\n") + "\n" + fence
+			text += "\n\n" + fence + info(s, e) + "\n" + strings.Join(repl, "\n") + "\n" + fence
 		} else if ok {
 			text += "\n\nThe safe fix also changes lines outside this change; run `terraguard fix` to apply it."
 		}

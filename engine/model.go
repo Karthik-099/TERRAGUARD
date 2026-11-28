@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const Version = "3.1.0"
+const Version = "3.2.0"
 
 type Severity string
 
@@ -239,7 +239,14 @@ func sortFindings(fs []Finding) {
 		if a.File != b.File {
 			return a.File < b.File
 		}
-		return a.Line < b.Line
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		// Rules can report several hits on one line in map order; break ties so output is stable.
+		if a.RuleID != b.RuleID {
+			return a.RuleID < b.RuleID
+		}
+		return a.Message < b.Message
 	})
 }
 

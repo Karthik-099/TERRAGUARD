@@ -6,7 +6,7 @@
 <title>TerraGuard: open-source infrastructure-as-code checker</title>
 <meta name="description" content="Catch misconfigurations, apply-time failures, destructive changes, secrets and cost in Terraform, Kubernetes, CloudFormation, ARM, Pulumi, Dockerfiles, CI pipelines and more. Open source. Runs in your browser, editor, CI and cluster.">
 <meta property="og:title" content="TerraGuard: catch infrastructure mistakes before they ship">
-<meta property="og:description" content="One open-source engine for Terraform, Kubernetes, CloudFormation, ARM, Pulumi, Docker, CI pipelines, Ansible and OpenAPI. 1,770 rules, will-it-apply checks, plan risk, cost and verified fixes. Free.">
+<meta property="og:description" content="One open-source engine for Terraform, Kubernetes, CloudFormation, ARM, Pulumi, Docker, CI pipelines, Ansible and OpenAPI. 1,784 rules, will-it-apply checks, plan risk, cost and verified fixes. Free.">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://giscus.app 'sha256-VpdsRO5q68zgt1AIjajLlzA2zK+oACdBAyIuL3zHakQ='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; frame-src https://giscus.app; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
@@ -106,14 +106,14 @@
       <div class="orb orb-peach" aria-hidden="true"></div>
       <div class="orb orb-sky" aria-hidden="true"></div>
       <div class="container hero-inner">
-        <a class="announce" href="#/whats-new"><span class="tag">New in 3.1</span>See what changed <svg class="ic sm"><use href="#i-arrow"/></svg></a>
+        <a class="announce" href="#/whats-new"><span class="tag">New in 3.2</span>HPE support <svg class="ic sm"><use href="#i-arrow"/></svg></a>
         <h1>Catch infrastructure mistakes before they ship.</h1>
         <p class="lead">One open-source engine checks Terraform, Kubernetes, CloudFormation, Dockerfiles, CI pipelines and more. In your browser, editor, CI and cluster.</p>
         <div class="cta-row">
           <a class="btn primary lg" href="#/app">Open workspace</a>
           <a class="btn lg" href="#/integrations">Install</a>
         </div>
-        <p class="facts"><span>1,770 rules</span><span>Nothing uploaded</span><span>MIT licensed</span></p>
+        <p class="facts"><span>1,784 rules</span><span>Nothing uploaded</span><span>MIT licensed</span></p>
       </div>
       <div class="container">
         <figure class="hero-visual" role="img" aria-label="Example result: four findings across a Terraform file, a Kubernetes manifest and a Dockerfile, and a verdict that apply is expected to fail.">
@@ -187,7 +187,7 @@
           <ol class="flow">
             <li><a class="flow-step" href="#/docs/guide"><span class="flow-n">01 Input</span><h3>Your files</h3><ul><li>Terraform, OpenTofu, plans</li><li>Kubernetes, Helm, OpenShift</li><li>CloudFormation, ARM, Bicep</li><li>Pulumi, Docker, CI pipelines</li></ul><span class="flow-more">Supported formats</span></a></li>
             <li><a class="flow-step" href="#/docs/architecture"><span class="flow-n">02 Parse</span><h3>One model</h3><ul><li>Every format becomes the same resources</li><li>Variables, tfvars and modules resolved</li><li>Nothing leaves the device</li></ul><span class="flow-more">Architecture</span></a></li>
-            <li><a class="flow-step core" href="#/docs/rules"><span class="flow-n">03 Check</span><h3>The engine</h3><ul><li>1,770 rules</li><li>Values the cloud rejects</li><li>Attack paths across resources</li><li>Plan risk, cost and secrets</li></ul><span class="flow-more">Rule catalog</span></a></li>
+            <li><a class="flow-step core" href="#/docs/rules"><span class="flow-n">03 Check</span><h3>The engine</h3><ul><li>1,784 rules</li><li>Values the cloud rejects</li><li>Attack paths across resources</li><li>Plan risk, cost and secrets</li></ul><span class="flow-more">Rule catalog</span></a></li>
             <li><a class="flow-step" href="#/policy"><span class="flow-n">04 Decide</span><h3>Your policy</h3><ul><li><code>.terraguard.yml</code></li><li>Custom rules and plugins</li><li>Waivers that expire</li><li>Pass or fail gate</li></ul><span class="flow-more">Policy as code</span></a></li>
             <li><a class="flow-step" href="#/integrations"><span class="flow-n">05 Deliver</span><h3>Results</h3><ul><li>Browser and editors</li><li>CLI and pull requests</li><li>SARIF, JSON, JUnit, HTML</li><li>AI agents over MCP</li></ul><span class="flow-more">Integrations</span></a></li>
           </ol>
@@ -381,6 +381,7 @@ resource "aws_db_instance" "main" {
               <tr><td>Kubernetes and Helm</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>CloudFormation and ARM</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Nutanix, vSphere and OpenShift</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
+              <tr><td>HPE Morpheus, OpsRamp and GreenLake</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Apply failures found without init</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Values the cloud API rejects</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
               <tr><td>Destroy and replace risk in a plan</td><td class="us"><i class="cmp cmp-y" role="img" aria-label="Yes"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-p" role="img" aria-label="Partly"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td><td><i class="cmp cmp-n" role="img" aria-label="No"></i></td></tr>
@@ -416,12 +417,32 @@ resource "aws_db_instance" "main" {
     <section id="whats-new" class="section page-top">
       <div class="container narrow">
         <header class="section-head">
-          <p class="kicker">What's new in 3.1</p>
-          <h2>Connect to Claude, Databricks, fixes in pull requests.</h2>
-          <p class="sub">20 new rules, 1,770 in all, across 27 providers. Policies pinned to <code>rules_version: "3.0"</code> keep their gate until you move the pin.</p>
+          <p class="kicker">What's new in 3.2</p>
+          <h2>HPE Morpheus, OpsRamp and GreenLake.</h2>
+          <p class="sub">14 new rules, 1,784 in all, across 29 providers. Policies pinned to <code>rules_version: "3.1"</code> keep their gate until you move the pin.</p>
           <div class="row"><a class="btn" href="https://github.com/Karthik-099/TERRAGUARD/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Full changelog</a><a class="btn ghost" href="https://github.com/Karthik-099/TERRAGUARD/blob/main/ROADMAP.md" target="_blank" rel="noopener">What is next</a></div>
         </header>
         <div class="news">
+          <article class="news-group">
+            <h3><span class="ii"><svg class="ic"><use href="#i-server"/></svg></span>HPE</h3>
+            <ul>
+              <li><b>Secrets in state</b><span>Passwords that Terraform would store in state, where a write-only field exists. One command switches them.</span>
+<pre>terraguard fix .</pre></li>
+              <li><b>Provider and access</b><span>Certificate checks turned off, literal credentials, AD without SSL, unsigned SAML, firewall rules open to the internet.</span></li>
+              <li><b>Will it apply</b><span>Unknown, missing and deprecated arguments for every HPE resource, and values the provider rejects, without init.</span></li>
+              <li><b>GreenLake migration</b><span>Each <code>hpegl_vmaas_*</code> resource names its <code>hpe_morpheus_*</code> replacement.</span></li>
+              <li><b>Blueprint templates</b><span>Terraform, CloudFormation, ARM and Kubernetes inside Morpheus blueprints, checked with the same rules.</span></li>
+              <li><b>Migration report</b><span>Every GreenLake resource with its replacement, import IDs and HPE's tfmigrator commands.</span>
+<pre>terraguard migrate hpegl .</pre></li>
+              <li><b>HPE policy pack</b><span>Gate at HIGH; secrets in state and literal credentials cannot be waived.</span>
+<pre>extends: [terraguard:hpe]</pre></li>
+              <li><b>AI agents</b><span>MCP prompts to review HPE Terraform and plan a GreenLake migration.</span></li>
+              <li><b>GitLab too</b><span>Merge requests get the same Apply suggestion fixes as GitHub pull requests.</span></li>
+              <li><b>Provider repositories</b><span>Documentation examples are checked one file at a time, so a provider repository scans cleanly.</span></li>
+            </ul>
+            <a class="link-more" href="#/docs/hpe">HPE guide <svg class="ic sm"><use href="#i-arrow"/></svg></a>
+          </article>
+          <p class="kicker news-sep">Also new in 3.1</p>
           <article class="news-group">
             <h3><span class="ii"><svg class="ic"><use href="#i-spark"/></svg></span>Connect to Claude and other agents</h3>
             <ul>
@@ -525,7 +546,7 @@ resource "aws_db_instance" "main" {
         <ol class="stages">
           <li class="stage">
             <div class="stage-head"><span class="stage-num">1</span><div><h3>Write</h3><p>You describe infrastructure as code.</p></div></div>
-            <div class="stage-cols"><div class="pain"><h4>What goes wrong</h4><ul><li>Public buckets, open ports, wildcard IAM, privileged pods</li><li>Secrets typed into code</li><li>Modules and images never pinned</li></ul></div><div class="gain"><h4>How TerraGuard helps</h4><ul><li>Findings as you type, with the line and the fix</li><li>1,770 rules across every format</li><li>One-click fixes; verified AI fixes</li></ul></div></div>
+            <div class="stage-cols"><div class="pain"><h4>What goes wrong</h4><ul><li>Public buckets, open ports, wildcard IAM, privileged pods</li><li>Secrets typed into code</li><li>Modules and images never pinned</li></ul></div><div class="gain"><h4>How TerraGuard helps</h4><ul><li>Findings as you type, with the line and the fix</li><li>1,784 rules across every format</li><li>One-click fixes; verified AI fixes</li></ul></div></div>
           </li>
           <li class="stage">
             <div class="stage-head"><span class="stage-num">2</span><div><h3>Init and validate</h3><p>Providers download; syntax and references are checked.</p></div></div>
@@ -893,6 +914,7 @@ docker compose up -d     # http://127.0.0.1:8080</pre>
           <p class="kicker">Documentation</p>
           <a href="#/docs/guide" data-doc="guide">Getting started</a>
           <a href="#/docs/reference" data-doc="reference">Reference: CLI, policy, API, MCP</a>
+          <a href="#/docs/hpe" data-doc="hpe">HPE Morpheus, OpsRamp, GreenLake</a>
           <a href="#/docs/connect" data-doc="connect">Connect to Claude and agents</a>
           <a href="#/docs/plugins" data-doc="plugins">Plugins and add-ons</a>
           <a href="#/docs/vuln" data-doc="vuln">Vulnerability scanning</a>
@@ -970,7 +992,7 @@ docker compose up -d     # http://127.0.0.1:8080</pre>
   <footer class="site-footer">
     <div class="container foot">
       <div class="foot-brand"><img class="logo" src="assets/logo.svg" alt="" width="24" height="24"><span><b>Terra<span class="wm-accent">Guard</span></b><br><span class="muted">Open-source infrastructure checks. MIT licensed.</span></span></div>
-      <nav aria-label="Product"><b>Product</b><a href="#/app">Workspace</a><a href="#/whats-new">What's new in 3.1</a><a href="#/product">How it works</a><a href="#/integrations">Integrations</a><a href="#/policy">Policy</a><a href="#/ai">AI</a><a href="#/compare">Compare</a></nav>
+      <nav aria-label="Product"><b>Product</b><a href="#/app">Workspace</a><a href="#/whats-new">What's new in 3.2</a><a href="#/product">How it works</a><a href="#/integrations">Integrations</a><a href="#/policy">Policy</a><a href="#/ai">AI</a><a href="#/compare">Compare</a></nav>
       <nav aria-label="Resources"><b>Resources</b><a href="#/docs">Docs</a><a href="#/docs/rules">Rule catalog</a><a href="#/architecture">Architecture</a><a href="#/integrations?deploy">Self-hosting</a><a href="#/docs/security">Security</a></nav>
       <nav aria-label="Project"><b>Project</b><a href="#/open-source">Open source</a><a href="#/open-source?support">Support</a><a href="https://github.com/Karthik-099/TERRAGUARD" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/Karthik-099/TERRAGUARD/releases" target="_blank" rel="noopener">Releases</a></nav>
     </div>

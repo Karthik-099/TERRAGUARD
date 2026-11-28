@@ -50,3 +50,15 @@ resource "aws_iam_role_policy" "q" {
 		}
 	}
 }
+
+// Findings on the same file and line sort by rule, then message, never by map order.
+func TestSortFindingsBreaksTies(t *testing.T) {
+	a := Finding{RuleID: "TG-SEC-001", Severity: High, File: "main.tf", Line: 3, Message: `"api_secret" is set`}
+	b := Finding{RuleID: "TG-SEC-001", Severity: High, File: "main.tf", Line: 3, Message: `"api_key" is set`}
+	for _, in := range [][]Finding{{a, b}, {b, a}} {
+		sortFindings(in)
+		if in[0].Message != b.Message {
+			t.Fatalf("got %q first, want %q", in[0].Message, b.Message)
+		}
+	}
+}

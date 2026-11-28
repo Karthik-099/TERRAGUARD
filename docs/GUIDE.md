@@ -140,7 +140,7 @@ terraguard review --base origin/main .
 GitHub Actions:
 
 ```yaml
-- uses: Karthik-099/TERRAGUARD@v3.1.0
+- uses: Karthik-099/TERRAGUARD@v3.2.0
   with:
     command: review          # scan | review | pulse
     path: infra
@@ -161,7 +161,7 @@ steps:
   - uses: actions/checkout@v4
     with:
       fetch-depth: 0
-  - uses: Karthik-099/TERRAGUARD@v3.1.0
+  - uses: Karthik-099/TERRAGUARD@v3.2.0
     with:
       command: review
       path: infra
@@ -172,6 +172,27 @@ Each run replaces the previous TerraGuard review. Secrets never get a
 suggestion. If posting fails, for example on a fork without write access, the
 job prints a warning and continues. To see the payload locally:
 `terraguard review --base origin/main --format github-review`.
+
+### GitLab merge request suggestions
+
+The `terraguard-mr-comments` job in
+[`templates/gitlab-ci.yml`](https://github.com/Karthik-099/TERRAGUARD/blob/main/templates/gitlab-ci.yml)
+posts the same findings as merge request threads with **Apply suggestion**
+fixes. It is off by default. To turn it on, under **Settings > CI/CD > Variables**:
+
+1. Create a project access token (**Settings > Access tokens**) with the
+   Reporter role and the `api` scope. Store it as `TERRAGUARD_GITLAB_TOKEN`,
+   masked. Leave it unprotected if merge request branches are unprotected,
+   or the job will not see it. `CI_JOB_TOKEN` cannot create threads.
+2. Add `TERRAGUARD_MR_COMMENTS` with the value `true`.
+
+The job runs only in merge request pipelines. It downloads a pinned,
+checksum-verified release, runs
+`terraguard review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format gitlab-review`,
+posts the threads, then deletes earlier TerraGuard threads nobody replied to
+and resolves the ones with replies. A failure to post is a warning, and the job
+has `allow_failure: true`. Anyone who can push a branch that runs this pipeline
+can read an unprotected variable, so keep the token at the Reporter role.
 
 GitLab, Jenkins, Bitbucket, CircleCI, Atlantis, AWS CodeBuild, Azure Pipelines
 and Google Cloud Build templates are in [`templates/`](https://github.com/Karthik-099/TERRAGUARD/tree/main/templates).

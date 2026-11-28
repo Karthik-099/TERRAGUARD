@@ -232,6 +232,10 @@
         ]
       }
     },
+    "snippets": {
+      "enum": ["auto", "on", "off"],
+      "description": "Provider documentation examples (examples/resources/<type>/*.tf and the like): auto detects them by path, on treats every .tf file as a standalone snippet, off scans them as modules."
+    },
     "inline_ignores": {
       "type": "boolean",
       "description": "false makes terraguard:ignore comments have no effect, so every exception is a reviewed waiver."

@@ -1016,3 +1016,28 @@ func TestModuleInputsFlowIntoLocalModules(t *testing.T) {
 		t.Errorf("private input, and disagreeing callers, must stay silent: %v", got)
 	}
 }
+
+func TestHPEPolicyPack(t *testing.T) {
+	src := map[string]string{"main.tf": "variable \"p\" {\n  type      = string\n  sensitive = true\n}\n" +
+		"resource \"hpe_morpheus_network_domain\" \"d\" {\n  name            = \"corp.example.com\"\n  domain_password = var.p\n}\n" +
+		"resource \"hpe_morpheus_cypher_secret\" \"s\" {\n  key   = \"api/key\"\n  value = \"Zr7Lp4Wn8Xk2v9QmTq3\"\n}\n" +
+		"resource \"hpe_morpheus_network_pool_server\" \"ipam\" {\n  name                = \"ipam\"\n  type_code           = \"infoblox\"\n  service_url         = \"http://infoblox.corp.internal/wapi\"\n  service_password_wo = var.p\n  ignore_ssl          = true\n}\n"}
+	// The user tries to silence everything HPE; only the unwaivable secret rules survive.
+	rep := Scan(Input{Files: src, Config: "extends: [terraguard:hpe]\ndisable: [TG-HPE-*]\nwaivers:\n  - rule: TG-HPE-*\n    reason: x\n    expires: \"2099-01-01\"\n"})
+	got := map[string]bool{}
+	for _, f := range rep.Findings {
+		if !f.Waived {
+			got[f.RuleID] = true
+		}
+	}
+	if rep.FailOn != High || !got["TG-HPE-STATE-001"] || !got["TG-HPE-SEC-001"] || got["TG-HPE-TLS-001"] || rep.Passed {
+		t.Errorf("hpe pack: fail_on %s, passed %v, unwaived %v", rep.FailOn, rep.Passed, got)
+	}
+	plain := Scan(Input{Files: src, Config: "extends: [terraguard:hpe]\n"})
+	for _, f := range plain.Findings {
+		got[f.RuleID] = true
+	}
+	if !got["TG-HPE-TLS-001"] {
+		t.Errorf("hpe pack must keep every HPE rule on: %v", got)
+	}
+}
